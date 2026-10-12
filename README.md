@@ -2,7 +2,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.1.0, an observer-only capability probe. Online co-op is not implemented. The probe has passed offline tests; loading it in the real game remains unverified.**
+**Current version: 0.1.1, an observer-only capability probe verified in the real game. Online co-op is not implemented.**
+
+The October 12, 2026 smoke test captured manual moves, Titan Fist attacks, damage, pushes, action consumption, enemy attacks, and spawning. It ran on a disposable profile using Test Mech and the first turn of a normal Archive mission. [Results and limits](docs/feasibility.md#runtime-evidence--october-12-2026) distinguish these observations from scripted action execution and synchronization, which remain unproven.
 
 The first engineering question is whether the real game exposes reliable action execution, input control, and enough state to keep two instances aligned. This repository records evidence and runnable experiments before choosing a networking design.
 
@@ -19,7 +21,7 @@ There is no action replay, input gate, transport, deterministic replay claim, or
 
 ## Baseline
 
-The inspected Steam build is `13725832`; its executable contains version `1.2.93`. The candidate loader is [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6), with its bundled modApiExt `1.25`. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). Compatibility in the running game is still pending.
+The tested Steam build is `13725832`, game `1.2.93`, with [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6) and its bundled modApiExt `1.25`. Main-menu versions and runtime logs agree. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). This is one tested baseline, not a compatibility claim for other versions.
 
 Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's five Lua source files.
 
@@ -34,7 +36,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 18 Lua contract tests under Fengari's Lua 5.3 VM, checks log parsing/diffing, and exercises the installer against inert temporary files. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. CI has been configured but has not run on GitHub.
+The current offline suite validates Lua 5.1 syntax, executes 19 Lua contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. The separate in-game smoke test is documented below. CI has been configured but has not run on GitHub.
 
 ## Prepare a real-game test
 
@@ -48,16 +50,18 @@ The current offline suite validates Lua 5.1 syntax, executes 18 Lua contract tes
 
    Preparation writes only under ignored `.local/`. It backs up saves and affected game files, verifies hashes, and stages the loader. It does not install or launch anything. It refuses to replace an existing staged baseline.
 
-3. Review the private `manifest.json` and [restore instructions](docs/test-plan.md#restore). Installing the loader replaces the game's `lua5.1.dll`, `SDL2.dll`, and `scripts/modloader.lua`; it also adds native libraries and Lua support files. Starting it rewrites `resources/resource.dat`. **Installation approval is required by this project's handoff before proceeding.** No unfamiliar installer script is needed.
-4. After approval, extract the reviewed upstream ZIP into the game folder as upstream documents, then install only this probe:
+3. Review the private `manifest.json` and [restore instructions](docs/test-plan.md#restore). Installing the loader replaces the game's `lua5.1.dll`, `SDL2.dll`, and `scripts/modloader.lua`; it also adds native libraries and Lua support files. Starting it rewrites `resources/resource.dat`. The originating machine has completed this reviewed installation; repeat the review for another installation. No unfamiliar installer script is needed.
+4. Extract the reviewed upstream ZIP into the game folder as upstream documents, then install only this probe:
 
    ```powershell
    .\tools\Install-Probe.ps1 -GamePath 'YOUR GAME FOLDER' -Mode Install
    ```
 
-5. Launch one game instance through Steam. Create/select the disposable profile named exactly **`ITB_Coop_Probe`**, enable **ITB Co-op Capability Probe** in the loader's mod menu, and use Rift Walkers with standard equipment. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test).
+5. Launch one game instance through Steam. Create/select a disposable profile whose displayed name is exactly **`ITB_Coop_Probe`**. Its internal folder key may differ after renaming; the probe checks the displayed name from the loader's profile data.
+6. Open **Mod Content → Configure Mods**, expand **Mod Loader Extensions**, enable **modApiExt**, and enable **ITB Co-op Capability Probe**. Leave memedit and Easy Edit off for this baseline. Close the dialog to save, then restart the game. The probe defaults to disabled: explicitly selecting both entries avoids the fresh-configuration dependency failure encountered during testing.
+7. Use Rift Walkers, standard equipment, Normal difficulty, and advanced content off. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test).
 
-The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Cloud state has not been verified; do not run two instances or two PCs against these saves yet. No Cloud settings are changed by these tools.
+The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Steam showed Cloud **Up to date** before and after the single-instance test; no Cloud settings were changed. Separate-instance save and Cloud isolation remains unverified. The four pre-existing normal-profile files matched their backup hashes after the test.
 
 ## Read the results
 

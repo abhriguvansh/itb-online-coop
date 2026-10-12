@@ -9,13 +9,14 @@ This repository is separate from the project's read-only synced `sources/`. Keep
 - Current implementation is an observer. It changes no tactical state, registers no input gate, and has no network listener. Preserve that scope until the next explicit experiment.
 - Read `docs/status.md` and `docs/feasibility.md` before extending it. Use pinned upstream source, not plausible API names. Do not assume LuaSocket, ABI compatibility, or deterministic AI/RNG.
 - Protect normal saves. Back up and hash affected files outside the live save directory. Use a disposable profile; verify Cloud behavior before two-instance testing. Never upload game assets, binaries, saves, logs, account data, or `.local/`.
-- Explain and obtain approval before publishing a repository, changing Steam Cloud/firewall settings, installing global tools, or running an unfamiliar installer. Once the user approves a specific action, do not ask again. Current loader is staged only; installation approval is pending.
+- Explain and obtain approval before publishing a repository, changing Steam Cloud/firewall settings, installing global tools, or running an unfamiliar installer. Once the user approves a specific action, do not ask again. The reviewed loader and probe installation is complete on the originating machine.
 - Mod installation is scoped to `mods/aman_itb_coop_probe`. Do not overwrite an existing mod or recursively delete a game/mods/save tree. Preserve partial/failing evidence.
 - Use small local Git commits. `package.json` is private to prevent accidental npm publication. No source distribution license has been selected yet; do not vendor upstream code.
 - Two-player defaults remain three mechs (host two, guest one), serialized actions, host deployment/campaign controls, both ready before end turn, and accepted actions invalidate readiness. A labeled single-token prototype is acceptable later.
 - Unsupported undo/reset must be blocked before a multiplayer session exists. Observing them in this first diagnostic build is not such a block.
 - Compare partial observed state only at equivalent boundaries. Local IDs are not cross-instance entity mappings. Stop on divergence once a gameplay session is implemented; a hash cannot repair state.
-- Native game UI interaction is unavailable in the originating tool session. Do not claim launch/click/runtime results without actual evidence.
+- Windows mouse control through the computer-use skill worked in the originating session. Keyboard injection did not enter a profile name; the user created the named test profile. Do not assume either capability in another session; inspect available tools.
+- Profile display names differ from folder keys after renaming. Use the loader-refreshed `Profile.visible_name` together with a nonempty current profile key for the observer gate. Never change the normal profile to make a test pass.
 
 ## Verified local commands
 
@@ -27,4 +28,4 @@ npm run check:tracked
 git diff --check
 ```
 
-`Prepare-Baseline.ps1` was run against the inspected installation and created hash-verified private backups. `Install-Probe.ps1` Install/Uninstall were tested only against inert fixtures. GitHub Actions has not run. The local Node version was 18.18.2; CI requests 22. Test packages are pinned in package-lock.json. Certificate trust problems were handled with Windows trust roots scoped to the download command; TLS verification was not disabled and global configuration was not changed.
+`Prepare-Baseline.ps1` created hash-verified private backups. `Install-Probe.ps1` Install/Uninstall passed inert fixture checks and updated only the owned probe files in the actual game while it was closed. A full loader restoration drill has not run. The real-game observer smoke test passed; Milestone 1 is incomplete. GitHub Actions has not run. Local Node was 18.18.2; CI requests 22. Test packages are pinned in package-lock.json. Certificate trust problems were handled with Windows trust roots scoped to the download command; TLS verification was not disabled and global configuration was not changed.

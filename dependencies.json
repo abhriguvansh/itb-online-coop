@@ -3,9 +3,9 @@
   "game": {
     "platform": "Windows Steam",
     "appId": "590380",
-    "candidateVersion": "1.2.93",
+    "verifiedVersion": "1.2.93",
     "installedBuildId": "13725832",
-    "evidence": "Installed executable string and Steam manifest; runtime probe pending",
+    "evidence": "Installed executable string, Steam manifest, main menu, and observer 0.1.1 runtime smoke test on 2026-10-12",
     "redistribute": false
   },
   "loader": {

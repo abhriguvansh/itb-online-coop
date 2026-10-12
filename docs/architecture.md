@@ -8,7 +8,7 @@
 
 The mod calls the existing loader extension API; it does not copy or vendor it. memedit remains an optional observation lead. The development Node dependencies are never installed in the game.
 
-**ADR 002: stability is a measurement, not a lock.** Three unchanged idle observations are labeled `settled_candidate`, with `proofOfQuiescence=false`. They do not authorize actions or assert full synchronization. Input remains normal single-player input.
+**ADR 002: stability is a measurement, not a lock.** Three unchanged idle observations are labeled `settled_candidate`, with `proofOfQuiescence=false`. The first real-game test produced candidates between portions of enemy activity, before later effects. They do not authorize actions or assert full synchronization. Input remains normal single-player input. A future executor needs a stronger boundary that accounts for phase and pending work.
 
 **ADR 003: separate local evidence from publishable source.** `.local/` stores downloaded upstream sources/binaries, backups, inert test fixtures, and logs. Git contains this project's source, tests, dependency pins and documentation. Publication must use reviewed tracked files only. `package.json` is private; source licensing is undecided.
 
