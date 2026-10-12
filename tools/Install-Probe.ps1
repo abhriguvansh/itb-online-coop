@@ -1,7 +1,8 @@
 [CmdletBinding()]
 param(
     [Parameter(Mandatory)][string]$GamePath,
-    [ValidateSet('Plan','Install','Uninstall')][string]$Mode = 'Plan'
+    [ValidateSet('Plan','Install','Uninstall')][string]$Mode = 'Plan',
+    [string]$NativeBridgePath
 )
 $ErrorActionPreference = 'Stop'
 $repoPath = Split-Path -Parent $PSScriptRoot
@@ -25,6 +26,8 @@ $traceFiles = @($files)
 $files += @('scripts\input_gate.lua')
 $gateFiles = @($files)
 $files += @('scripts\attack.lua')
+$attackFiles = @($files)
+$files += @('scripts\ui_bridge.lua','itb_input.dll')
 $markerName = '.itb-coop-probe.json'
 $markerPath = Join-Path $modRoot $markerName
 if ($Mode -eq 'Plan') {
@@ -37,20 +40,21 @@ if ($Mode -eq 'Install') {
     $loaderInit = Join-Path $gameRoot 'scripts\mod_loader\modapi\init.lua'
     if (-not (Test-Path -LiteralPath $loaderInit)) { throw 'Install the separately obtained loader first.' }
     if ((Get-Content -LiteralPath $loaderInit -Raw) -notmatch 'self\.version\s*=\s*"2\.9\.6"') { throw 'Expected pinned loader 2.9.6.' }
-    foreach ($relative in $files) {
+    if (-not $NativeBridgePath -or -not (Test-Path -LiteralPath $NativeBridgePath -PathType Leaf)) { throw 'Supply a separately built, reviewed native bridge using -NativeBridgePath.' }
+    foreach ($relative in ($files | Where-Object { $_ -ne 'itb_input.dll' })) {
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf)) { throw "Missing source $relative" }
     }
     New-Item -ItemType Directory -Path (Join-Path $modRoot 'scripts') | Out-Null
     $installed = @()
     foreach ($relative in $files) {
-        $source = Join-Path $sourceRoot $relative
+        $source = if ($relative -eq 'itb_input.dll') { $NativeBridgePath } else { Join-Path $sourceRoot $relative }
         $destination = Join-Path $modRoot $relative
         Copy-Item -LiteralPath $source -Destination $destination
         $hash = (Get-FileHash -LiteralPath $source).Hash
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.4.2';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.5.2';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }
@@ -60,7 +64,8 @@ if ($marker.Version -in @('0.1.0','0.1.1')) { $files = $legacyFiles }
 elseif ($marker.Version -eq '0.2.0') { $files = $movementFiles }
 elseif ($marker.Version -in @('0.2.1','0.2.2')) { $files = $traceFiles }
 elseif ($marker.Version -eq '0.3.0') { $files = $gateFiles }
-elseif ($marker.Version -notin @('0.4.0','0.4.1','0.4.2')) { throw 'Unrecognized probe version; preserve and inspect before removal.' }
+elseif ($marker.Version -in @('0.4.0','0.4.1','0.4.2')) { $files = $attackFiles }
+elseif ($marker.Version -notin @('0.5.0','0.5.1','0.5.2')) { throw 'Unrecognized probe version; preserve and inspect before removal.' }
 if ($marker.Id -ne 'aman_itb_coop_probe' -or $marker.Files.Count -ne $files.Count) { throw 'Unrecognized ownership manifest.' }
 $actualFiles = @(Get-ChildItem -LiteralPath $modRoot -File -Force -Recurse)
 if (Get-ChildItem -LiteralPath $modRoot -Force -Recurse | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Link in probe folder; refusing removal.' }

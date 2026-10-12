@@ -8,9 +8,9 @@ local function integer(n) return type(n) == 'number' and n == n and n % 1 == 0 e
 
 function movement.new(env, emit, path)
     path = path or 'native'
-    assert(path == 'native' or path == 'effect', 'Unknown movement experiment')
+    assert(path == 'native' or path == 'effect' or path == 'ui', 'Unknown movement experiment')
     local self = { armed = false, blocked = false, pending = nil, fault = false, status = 'Move lab off' }
-    self.label = path == 'effect' and 'effect lab' or 'move lab'
+    self.label = path == 'ui' and 'UI move lab' or (path == 'effect' and 'effect lab' or 'move lab')
     function self:profileAllowed()
         local key = env.modApi:getCurrentProfile()
         return type(key) == 'string' and key ~= '' and type(env.Profile) == 'table'
@@ -40,23 +40,24 @@ function movement.new(env, emit, path)
     local function pawnState(pawn)
         local state = { position = xy(pawn:GetSpace()), health = pawn:GetHealth(), active = pawn:IsActive(),
             movementSpent = pawn:IsMovementSpent(), undoPossible = pawn:IsUndoPossible() }
-        if path == 'effect' then state.undoPosition = xy(pawn:GetUndoLoc()) end
+        if path ~= 'native' then state.undoPosition = xy(pawn:GetUndoLoc()) end
         return state
     end
     local function safeTile(p, origin)
         local b = env.Board
         local terrain = b:GetTerrain(p)
-        -- Leaving an unburning forest is supported; destinations remain plain ground.
-        need((terrain == env.TERRAIN_ROAD or (origin and terrain == env.TERRAIN_FOREST))
+        -- UI submission also supports entering a clear forest through normal engine handling.
+        need((terrain == env.TERRAIN_ROAD or ((origin or path == 'ui') and terrain == env.TERRAIN_FOREST))
             and b:GetItem(p) == '', 'unsupported-tile')
         for _, method in ipairs({ 'IsFire', 'IsAcid', 'IsSmoke', 'IsFrozen', 'IsSpawning',
                 'IsPod', 'IsCracked', 'IsEnvironmentDanger', 'IsDangerous', 'IsDangerousItem' }) do
             need(b[method](b, p) == false, 'unsafe-tile:' .. method)
         end
     end
-    local function validate(request)
+    local function validate(request, allowPending)
         need(self.armed and not self.fault, 'not-armed')
-        need(not self.pending, 'move-pending')
+        need(allowPending or not self.pending, 'move-pending')
+        need(path ~= 'ui' or allowPending or not self.used, 'ui-one-call-lockout')
         local mission = context()
         need(type(request) == 'table' and integer(request.pawnId) and types[request.pawnId], 'invalid-pawn')
         need(request.mission == mission.ID and request.turn == env.Game:GetTurnCount(), 'stale-context')
@@ -103,6 +104,7 @@ function movement.new(env, emit, path)
         return ok
     end
     function self:reset(reason)
+        if self.bridge then self.bridge:stop() end
         if self.pending then
             self.fault = true
             emit('move_failed', { reason = 'context-changed:' .. reason })
@@ -145,6 +147,12 @@ function movement.new(env, emit, path)
             samples = 0, nextSample = 0, startObserved = false, endObserved = false }
         emit('move_requested', { request = command, before = before, path = path, inputGateImplemented = false })
         local ok, result = pcall(function()
+            if path == 'ui' then
+                self.used = true
+                need(self.bridge, 'ui-bridge-unavailable')
+                self.bridge:start(command, function() return pcall(validate, command, true) end)
+                return nil
+            end
             if path == 'effect' then
                 local pawn = env.Board:GetPawn(command.pawnId)
                 local route = env.Board:GetPath(env.Point(command.from.x, command.from.y),
@@ -164,6 +172,7 @@ function movement.new(env, emit, path)
             path = path, returnType = type(result),
             detail = not ok and tostring(result) or nil })
         if not ok or (path == 'native' and result ~= true) then
+            if self.bridge then self.bridge:stop() end
             self.fault, self.armed, self.pending = true, false, nil
             self.status = 'Move failed: restart required'
             emit('move_failed', { reason = 'engine-call-failed-or-uncertain' })
@@ -186,6 +195,7 @@ function movement.new(env, emit, path)
         if now < p.nextSample then return end
         p.nextSample = now + 100
         local ok, after = pcall(function()
+            if self.bridge then self.bridge:update() end
             local mission = context()
             need(mission.ID == p.command.mission and env.Game:GetTurnCount() == p.command.turn, 'context-changed')
             idle()
@@ -193,21 +203,24 @@ function movement.new(env, emit, path)
         end)
         local matches = ok and same(after.position, p.command.to) and after.movementSpent == true
             and after.active == p.before.active and after.health == p.before.health
-        if path == 'effect' then
+        if path ~= 'native' then
             matches = matches and after.undoPossible == true and same(after.undoPosition, p.command.from)
         end
+        if path == 'ui' then matches = matches and p.startObserved and p.endObserved end
         p.samples = matches and (p.samples + 1) or 0
         if p.samples >= 3 then
             emit('move_postconditions_observed', { request = p.command, before = p.before, after = after,
                 startObserved = p.startObserved, endObserved = p.endObserved,
                 path = path, persistenceVerified = false,
                 proofOfQuiescence = false, coverage = 'one-tile-manual-lab-only' })
+            if self.bridge then self.bridge:stop() end
             self.pending = nil
             self.status = 'Move outcome observed'
         elseif now - p.since > 5000 then
             emit('move_failed', { reason = 'postconditions-not-observed', request = p.command,
                 path = path, startObserved = p.startObserved, endObserved = p.endObserved,
                 after = ok and after or nil, detail = not ok and tostring(after) or nil })
+            if self.bridge then self.bridge:stop() end
             self.pending, self.armed, self.fault = nil, false, true
             self.status = 'Move failed: restart required'
         end

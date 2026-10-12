@@ -184,4 +184,27 @@ test('input diagnostic blocks movement arming and requests',function()
     l.gateBlocked=false; assert(l:arm()); l.gateBlocked=true
     assert(not l:request(r) and e.calls==0)
 end)
+test('UI path permits clear forest but still rejects hazards',function()
+    local e,l,r=fixture('ui');e.Board.GetTerrain=function()return 6 end
+    assert(l:arm() and l:validate(r));e.Board.IsFire=function()return true end
+    assert(not l:validate(r) and e.calls==0 and e.effectCalls==0)
+end)
+test('UI path requires hooks and undo then locks further submissions',function()
+    local e,l,r=fixture('ui');local starts,stops=0,0
+    l.bridge={start=function(_,c,validate)starts=starts+1;assert(validate())end,
+        update=function()end,stop=function()stops=stops+1 end}
+    l:arm();assert(l:request(r));e.pawn.position=r.to;e.pawn.spent=true
+    for i=1,3 do e.clock=i*100;l:update()end
+    assert(l.pending)
+    l:skillEvent('onSkillStart',e.pawn,'Move');l:skillEvent('onSkillEnd',e.pawn,'Move')
+    for i=4,6 do e.clock=i*100;l:update()end
+    assert(not l.pending and starts==1 and stops==1 and e.calls==0 and e.effectCalls==0)
+    e.pawn.position=r.from;e.pawn.spent=false
+    assert(not l:request(r) and starts==1)
+end)
+test('UI bridge failure faults without a fallback relocation',function()
+    local e,l,r=fixture('ui');local stops=0
+    l.bridge={start=function()error('uncertain queue')end,stop=function()stops=stops+1 end}
+    l:arm();assert(not l:request(r));assert(l.fault and stops==1 and e.calls==0 and e.effectCalls==0)
+end)
 print('Movement contract tests: '..passed..' passed.')
