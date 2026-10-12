@@ -20,6 +20,8 @@ The real 0.2.0 test returned true and changed position but left movement unused.
 
 ## Proposed after the probe
 
+The 0.2.2 direct skill-effect experiment also failed allowance/undo equivalence, although its position persisted across a controlled reload. The selected lab path is now `effect`; the earlier `native` path remains a regression case. Neither is a legal executor. Investigate the complete native player-command boundary before extending the action layer. [Evidence](effect-experiment.md).
+
 One authoritative host orders both players' validated requests. Two actual game instances render locally. Keep game integration, command validation/session rules, transport, state comparison, and UI/diagnostics separate. Start with a single control token if ownership input gating otherwise delays the engine experiment; label that limitation.
 
 Defaults are two humans, Rift Walkers, three mechs (host two, guest one), host deployment/campaign menus, both ready before team-turn completion, and any accepted action invalidating readiness. The Vek remain AI-controlled. Undo and full-turn reset are separate deferred features and must both be blocked during a future multiplayer session.

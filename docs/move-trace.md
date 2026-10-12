@@ -25,6 +25,8 @@ The session produced 11 probe records: three trace records, one Move start/end p
 
 On resuming this session, Artillery was back at (1,3), movement unused, despite the prior experiment observing it at (0,3) before the user's reported Save and Quit. This is a persistence discrepancy requiring a controlled follow-up; it does not by itself identify whether the native action, save boundary, or another transition caused it. No reset or undo was issued during this trace session.
 
+Follow-up in 0.2.2: this session's normal UI move also resumed at the origin. That removes any basis for attributing the earlier discrepancy specifically to scripted relocation. The subsequent effect submission retained its position across a controlled reload but still failed movement/undo bookkeeping. [Updated comparison](effect-experiment.md).
+
 ## Source evidence and interpretation
 
 - The pinned loader's [Move effect builder](https://github.com/itb-community/ITB-ModLoader/blob/1c683d4fc29267044b6928be14d5270ae92ac43c/scripts/mod_loader/altered/skills.lua#L28) constructs a path-based `SkillEffect:AddMove` for standard ground movement. The visible Lua builder does not explicitly set movement allowance or undo state.
