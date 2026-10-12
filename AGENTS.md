@@ -6,7 +6,7 @@ This repository is separate from the project's read-only synced `sources/`. Keep
 
 - First finish safe baseline and real-game capabilities. Do not expand transport before legal movement, attack execution, input gating, and useful settled observations are demonstrated.
 - Label evidence as source-verified, offline-tested, game-verified, proposed, or unknown. Never promote mock/contract tests into game evidence.
-- Current implementation is an observer. It changes no tactical state, registers no input gate, and has no network listener. Preserve that scope until the next explicit experiment.
+- Current implementation is an observer plus a manually armed movement diagnostic on the disposable profile. The 0.2.0 native Move experiment relocates a pawn without consuming movement; it is not a legal action executor. Preserve the failure evidence and fault lockout. No input gate or network listener exists.
 - Read `docs/status.md` and `docs/feasibility.md` before extending it. Use pinned upstream source, not plausible API names. Do not assume LuaSocket, ABI compatibility, or deterministic AI/RNG.
 - Protect normal saves. Back up and hash affected files outside the live save directory. Use a disposable profile; verify Cloud behavior before two-instance testing. Never upload game assets, binaries, saves, logs, account data, or `.local/`.
 - Explain and obtain approval before publishing a repository, changing Steam Cloud/firewall settings, installing global tools, or running an unfamiliar installer. Once the user approves a specific action, do not ask again. The reviewed loader and probe installation is complete on the originating machine.

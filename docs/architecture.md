@@ -6,11 +6,15 @@
 
 `mod/scripts/init.lua` supplies loader metadata and lifecycle. `probe.lua` subscribes once, distinguishes effect-building counts from execution events, resets observation epochs across contexts, and restricts tactical capture to the named test profile. `snapshot.lua` copies only scalar data immediately; no Board/Pawn userdata is retained for a later callback. `json.lua` and `settle.lua` are pure helpers. `tools/probe-report.cjs` parses local diagnostic JSON, summarizes boundaries, and compares explicitly selected observations.
 
-The mod calls the existing loader extension API; it does not copy or vendor it. memedit remains an optional observation lead. The development Node dependencies are never installed in the game.
+The mod calls the existing loader extension API; it does not copy or vendor it. memedit is optional for observation and required for the manually armed movement diagnostic. The development Node dependencies are never installed in the game.
 
 **ADR 002: stability is a measurement, not a lock.** Three unchanged idle observations are labeled `settled_candidate`, with `proofOfQuiescence=false`. The first real-game test produced candidates between portions of enemy activity, before later effects. They do not authorize actions or assert full synchronization. Input remains normal single-player input. A future executor needs a stronger boundary that accounts for phase and pending work.
 
 **ADR 003: separate local evidence from publishable source.** `.local/` stores downloaded upstream sources/binaries, backups, inert test fixtures, and logs. Git contains this project's source, tests, dependency pins and documentation. Publication must use reviewed tracked files only. `package.json` is private; source licensing is undecided.
+
+**ADR 004: measure an engine action before accepting it as legal execution.** `movement.lua` validates a bounded request immediately before one native call, retains scalar data, and checks destination, allowance, activity and health afterwards. `movement_ui.lua` supplies a local opt-in trigger on the disposable profile. Neither is a multiplayer input gate. The experiment is restricted to three exact Rift Walker pawn identities in `Mission_Artillery`, one adjacent plain-ground destination, and a clear road/forest origin. Unsupported statuses, tiles, abilities, missing reads, stale requests and concurrent lab actions fail closed.
+
+The real 0.2.0 test returned true and changed position but left movement unused. The lab timed out into a fault that survives context resets until process restart. No allowance setter, forced position, automatic retry or rollback was used to manufacture a successful result. [Evidence and next investigation](movement-experiment.md) record the difference from normal UI movement. This diagnostic remains a known failing path, not an executor to connect to transport.
 
 ## Proposed after the probe
 

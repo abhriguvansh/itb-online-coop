@@ -1,24 +1,27 @@
 # Status — October 12, 2026
 
-**Latest working increment: Milestone 0 safe baseline and a real-game observer smoke test. Milestone 1 (legal programmatic actions and input gating) remains incomplete. Online co-op is not implemented.**
+**Latest increment: probe 0.2.0 reproduced a native movement failure and correctly locked out further lab actions. Milestone 1 (legal programmatic actions and input gating) remains incomplete. Online co-op is not implemented.**
 
 ## Implemented
 
 - Local Git repository with original source, tests, dependency pins, and project records.
-- Probe 0.1.1 with version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
+- Probe 0.2.0 retains version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
+- Opt-in one-tile movement diagnostic, immediate request validation, measured postconditions and fault lockout. It is a known failing engine experiment, not a legal movement executor. [Test record](movement-experiment.md).
 - Bounded JSON log reader, deterministic observed-state digests and explicit-boundary field differences.
 - Verified backup/staging tool and scoped probe install/uninstall with ownership and hash checks.
 - A GitHub Actions workflow for offline checks; it does not launch the game.
 
 ## Actually checked
 
-- Windows Steam build 13725832, game 1.2.93, loader 2.9.6, and modApiExt 1.25. Versions agree in the menu and runtime log. memedit and Easy Edit were disabled.
+- Windows Steam build 13725832, game 1.2.93, loader 2.9.6, and modApiExt 1.25. Versions agree in the menu and runtime log. memedit was disabled for the observer baseline, then enabled at 1.2.2 for the movement experiment; Easy Edit remained disabled.
 - The loader release checksum matched upstream metadata. Ten save files and four affected game files were backed up and hash-verified before installation. Private baseline manifest: `.local/backups/baseline-20261012-151451/manifest.json` on the originating machine.
 - The reviewed loader was installed, and the owned probe was installed, removed, and updated while the game was closed. Full loader/save restoration is documented but has not been exercised.
-- Five mod files pass Lua 5.1 syntax parsing. Nineteen Lua contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures pass scoped-install and refusal checks.
+- Seven mod files pass Lua 5.1 syntax parsing. Nineteen observer tests, 41 movement contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures cover scoped installation/removal and legacy five-file upgrade removal.
 - In the disposable `ITB_Coop_Probe` profile, Test Mech and a normal Archive mission produced real execution events, matching partial snapshots, damage, pushes, a collision, and normal attack consumption. Preview-only activity produced no corresponding execution events.
 - One normal team turn continued through enemy attacks, planning, and spawning to the next player turn. The preserved log contains 92 records, including three queued-attack start/end pairs, with no capture failures or missing-hook records. The game's error file was empty. [Detailed evidence](feasibility.md#runtime-evidence--october-12-2026).
-- The test run was saved and the game closed. Steam showed Cloud up to date before and after; its settings were not changed. All four pre-existing normal-profile files still matched their baseline hashes. Global loader/settings files and the disposable save changed as expected.
+- After the observer test, the run was saved and the game closed. Steam showed Cloud up to date before and after that test; its settings were not changed. All four pre-existing normal-profile files matched their baseline hashes. Global loader/settings files and the disposable save changed as expected.
+- With memedit enabled, a normal Cannon move changed movementSpent from false to true while remaining active. A scripted Artillery move reached (0,3) from (1,3) but left movementSpent false and emitted no Move execution hooks. The lab timed out to a fault and could not be rearmed. The final log contains exactly one request and one engine call. No allowance setter or automatic retry was used.
+- The movement test was saved and closed by the user after injected menu clicks failed. All four normal-profile hashes still match. Cloud was up to date before this final launch; its status after the final exit was not rechecked. Raw evidence and all 18 pre-experiment save backups remain private.
 
 ## Failures resolved
 
@@ -26,9 +29,11 @@ The first launch lacked an enabled modApiExt dependency. Both failing logs were 
 
 The initial profile check compared the displayed name with the internal folder key. Renaming the disposable profile left its folder key unchanged. Version 0.1.1 checks the loader-refreshed `Profile.visible_name` and requires a nonempty current-profile key. Offline tests cover wrong/missing names and the renamed-profile case; real tactical capture now passes that gate.
 
+Movement setup corrected Artillery's internal type to `ArtiMech` and allowed leaving a clear forest while retaining a plain-ground-only destination. Neither setup session issued a scripted move. The later allowance-consumption failure is unresolved and preserved, not classified as a successful move.
+
 ## Remaining limits
 
-`settled_candidate` appeared between portions of enemy activity, including before subsequent effects. It is a diagnostic observation, not evidence that all work has drained. Movement-spent state and queued targets were unavailable with memedit disabled. Those findings block using this observer as an action authorization boundary.
+`settled_candidate` appeared between portions of enemy activity, including before subsequent effects. It is a diagnostic observation, not evidence that all work has drained. memedit now supplies movement-spent reads, with one manual baseline comparison; this does not solve the action authorization boundary or prove full state capture.
 
 Legal programmatic movement/attacks, pre-mutation input gating, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
 
@@ -36,4 +41,4 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Single next engineering experiment
 
-Demonstrate one validated programmatic standard move on the disposable profile. First establish a trustworthy movement-spent read and a supported pre-mutation trigger; reject wrong phase, inactive/already-moved pawns, unsupported status, and unreachable targets before invoking the documented engine path. Compare the exact destination and allowance consumption against normal UI movement. Do not add transport until legal execution and input gating are demonstrated.
+Find the normal movement commitment path that performs both the movement effect and action bookkeeping. Native `BoardPawn:Move` alone failed the real-game allowance check. Inspect the skill-effect path and its surrounding commitment logic, then test a supported complete action against the manual baseline. Do not manufacture success by setting movementSpent, or add transport before legal execution and input gating are demonstrated.
