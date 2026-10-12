@@ -1,6 +1,6 @@
 -- Mouse-triggered controls for separate opt-in diagnostics.
 local ui = {}
-function ui.install(env, lab, gate)
+function ui.install(env, lab, gate, attack)
     local controls, windows, lastRequests = {}, {}, {}
     local nextRefresh = 0
     local names = { [0] = 'Combat', [1] = 'Cannon', [2] = 'Artillery' }
@@ -20,6 +20,10 @@ function ui.install(env, lab, gate)
         local root = env.sdlext.getUiRoot()
         if not root then return end
         if not controls.toggle then
+            controls.attack = button(root, 556, 'Enable attack lab', function()
+                if attack.armed then attack:reset('manual-disarm') else attack:arm() end
+            end)
+            controls.fire = button(root, 600, 'Punch Hornet at (2,3)', function() attack:request() end)
             controls.gate = button(root, 510, 'Block input 30s', function()
                 if gate.active then gate:stop('manual-disarm', false) else gate:arm() end
             end)
@@ -40,10 +44,15 @@ function ui.install(env, lab, gate)
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID == 'Mission_Artillery'
         end)
         visible = ok and visible == true
-        controls.gate.visible = visible
+        controls.attack.visible = visible and not gate.active and not lab.armed
+        controls.attack:caption(attack.armed and 'Disable attack lab' or 'Enable attack lab')
+        controls.attack:settooltip(attack.status)
+        controls.fire.visible = visible and attack.armed
+        controls.fire:settooltip(attack.status)
+        controls.gate.visible = visible and not attack.armed
         controls.gate:caption(gate.active and gate.status or 'Block input 30s')
         controls.gate:settooltip(gate.status)
-        controls.toggle.visible = visible and not gate.active
+        controls.toggle.visible = visible and not gate.active and not attack.armed
         controls.toggle:caption((lab.armed and 'Disable ' or 'Enable ') .. lab.label)
         controls.toggle:settooltip(lab.status)
         local refresh = env.modApi:elapsedTime() >= nextRefresh

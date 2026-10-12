@@ -38,6 +38,7 @@ end)
 test('held key repeats and release remain suppressed across expiry', function()
     local e,l,g=fixture(); g:arm(); assert(g:handle('keydown',7)); e.clock=30001
     assert(g:handle('keydown',7)); assert(not g:arm()); assert(g:handle('keyup',7))
+    assert(e.logs[#e.logs-1].kind == 'input_gate_tail_release')
     assert(not g:handle('keydown',7)); assert(g:arm())
 end)
 test('mouse release is paired across manual disarm', function()

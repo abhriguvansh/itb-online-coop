@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.3.0',
+    version = '0.4.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in one-tile movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -22,15 +22,20 @@ function mod:init()
         function(kind, payload) self.probe:record(kind, payload) end,
         function() return require(path .. 'snapshot').capture(_G, GetCurrentMission(), require(path .. 'json')) end)
     self.inputGate:install()
-    require(path .. 'movement_ui').install(_G, self.movement, self.inputGate)
-    modApi.events.onMissionUpdate:subscribe(function() self.movement:update(); self.moveTrace:update() end)
+    self.attack = require(path .. 'attack').new(_G, self.movement, self.inputGate,
+        function(kind, payload) self.probe:record(kind, payload) end,
+        function() return require(path .. 'snapshot').capture(_G, GetCurrentMission(), require(path .. 'json')) end,
+        require(path .. 'json'))
+    require(path .. 'movement_ui').install(_G, self.movement, self.inputGate, self.attack)
+    modApi.events.onMissionUpdate:subscribe(function() self.movement:update(); self.moveTrace:update(); self.attack:update() end)
     for _, name in ipairs({ 'onMissionChanged', 'onMissionEnd', 'onGameExited', 'onProfileChanged' }) do
         local eventName = name
-        modApi.events[eventName]:subscribe(function() self.inputGate:stop(eventName, true); self.movement:reset(eventName); self.moveTrace:reset() end)
+        modApi.events[eventName]:subscribe(function() self.attack:reset(eventName); self.inputGate:stop(eventName, true); self.movement:reset(eventName); self.moveTrace:reset() end)
     end
     for _, name in ipairs({ 'onSkillStart', 'onSkillEnd' }) do
         local eventName = name
         modapiext.events[eventName]:subscribe(function(_, pawn, weapon, from, to)
+            self.attack:skillEvent(eventName, pawn, weapon)
             self.movement:skillEvent(eventName, pawn, weapon)
             self.moveTrace:observe(eventName, pawn, weapon, from, to)
         end)
@@ -41,6 +46,7 @@ function mod:init()
 end
 
 function mod:load()
+    self.attack:reset('mod-load')
     self.inputGate:stop('mod-load', true)
     self.probe:load()
     self.movement:reset('mod-load')

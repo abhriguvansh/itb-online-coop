@@ -17,7 +17,7 @@ function gate.new(env, lab, emit, capture)
         assert(env.Board and not env.Board:IsTipImage(), 'no board')
         assert(not env.modApi.deployment:isDeploymentPhase() and not env.modApi.deployment:isLandingPhase(), 'deployment')
         assert(env.Game:GetTeamTurn() == env.TEAM_PLAYER and env.Game:GetTurnCount() >= 1, 'wrong phase')
-        assert(not lab.armed and not lab.pending, 'movement lab must be off')
+        assert(not lab.armed and not lab.pending and not lab.attackBlocked, 'other labs must be off')
         return mission
     end
     local function sample()
@@ -31,8 +31,10 @@ function gate.new(env, lab, emit, capture)
         if self.active then
             self.active, lab.gateBlocked = false, false
             self.status = 'Input lab off: ' .. reason
+            local heldCount = 0
+            for _ in pairs(self.held) do heldCount = heldCount + 1 end
             log('input_gate_end', { reason = reason, blockedEvents = self.count, state = sample(),
-                proofOfCompleteGate = false })
+                heldCount = heldCount, proofOfCompleteGate = false })
         end
         if clearHeld then self.held = {} end
     end
@@ -77,6 +79,9 @@ function gate.new(env, lab, emit, capture)
         if not self.active and not (id and self.held[id]) then return false end
         if down then self.held[id] = true elseif up then self.held[id] = nil end
         self.count = self.count + 1
+        if not self.active and up then
+            log('input_gate_tail_release', { kind = kind, code = code })
+        end
         if self.count <= 128 then
             log('input_gate_blocked', { kind = kind, code = code, active = self.active })
         elseif self.count == 129 then log('input_gate_log_limit', { limit = 128 }) end
