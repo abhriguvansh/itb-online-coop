@@ -1,11 +1,11 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.3.0 demonstrated bounded mouse input blocking, automatic release, and a successful normal-move positive control. Keyboard and broader input coverage remain unproven; both direct movement executors remain unsuitable. Milestone 1 remains incomplete. Online co-op is not implemented.**
+**Latest increment: probe 0.4.1 executed one validated standard attack with damage, push, normal action consumption, and persisted pawn outcomes after reload. Physical Tab blocking has bounded evidence. Legal movement and complete input authorization remain unresolved; online co-op is not implemented.**
 
 ## Implemented
 
 - Local Git repository with original source, tests, dependency pins, and project records.
-- Probe 0.3.0 retains version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
+- Probe 0.4.1 retains version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
 - Read-only normal Move trace: bounded logging, deduplicated preview state, separate execution states, allowance/undo reads, and a two-second change watch. [Trace evidence](move-trace.md).
 - Opt-in one-tile movement diagnostic, immediate request validation, measured postconditions and fault lockout. It is a known failing engine experiment, not a legal movement executor. [Test record](movement-experiment.md).
 - The selected diagnostic now submits a direct movement effect with path checks and strict undo postconditions. The earlier native path remains covered offline. [Effect test](effect-experiment.md).
@@ -22,7 +22,7 @@
 - Windows Steam build 13725832, game 1.2.93, loader 2.9.6, and modApiExt 1.25. Versions agree in the menu and runtime log. memedit was disabled for the observer baseline, then enabled at 1.2.2 for the movement experiment; Easy Edit remained disabled.
 - The loader release checksum matched upstream metadata. Ten save files and four affected game files were backed up and hash-verified before installation. Private baseline manifest: `.local/backups/baseline-20261012-151451/manifest.json` on the originating machine.
 - The reviewed loader was installed, and the owned probe was installed, removed, and updated while the game was closed. Full loader/save restoration is documented but has not been exercised.
-- Nine mod files pass Lua 5.1 syntax parsing. Nineteen observer, 49 movement, ten trace and 14 input-gate contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures cover scoped installation/removal and legacy five-/seven-/eight-file upgrade removal.
+- Ten mod files pass Lua 5.1 syntax parsing. Nineteen observer, 49 movement, ten trace 14 input-gate and 23 attack contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures cover scoped installation/removal and legacy five-/seven-/eight-/nine-file upgrade removal.
 - In the disposable `ITB_Coop_Probe` profile, Test Mech and a normal Archive mission produced real execution events, matching partial snapshots, damage, pushes, a collision, and normal attack consumption. Preview-only activity produced no corresponding execution events.
 - One normal team turn continued through enemy attacks, planning, and spawning to the next player turn. The preserved log contains 92 records, including three queued-attack start/end pairs, with no capture failures or missing-hook records. The game's error file was empty. [Detailed evidence](feasibility.md#runtime-evidence--october-12-2026).
 - After the observer test, the run was saved and the game closed. Steam showed Cloud up to date before and after that test; its settings were not changed. All four pre-existing normal-profile files matched their baseline hashes. Global loader/settings files and the disposable save changed as expected.
@@ -44,12 +44,12 @@ Movement setup corrected Artillery's internal type to `ArtiMech` and allowed lea
 
 `settled_candidate` appeared between portions of enemy activity, including before subsequent effects. It is a diagnostic observation, not evidence that all work has drained. memedit now supplies movement-spent reads, with one manual baseline comparison; this does not solve the action authorization boundary or prove full state capture.
 
-Legal programmatic movement/attacks, complete input authorization, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
+Legal programmatic movement, general attack coverage, complete input authorization, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
 
 Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/abhriguvansh/itb-online-coop), explicitly approved on October 12, 2026. [Live CI results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) are the authority for each pushed revision; local checks alone are not evidence of a successful GitHub run. Source licensing is undecided; no game or upstream code is included.
 
-## Single next engineering experiment
+## Next playable milestone
 
-The initial mouse experiment is complete: two click pairs were consumed, arming/timeout partial snapshots matched, and the same move executed normally after release. Eighteen records, empty error file, normal saves unchanged, game closed and Cloud up to date. [Detailed result](input-gate.md).
+Deliver a complete legal movement path alongside the bounded attack path, then exercise serialized actions before adding transport. Inspect the native command boundary; neither failed relocation primitive nor flag repair is a substitute. Keep small experiments inside this larger milestone rather than asking the user to continue after each one.
 
-Next validate physical keyboard down/up and held-key release across timeout, with a harmless shortcut positive control. The injected repair key produced only text input; it is not keyboard-action evidence. Expand undo/reset/menu coverage separately. Complete legal command submission remains independently unresolved. Do not repeat failing movement primitives, patch flags to claim success, or add transport.
+The [attack record](attack-experiment.md) documents two real submissions, the corrected return-value check, persistence and the remaining tile discrepancy. The [input record](input-gate.md) documents physical Tab, menu coverage and the verified Tab/Escape scan-code helper. No further routine physical-keyboard check is currently requested.

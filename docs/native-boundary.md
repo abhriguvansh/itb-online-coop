@@ -38,7 +38,7 @@ An SDL event-submission bridge would be a different design: it would need local 
 
 ## Next runnable experiment: bounded event-consumption lab
 
-Use the existing loader to establish whether its source-backed interception point actually blocks the chosen mouse/keyboard actions on the disposable profile. Probe 0.3.0 completed the initial mouse test with a positive control; see [results and remaining coverage](input-gate.md). The steps below remain the test protocol; keyboard, held-input and broader route coverage are still unverified.
+Use the existing loader to establish whether its source-backed interception point actually blocks the chosen mouse/keyboard actions on the disposable profile. Probe 0.3.0 completed the initial mouse test with a positive control; see [results and remaining coverage](input-gate.md). The steps below remain the test protocol; Tab and Escape now have bounded keyboard coverage through a verified scan-code helper; held-input and broader route coverage remain incomplete.
 
 1. Back up and preserve current evidence. Start in the named disposable profile with the movement-effect lab off. Record one selected pawn, turn, grid, and action availability before arming.
 2. Add a manually armed, visibly labeled, time-bounded input diagnostic. Retain the hook object for its lifetime. Keep context changes, exceptions, and emergency exit behavior explicit; it must not trap the user indefinitely. A diagnostic timeout is not an acceptable multiplayer fail-open policy.
@@ -47,4 +47,4 @@ Use the existing loader to establish whether its source-backed interception poin
 5. Test repair, weapon shortcuts, undo, reset, menu routes, and focus changes separately. Identify any earlier loader handler or polled-state bypass. Unsupported controller paths remain outside the declared mouse/keyboard scope and cannot be claimed blocked.
 6. Any unblocked mutation is a failed gate; preserve the event/state sequence and stop. Passing selected controls establishes only their bounded coverage, not full authorization or quiescence.
 
-This is the next smaller test because its API is present and its failure modes are now identified. It advances input gating while legal programmatic action commitment remains a separate blocker. Transport remains deferred.
+The initial gate and keyboard follow-up are complete within their stated scope. The next investigation is legal movement submission, including whether a UI-event bridge can reach normal commit handling without relying on selected units, fixed screen coordinates or untagged physical input. Transport remains deferred.

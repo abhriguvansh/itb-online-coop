@@ -1,6 +1,6 @@
 # Temporary input gate — probe 0.3.0
 
-## Result: bounded mouse coverage demonstrated
+## Result: bounded mouse coverage demonstrated (initial test)
 
 On October 12, 2026, the existing loader hook consumed a move click and an End Turn click during a manually armed 30-second window. The full **partial observation** at arming and timeout was identical: player turn 2, grid 4, nine pawns, and no unavailable fields. No execution or phase event appeared between those records. After automatic release, the same destination click executed a normal Artillery move, consumed movement, and established undo. This is evidence for the tested mouse path, not complete multiplayer authorization.
 
@@ -26,10 +26,26 @@ The gate checks the disposable profile, game version, supported tactical context
 
 This diagnostic deliberately releases on context/clock failure. Callback exceptions are contained; the failing event is consumed if the gate was active, then the lab releases. Clock reset, held input, callback faults, log limits and lifecycle behavior have offline contracts only. A frozen process cannot run the timer. These behaviors are **not** a production multiplayer failure policy.
 
-Matching partial observations cannot prove unchanged RNG, hidden callbacks, UI state or complete engine state. Keyboard shortcuts, held physical inputs, undo, reset, repair, weapon selection, menus, focus transitions, other mods and controllers still require separate tests. The current result does not justify enabling networking or claiming all unauthorized actions are blocked.
+Matching partial observations cannot prove unchanged RNG, hidden callbacks, UI state or complete engine state. Beyond the follow-up below, shortcut families, exact held-input tails, undo, reset, repair, weapon selection, focus transitions, other mods and controllers still require separate tests. The current result does not justify enabling networking or claiming all unauthorized actions are blocked.
 
 ## Repeat and next test
 
 With the disposable profile and supported mission loaded, keep the effect lab off. Select an unused mech and note a reachable tile. Click **Block input 30s**, attempt the destination and End Turn, let the timer expire, and repeat the destination click. Preserve the original log and compare the start/end observations and subsequent normal Move trace.
 
-Next test physical keyboard down/up with an actual keyboard or a verified delivery method, including a harmless shortcut positive control, then a held key released across timeout. Expand undo/reset/menu coverage with matched unblocked controls. Stop and preserve evidence if any gameplay mutation bypasses the gate. Legal programmatic action commitment remains a separate unresolved blocker; do not repeat failed relocation primitives or repair their flags to declare success.
+The follow-up below partially closes keyboard/menu coverage. Complete legal movement commitment remains unresolved; do not repeat failed relocation primitives or repair their flags to declare success.
+
+## Physical keyboard and automation follow-up
+
+The user ran the disposable profile with a physical keyboard and reported that Tab selected units normally until blocking was enabled. The preserved 0.3.0 log contains 136 records, 128 logged key-down events for code 9, a logging-limit record, and timeout with 787 consumed events. Starting/ending partial observations matched. The cap hides the release/tail sequence, so exact held-key behavior across timeout is not independently established by that log. New diagnostics report held count at timeout and tail releases outside the bulk event cap.
+
+With 0.4.0, automated Tab and Ctrl+D during a separate gate window produced zero consumed events. Earlier automated r produced text only. The same hook sees physical keys: this isolates an automation-delivery limitation, but does not establish its low-level cause. The available keyboard API exposes chords, without documented hold duration or scan-code options. Focus activation did not establish a reliable keyboard path. No input helper was used in that initial check.
+
+A second window consumed Undo Move and gear-menu click pairs and left the partial observation unchanged. The gear menu opened successfully after release. Undo lacked a successful paired control; Reset Turn was unavailable in this save. Do not count either as complete coverage. Mouse automation also intermittently missed game-menu clicks; working custom diagnostic buttons are not proof of reliable native controls.
+
+Private evidence: `.local/evidence/input-gate-physical-0.3.0/` and `.local/evidence/attack-0.4.0/`. No additional manual keyboard check is requested. At that point keyboard delivery was unresolved; the subsequent authorized helper check below provides a working path for Tab and Escape.
+
+## Automated keyboard follow-up
+
+The user authorized a narrow local scan-code helper after ordinary injected keys failed in SDL. Tab and Escape now have real-game positive controls, paired blocking under the gate, unchanged partial state, and restored Tab selection after timeout. Only these two keys and short presses were tested; held-across-timeout coverage remains incomplete. The helper stays private and checks the exact game process and foreground window before sending. This is a development input workaround, not a multiplayer command executor.
+
+Private evidence: .local/evidence/keyboard-helper-20261012/. The gate consumed exactly four events: Tab down/up (code 9), Escape down/up (code 27). It ended with no held inputs. Outside the gate Tab changed unit selection and Escape opened the native menu. No general keyboard, chord or held-input guarantee follows from this check.

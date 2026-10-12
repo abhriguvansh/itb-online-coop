@@ -54,11 +54,22 @@ test('matching visible result without hooks is insufficient',function()
 end)
 test('uncertain exception never retries',function()
     local e,l,g,a=fixture();e.actor.FireWeapon=function()e.calls=e.calls+1;error('uncertain')end
-    a:arm();assert(not a:request());assert(a.fault and not a:arm() and e.calls==1)
+    a:arm();assert(not a:request());assert(a.fault and a.pending and not a:arm() and e.calls==1)
+    e.clock=5001;a:update();assert(not a.pending and a.fault)
 end)
-test('native false locks the lab',function()
+test('native false retains observation but cannot retry',function()
     local e,l,g,a=fixture();e.actor.FireWeapon=function()e.calls=e.calls+1;return false end
-    a:arm();assert(not a:request());assert(a.fault and a.used and not a:arm())
+    a:arm();assert(a:request());assert(a.pending and a.used and not a:request())
+    e.clock=5001;a:update();assert(a.fault and not a:arm())
+end)
+test('nil return can still produce observed completion without a retry',function()
+    local e,l,g,a=fixture();e.actor.FireWeapon=function()e.calls=e.calls+1 end
+    a:arm();assert(a:request());a:skillEvent('onSkillStart',e.actor,'Prime_Punchmech')
+    e.actor.active=false;e.target.hp=1;e.target.pos={x=1,y=3}
+    a:skillEvent('onSkillEnd',e.actor,'Prime_Punchmech')
+    for i=1,3 do e.clock=i*100;a:update()end
+    assert(not a.pending and not a.fault and e.calls==1)
+    assert(e.logs[#e.logs].payload.returnType=='nil')
 end)
 test('context reset preserves one-call lockout',function()
     local e,l,g,a=fixture();a:arm();a:request();a:reset('mission-change');assert(a.fault and not a:arm())

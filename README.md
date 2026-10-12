@@ -4,21 +4,23 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.3.0, an observer with movement diagnostics and a temporary input-blocking lab. Online co-op is not implemented.**
+**Current version: 0.4.1, with a game-tested standard attack diagnostic, movement diagnostics, and a temporary input gate. Online co-op is not implemented.**
 
 The read-only trace captured normal movement bookkeeping: undo became available by the execution-start hook, and movement was consumed by execution end. This narrows the missing behavior without claiming a complete action API. [Trace results](docs/move-trace.md).
 
 The real-game movement experiment exposed a blocker: `BoardPawn:Move` reached the requested tile but did not consume movement allowance, establish undo state, or emit the normal move execution hooks. The diagnostic detected the failed postcondition and locked itself off. It is a reproducible investigation, not a working legal-movement feature. [Movement test record](docs/movement-experiment.md).
 
-The October 12, 2026 smoke test captured manual moves, Titan Fist attacks, damage, pushes, action consumption, enemy attacks, and spawning. It ran on a disposable profile using Test Mech and the first turn of a normal Archive mission. [Results and limits](docs/feasibility.md#runtime-evidence--october-12-2026) distinguish these observations from scripted action execution and synchronization, which remain unproven.
+The October 12, 2026 smoke test captured manual moves, Titan Fist attacks, damage, pushes, action consumption, enemy attacks, and spawning. It ran on a disposable profile using Test Mech and the first turn of a normal Archive mission. [Results and limits](docs/feasibility.md#runtime-evidence--october-12-2026) distinguish these observations from general action execution and synchronization, which remain unproven.
 
 The first engineering question is whether the real game exposes reliable action execution, input control, and enough state to keep two instances aligned. This repository records evidence and runnable experiments before choosing a networking design.
 
 The 0.2.2 follow-up submitted a movement effect directly. Its position survived saving/reloading, but movement remained unused and undo unavailable. Both direct movement paths therefore remain unsuitable as legal action executors. [Effect test and next investigation](docs/effect-experiment.md).
 
+The new [native attack experiment](docs/attack-experiment.md) executed a validated Titan Fist attack, consumed the mech action, and preserved damage/push through save and reload. Movement remains the main command-execution blocker.
+
 ## What exists
 
-The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Keyboard and broader input coverage remain unproven. No complete move-command API or new native extension has been established.
+The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. No complete move-command API or new native extension has been established.
 
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
@@ -36,7 +38,7 @@ There is no action replay, production multiplayer input authorization, transport
 
 The tested Steam build is `13725832`, game `1.2.93`, with [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6) and its bundled modApiExt `1.25`. Main-menu versions and runtime logs agree. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). This is one tested baseline, not a compatibility claim for other versions.
 
-Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's nine Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
+Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's ten Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
 
 ## Test the project code
 
@@ -49,7 +51,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, and 14 input-gate contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, and eight-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
+The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, 14 input-gate, and 23 attack contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, eight-, and nine-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
 
 ## Prepare a real-game test
 

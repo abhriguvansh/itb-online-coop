@@ -84,12 +84,14 @@ function attack.new(env, lab, gate, emit, capture, json)
             target = {x=2,y=3}, before = before })
         local called, result = pcall(function() return env.Board:GetPawn(0):FireWeapon(env.Point(2,3),1) end)
         emit('attack_engine_return', { callSucceeded = called, returnedTrue = result == true,
-            detail = not called and tostring(result) or nil })
-        if not called or result ~= true then
-            self.fault = true; self:reset('engine-call-failed-or-uncertain'); return false
-        end
+            returnType = type(result), detail = not called and tostring(result) or nil })
+        -- The installed engine executed an attack without returning true. Never
+        -- discard observation or retry solely because the return is unexpected.
+        self.pending.callSucceeded, self.pending.returnType = called, type(result)
+        self.pending.returnedTrue = result == true
+        if not called then self.fault = true end
         self.status = 'Checking attack outcome'
-        return true
+        return called -- Submission only; completion is measured independently.
     end
     function self:skillEvent(kind, pawn, weapon)
         if self.pending and pawn and pawn:GetId() == 0 and weapon == 'Prime_Punchmech' then
@@ -121,7 +123,9 @@ function attack.new(env, lab, gate, emit, capture, json)
         p.last = fingerprint
         if p.samples >= 3 then
             emit('attack_postconditions_observed', { after = after, startObserved = p.startObserved,
-                endObserved = p.endObserved, proofOfQuiescence = false, persistenceVerified = false })
+                endObserved = p.endObserved, callSucceeded = p.callSucceeded,
+                returnType = p.returnType, returnedTrue = p.returnedTrue,
+                proofOfQuiescence = false, persistenceVerified = false })
             self.pending = nil; self:reset('observed'); self.status = 'Attack outcome observed; lab locked'
         elseif t - p.since >= 5000 then
             emit('attack_outcome_timeout', { after = ok and after or nil, readError = not ok and tostring(after) or nil,
