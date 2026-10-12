@@ -4,7 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.2.0, an observer with an opt-in movement diagnostic. Online co-op is not implemented.**
+**Current version: 0.2.1, an observer with a normal-move trace and an opt-in movement diagnostic. Online co-op is not implemented.**
+
+The new read-only trace captured normal movement bookkeeping: undo became available by the execution-start hook, and movement was consumed by execution end. This narrows the missing behavior without claiming a complete action API. [Trace results](docs/move-trace.md).
 
 The real-game movement experiment exposed a blocker: `BoardPawn:Move` reached the requested tile but did not consume movement allowance, establish undo state, or emit the normal move execution hooks. The diagnostic detected the failed postcondition and locked itself off. It is a reproducible investigation, not a working legal-movement feature. [Movement test record](docs/movement-experiment.md).
 
@@ -15,6 +17,7 @@ The first engineering question is whether the real game exposes reliable action 
 ## What exists
 
 - A Lua mod that registers source-backed execution and mission-phase hooks.
+- A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
 - A manually armed, one-tile movement experiment with validation, outcome checks, and a fault lockout; disabled by default.
 - Versioned JSON diagnostic records through the loader's `LOG` function.
 - Partial tile, pawn, turn, and grid observations, with unavailable fields identified.
@@ -28,7 +31,7 @@ There is no action replay, input gate, transport, deterministic replay claim, or
 
 The tested Steam build is `13725832`, game `1.2.93`, with [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6) and its bundled modApiExt `1.25`. Main-menu versions and runtime logs agree. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). This is one tested baseline, not a compatibility claim for other versions.
 
-Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's seven Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not.
+Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's eight Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
 
 ## Test the project code
 
@@ -41,7 +44,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 observer and 41 movement contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of the earlier five-file probe. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
+The current offline suite validates Lua 5.1 syntax, executes 19 observer, 41 movement, and ten trace contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five- and seven-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
 
 ## Prepare a real-game test
 

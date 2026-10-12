@@ -44,10 +44,12 @@ This procedure deliberately reproduces a failed engine path and changes the disp
 3. Keep the lab off while collecting one normal UI movement baseline. Compare position, movement-spent, health and activity before/after. Preserve logs before another launch replaces them.
 4. Click **Enable move lab**. A supported unmoved mech needs an empty, adjacent, reachable plain-ground destination and clear road/forest origin. The lab rejects hazards/items, unsupported statuses, occupied or unreachable destinations, wrong phase/context and missing getters. Unavailable buttons may show the last attempted candidate's rejection reason.
 5. Click one displayed move. The request is revalidated before the single native call. Let the outcome check finish without other gameplay input. A true return alone is not a pass. Record exact destination, movement allowance, health, activity and hook presence; do not patch state to satisfy the check.
-6. On the known failure, verify Enable cannot rearm, preserve logs and save/quit. A restart clears only the lab fault, not the changed game state. Do not retry the failed path as if it were a legal executor.
+6. On the known failure, verify Enable cannot rearm, preserve logs and save/quit. A restart clears the lab fault; the diagnostic performs no state rollback. Persistence of the native relocation is unverified and a later resume showed the prior origin. Do not retry the failed path as if it were a legal executor.
 
 The 41 offline movement tests cover validation, pending locks, outcome checks and faults against doubles. The successful-outcome and already-spent cases in those tests are hypothetical engine responses, not real-game successes.
 
 ## Next blocking experiment
+
+Follow-up: the [0.2.1 read-only trace](move-trace.md) completed one normal move along the same route. Undo was available by effect start and movement was consumed by effect end. The complete commitment path remains unidentified; the trace narrows the investigation below.
 
 Trace the normal move commitment path that pairs the movement effect with allowance and undo bookkeeping. The pinned loader's [Move skill implementation](https://github.com/itb-community/ITB-ModLoader/blob/1c683d4fc29267044b6928be14d5270ae92ac43c/scripts/mod_loader/altered/skills.lua#L28) builds a `SkillEffect` using `AddMove`, while modApiExt [wraps skill effects](https://github.com/itb-community/ITB-ModUtils/blob/21bcb56ba674aaaa6a940118b1cd527dfd38401b/scripts/alter.lua#L475) to observe execution. Those are source leads, not proof that directly submitting an effect performs normal action bookkeeping. Find and test a supported complete commitment path before extending attacks or transport. Do not simply set movementSpent to turn this result into a pass.

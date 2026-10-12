@@ -16,6 +16,8 @@ The mod calls the existing loader extension API; it does not copy or vendor it. 
 
 The real 0.2.0 test returned true and changed position but left movement unused. The lab timed out into a fault that survives context resets until process restart. No allowance setter, forced position, automatic retry or rollback was used to manufacture a successful result. [Evidence and next investigation](movement-experiment.md) record the difference from normal UI movement. This diagnostic remains a known failing path, not an executor to connect to transport.
 
+**ADR 005: trace bookkeeping without changing it.** `move_trace.lua` copies state at build/start/end, deduplicates unchanged preview states, and briefly watches for later changes. It does not edit effects, call actions, or use setters. Native userdata never survives a callback. The 0.2.1 normal-move trace found undo available by effect start and movement consumed by effect end. The start hook therefore cannot be treated as a pre-mutation rejection boundary. [Evidence and limits](move-trace.md).
+
 ## Proposed after the probe
 
 One authoritative host orders both players' validated requests. Two actual game instances render locally. Keep game integration, command validation/session rules, transport, state comparison, and UI/diagnostics separate. Start with a single control token if ownership input gating otherwise delays the engine experiment; label that limitation.
