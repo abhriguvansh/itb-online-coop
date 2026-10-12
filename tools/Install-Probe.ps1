@@ -42,7 +42,7 @@ if ($Mode -eq 'Install') {
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.1.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.1.1';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }

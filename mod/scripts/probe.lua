@@ -11,7 +11,11 @@ function probe.new(mod, env, json, snapshot, settle)
             event = kind, sequence = self.sequence, epoch = self.epoch, payload = payload or {} }))
     end
     local function allowed()
-        return env.modApi:getCurrentProfile() == 'ITB_Coop_Probe'
+        -- getCurrentProfile returns a folder key, which survives profile renames.
+        -- The loader refreshes Profile on main-menu entry and profile changes.
+        local key = env.modApi:getCurrentProfile()
+        return type(key) == 'string' and key ~= '' and type(env.Profile) == 'table'
+            and env.Profile.visible_name == 'ITB_Coop_Probe'
     end
     local function clear()
         self.epoch = self.epoch + 1

@@ -52,7 +52,8 @@ test('state change and context reset restart stability', function()
 end)
 
 local function environment()
-    local env = { TEAM_ANY = 2, clock = 0, logs = {}, selectedProfile = 'ITB_Coop_Probe' }
+    local env = { TEAM_ANY = 2, clock = 0, logs = {}, selectedProfile = 'Alpha',
+        Profile = { visible_name = 'ITB_Coop_Probe' } }
     env.Point = function(x,y) return {x=x,y=y} end
     local pawn = { IsBusy=function() return false end,
         GetSpace=function() return env.Point(0,0) end, GetId=function() return 7 end }
@@ -142,11 +143,22 @@ test('duplicate subscribe and repeated loads do not multiply callbacks', functio
 end)
 test('normal profile and tip images do not produce tactical evidence', function()
     local env=environment(); local p=probe.new({version='test'},env,json,snapshot,settle); p:subscribe()
-    env.selectedProfile='normal'; env:tick(); env:tick(); env:tick()
+    env.selectedProfile='normal'; env.Profile.visible_name='normal'; env:tick(); env:tick(); env:tick()
     env.modapiext.events.onSkillStart:dispatch({},env.pawn,'Move',env.Point(0,0),env.Point(1,0))
     eq(env:count('onSkillStart'),0); eq(env:count('settled_candidate'),0)
-    env.selectedProfile='ITB_Coop_Probe'; env.Board.IsTipImage=function() return true end
+    env.selectedProfile='Alpha'; env.Profile.visible_name='ITB_Coop_Probe'; env.Board.IsTipImage=function() return true end
     env:tick(); env:tick(); env:tick(); eq(env:count('settled_candidate'),0)
+end)
+test('profile display name is required even when its folder key matches', function()
+    local env=environment(); local p=probe.new({version='test'},env,json,snapshot,settle); p:subscribe()
+    env.selectedProfile='ITB_Coop_Probe'; env.Profile.visible_name='normal'
+    env:tick(); env:tick(); env:tick(); eq(env:count('settled_candidate'),0)
+    env.Profile=nil
+    env:tick(); env:tick(); env:tick(); eq(env:count('settled_candidate'),0)
+    env.Profile={visible_name='ITB_Coop_Probe'}; env.selectedProfile=''
+    env:tick(); env:tick(); env:tick(); eq(env:count('settled_candidate'),0)
+    env.selectedProfile='Alpha'
+    env:tick(); env:tick(); env:tick(); eq(env:count('settled_candidate'),1)
 end)
 test('build events do not become execution events', function()
     local env=environment(); local p=probe.new({version='test'},env,json,snapshot,settle); p:subscribe()

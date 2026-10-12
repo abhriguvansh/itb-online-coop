@@ -1,11 +1,13 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.1.0',
+    version = '0.1.1',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Observer-only research probe. Logs execution and partial state on ITB_Coop_Probe. No multiplayer yet.',
     dependencies = { modApiExt = '1.25' },
+    -- Enable this and modApiExt in Configure Mods, then restart the game.
+    enabled = false,
 }
 
 function mod:init()
