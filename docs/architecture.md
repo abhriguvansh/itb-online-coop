@@ -20,6 +20,8 @@ The real 0.2.0 test returned true and changed position but left movement unused.
 
 ## Proposed after the probe
 
+**ADR 006: investigate existing input interception before replacing native libraries.** The [native boundary audit](native-boundary.md) finds event suppression in the installed loader's source lineage, but no exposed complete command-submission operation. A timed diagnostic gate can test that existing path. Hook ordering, exception fall-through, release handling, and polled-state bypasses must be measured before treating it as authorization. A future command bridge needs a verified native entry point; DLL exports and movement flag setters do not establish one. No native extension is currently selected or installed.
+
 The 0.2.2 direct skill-effect experiment also failed allowance/undo equivalence, although its position persisted across a controlled reload. The selected lab path is now `effect`; the earlier `native` path remains a regression case. Neither is a legal executor. Investigate the complete native player-command boundary before extending the action layer. [Evidence](effect-experiment.md).
 
 One authoritative host orders both players' validated requests. Two actual game instances render locally. Keep game integration, command validation/session rules, transport, state comparison, and UI/diagnostics separate. Start with a single control token if ownership input gating otherwise delays the engine experiment; label that limitation.

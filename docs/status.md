@@ -1,6 +1,6 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.2.2 tested direct skill-effect movement and a controlled save/reload. Relocation persisted, but movement consumption and undo failed. Both direct movement paths remain unsuitable. Milestone 1 (legal programmatic actions and input gating) remains incomplete. Online co-op is not implemented.**
+**Latest increment: source audit identified the native input-event consumption path, its ordering/error limitations, and the missing command-submission interface. Runtime remains probe 0.2.2; both direct movement paths remain unsuitable. Milestone 1 (legal programmatic actions and input gating) remains incomplete. Online co-op is not implemented.**
 
 ## Implemented
 
@@ -14,6 +14,8 @@
 - A GitHub Actions workflow for offline checks; it does not launch the game.
 
 ## Actually checked
+
+- Native source provenance and input bindings audited: installed SDL2.dll matches the pinned loader file; its update points to the reviewed native source. PollEvent can suppress delivery, but hook order, exception fall-through, separate input-state reads, and earlier Lua UI handlers limit what a late hook can guarantee. No complete player-command submission API was identified. This increment changed documentation/dependency records only; no new game test or native installation. [Audit and next test](native-boundary.md).
 
 - Windows Steam build 13725832, game 1.2.93, loader 2.9.6, and modApiExt 1.25. Versions agree in the menu and runtime log. memedit was disabled for the observer baseline, then enabled at 1.2.2 for the movement experiment; Easy Edit remained disabled.
 - The loader release checksum matched upstream metadata. Ten save files and four affected game files were backed up and hash-verified before installation. Private baseline manifest: `.local/backups/baseline-20261012-151451/manifest.json` on the originating machine.
@@ -46,4 +48,4 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Single next engineering experiment
 
-Audit the native player-command boundary after [both direct movement paths failed](effect-experiment.md). Determine whether the loader exposes the complete accept/commit operation or a narrow native extension is needed, and identify where input can be rejected before mutation. Specify the missing operation before implementing an extension. Do not repeat the same primitives, patch movementSpent to claim success, or add transport before legal execution and pre-mutation input gating are demonstrated.
+Implement and run the [bounded event-consumption lab](native-boundary.md#next-runnable-experiment-bounded-event-consumption-lab) using the existing loader: arm explicitly on the disposable profile, consume paired mouse/keyboard events, attempt a legal move and end turn, compare state, and repeat a normal action after disarming as a positive control. Record bypasses, context changes, held inputs, and timeout behavior. This will test input interception; complete legal command submission remains independently unresolved. Do not repeat failing movement primitives, patch flags to claim success, or add transport.

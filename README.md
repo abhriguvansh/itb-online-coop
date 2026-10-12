@@ -18,6 +18,8 @@ The 0.2.2 follow-up submitted a movement effect directly. Its position survived 
 
 ## What exists
 
+The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The next experiment is a bounded input-blocking lab; no complete move-command API or new native extension has been established.
+
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
 - A manually armed, one-tile movement experiment with validation, outcome checks, and a fault lockout; disabled by default.

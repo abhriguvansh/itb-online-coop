@@ -33,7 +33,17 @@
       "repository": "https://github.com/itb-community/memedit",
       "commit": "24fb9af025d06fa225f645cb482f992208f17e04",
       "licenseFile": "GPL version 3 text",
-      "usage": "Inspected only; optional getters reported unavailable when absent; not a required dependency"
+      "usage": "Optional for observation; enabled and calibrated for movement diagnostics; API calls only, not vendored"
     }
-  ]
+  ],
+  "nativeSourceAudit": {
+    "repository": "https://github.com/kartoFlane/IntoTheBreachLua",
+    "commit": "4ecc4a74ee62871fb8a91fd590330b9684553839",
+    "inspectedHead": "dcf22e726088f9f1ab788c693a59259450e31ef6",
+    "loaderBinaryUpdate": "276a70de3e47236602a209ad64d98d2780587984",
+    "installedSdlSha256": "7f0765d37a0b3f9946c501be04a55a8e8c63549710675de4311a4579fe8f432a",
+    "evidence": "Installed SDL2.dll matches the pinned loader file; upstream update names source PRs 10 and 11. Source head differs from the referenced merge only in README links. Not a reproducible-build proof.",
+    "usage": "Source inspection only; no native build or installation",
+    "redistribute": false
+  }
 }

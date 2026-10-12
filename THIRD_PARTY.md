@@ -7,7 +7,8 @@ No third-party game or mod source is vendored in this repository. API references
 | Into the Breach | Windows Steam 1.2.93 / build 13725832 | Proprietary Subset Games product | User-installed runtime only; no redistribution |
 | ITB-ModLoader | v2.9.6 | No root license found at inspected tag; distribution includes native/original binaries and separately licensed extensions | Obtained separately, checksum pinned; no bundling |
 | ITB-ModUtils / modApiExt | 1.25 / `21bcb56` | Upstream LICENSE contains GPL v2 text | Existing loader extension API only; not copied |
-| memedit | 1.2.2 / `24fb9af` | Upstream LICENSE contains GPL v3 text | Inspected optional getter source; not required or copied |
+| memedit | 1.2.2 / `24fb9af` | Upstream LICENSE contains GPL v3 text | Optional observer getters; enabled/calibrated for movement diagnostics; not copied |
+| IntoTheBreachLua (kartoFlane fork) | `4ecc4a7`; inspected head `dcf22e7` | Upstream LICENSE contains GPL v2 text | Native boundary source audit only; no source/binary vendoring, compilation or installation |
 | Fengari | 0.1.5 | MIT, upstream/package license | Development-only Lua 5.3 VM |
 | luaparse | 0.3.1 | MIT, upstream/package license | Development-only Lua 5.1 syntax check |
 | actions/checkout | [v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) | MIT; exact commit pinned in the workflow | GitHub-hosted CI only |
