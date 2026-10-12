@@ -26,7 +26,9 @@ The 0.2.2 direct skill-effect experiment also failed allowance/undo equivalence,
 
 One authoritative host orders both players' validated requests. Two actual game instances render locally. Keep game integration, command validation/session rules, transport, state comparison, and UI/diagnostics separate. Start with a single control token if ownership input gating otherwise delays the engine experiment; label that limitation.
 
-Defaults are two humans, Rift Walkers, three mechs (host two, guest one), host deployment/campaign menus, both ready before team-turn completion, and any accepted action invalidating readiness. The Vek remain AI-controlled. Undo and full-turn reset are separate deferred features and must both be blocked during a future multiplayer session.
+Defaults are two humans sharing three Rift Walker mechs. The two-mech allocation alternates each battle: battle 1 gives the host two and guest one; battle 2 gives the host one and guest two; subsequent battles repeat that rotation. Ownership stays fixed throughout each battle. Reconnecting, reloading the same battle, or resetting a turn must preserve its assignment rather than advance the rotation. The authoritative session must retain the battle identity and assignment so both clients agree. Which specific mechs each player receives remains a separate design decision. This rotation is a required future session rule, not implemented behavior.
+
+The host handles deployment/campaign menus, both players must be ready before team-turn completion, and any accepted action invalidates readiness. The Vek remain AI-controlled. Undo and full-turn reset are separate deferred features and must both be blocked during a future multiplayer session.
 
 No transport has been selected. First establish a supported communication path from the embedded Lua runtime; do not assume LuaSocket, unrestricted DLL loading, or an ABI. A small local helper and reliable ordered LAN transport are candidates. Messages must be bounded structured data with version/session/action identifiers, sequence numbers and revisions. Never execute received code. A receipt acknowledgement is not proof of in-game execution.
 
