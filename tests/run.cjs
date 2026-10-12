@@ -12,11 +12,14 @@ for (const file of files) {
 console.log(`Lua 5.1 syntax: ${files.length} mod files passed.`);
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
-const status = lauxlib.luaL_dofile(L, to_luastring('tests/probe.lua'));
-if (status !== lua.LUA_OK) {
-  console.error(lua.lua_tojsstring(L, -1));
-  process.exitCode = 1;
-} else {
+for (const suite of ['tests/probe.lua', 'tests/movement.lua']) {
+  if (lauxlib.luaL_dofile(L, to_luastring(suite)) !== lua.LUA_OK) {
+    console.error(lua.lua_tojsstring(L, -1));
+    process.exitCode = 1;
+    break;
+  }
+}
+if (!process.exitCode) {
   runReportTests();
   console.log('Contract tests use Fengari (Lua 5.3) and engine doubles. No in-game result is implied.');
 }

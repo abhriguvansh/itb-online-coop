@@ -17,6 +17,7 @@ function probe.new(mod, env, json, snapshot, settle)
         return type(key) == 'string' and key ~= '' and type(env.Profile) == 'table'
             and env.Profile.visible_name == 'ITB_Coop_Probe'
     end
+    function self:record(kind, payload) emit(kind, payload) end
     local function clear()
         self.epoch = self.epoch + 1
         self.observer:reset()
@@ -35,7 +36,7 @@ function probe.new(mod, env, json, snapshot, settle)
     function self:load()
         clear()
         emit('probe_loaded', { version = mod.version, loader = env.modApi.version,
-            game = env.modApi:getGameVersion(), mode = 'observer-only',
+            game = env.modApi:getGameVersion(), mode = 'observer-with-opt-in-movement-lab',
             testProfileSelected = allowed(), requiredProfile = 'ITB_Coop_Probe',
             runtimeVerified = false })
     end
