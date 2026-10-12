@@ -1,6 +1,6 @@
--- A mouse-triggered diagnostic panel; no keyboard or whole-game input interception.
+-- Mouse-triggered controls for separate opt-in diagnostics.
 local ui = {}
-function ui.install(env, lab)
+function ui.install(env, lab, gate)
     local controls, windows, lastRequests = {}, {}, {}
     local nextRefresh = 0
     local names = { [0] = 'Combat', [1] = 'Cannon', [2] = 'Artillery' }
@@ -16,9 +16,13 @@ function ui.install(env, lab)
     env.modApi.events.onWindowShown:subscribe(function(id) windows[id] = true; lab.blocked = true end)
     env.modApi.events.onWindowHidden:subscribe(function(id) windows[id] = nil; lab.blocked = next(windows) ~= nil end)
     env.modApi.events.onFrameDrawStart:subscribe(function()
+        gate:update()
         local root = env.sdlext.getUiRoot()
         if not root then return end
         if not controls.toggle then
+            controls.gate = button(root, 510, 'Block input 30s', function()
+                if gate.active then gate:stop('manual-disarm', false) else gate:arm() end
+            end)
             controls.toggle = button(root, 310, 'Enable move lab', function()
                 if lab.armed then lab:reset('manual-disarm') else lab:arm() end
             end)
@@ -36,14 +40,17 @@ function ui.install(env, lab)
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID == 'Mission_Artillery'
         end)
         visible = ok and visible == true
-        controls.toggle.visible = visible
+        controls.gate.visible = visible
+        controls.gate:caption(gate.active and gate.status or 'Block input 30s')
+        controls.gate:settooltip(gate.status)
+        controls.toggle.visible = visible and not gate.active
         controls.toggle:caption((lab.armed and 'Disable ' or 'Enable ') .. lab.label)
         controls.toggle:settooltip(lab.status)
         local refresh = env.modApi:elapsedTime() >= nextRefresh
         if refresh then nextRefresh = env.modApi:elapsedTime() + 100 end
         for id = 0, 2 do
             local b = controls[id]
-            b.visible = visible and lab.armed
+            b.visible = visible and lab.armed and not gate.active
             if b.visible and refresh then
                 local request, reason = lab:preview(id)
                 if request then

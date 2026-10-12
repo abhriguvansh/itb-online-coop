@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.2.2',
+    version = '0.3.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in one-tile movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -18,11 +18,15 @@ function mod:init()
     self.moveTrace = require(path .. 'move_trace').new(_G,
         function(kind, payload) self.probe:record(kind, payload) end, require(path .. 'json'))
     self.movement = require(path .. 'movement').new(_G, function(kind, payload) self.probe:record(kind, payload) end, 'effect')
-    require(path .. 'movement_ui').install(_G, self.movement)
+    self.inputGate = require(path .. 'input_gate').new(_G, self.movement,
+        function(kind, payload) self.probe:record(kind, payload) end,
+        function() return require(path .. 'snapshot').capture(_G, GetCurrentMission(), require(path .. 'json')) end)
+    self.inputGate:install()
+    require(path .. 'movement_ui').install(_G, self.movement, self.inputGate)
     modApi.events.onMissionUpdate:subscribe(function() self.movement:update(); self.moveTrace:update() end)
     for _, name in ipairs({ 'onMissionChanged', 'onMissionEnd', 'onGameExited', 'onProfileChanged' }) do
         local eventName = name
-        modApi.events[eventName]:subscribe(function() self.movement:reset(eventName); self.moveTrace:reset() end)
+        modApi.events[eventName]:subscribe(function() self.inputGate:stop(eventName, true); self.movement:reset(eventName); self.moveTrace:reset() end)
     end
     for _, name in ipairs({ 'onSkillStart', 'onSkillEnd' }) do
         local eventName = name
@@ -37,6 +41,7 @@ function mod:init()
 end
 
 function mod:load()
+    self.inputGate:stop('mod-load', true)
     self.probe:load()
     self.movement:reset('mod-load')
     self.moveTrace:reset()
