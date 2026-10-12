@@ -10,6 +10,8 @@ No third-party game or mod source is vendored in this repository. API references
 | memedit | 1.2.2 / `24fb9af` | Upstream LICENSE contains GPL v3 text | Inspected optional getter source; not required or copied |
 | Fengari | 0.1.5 | MIT, upstream/package license | Development-only Lua 5.3 VM |
 | luaparse | 0.3.1 | MIT, upstream/package license | Development-only Lua 5.1 syntax check |
+| actions/checkout | [v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) | MIT; exact commit pinned in the workflow | GitHub-hosted CI only |
+| actions/setup-node | [v7.1.0](https://github.com/actions/setup-node/releases/tag/v7.1.0) | MIT; exact commit pinned in the workflow | GitHub-hosted CI only |
 
 The npm lockfile records exact resolved transitive packages and integrity values. Package license files stay with local installed dependencies. No code or art was reused from ITB-Hotseat. That project is a local mechs-versus-Vek PvP reference, not evidence of native online co-op.
 
