@@ -71,6 +71,22 @@ test('nil return can still produce observed completion without a retry',function
     assert(not a.pending and not a.fault and e.calls==1)
     assert(e.logs[#e.logs].payload.returnType=='nil')
 end)
+test('rearm and manual disarm cannot release a pending native attack',function()
+    local e,l,g,a=fixture();assert(a:arm());assert(a:request())
+    local pending=a.pending
+    assert(not a:arm() and not a:disarm())
+    assert(a.pending==pending and a.armed and l.attackBlocked and e.calls==1)
+    a:skillEvent('onSkillStart',e.actor,'Prime_Punchmech')
+    e.actor.active=false;e.target.hp=1;e.target.pos={x=1,y=3}
+    a:skillEvent('onSkillEnd',e.actor,'Prime_Punchmech')
+    for i=1,3 do e.clock=i*100;a:update()end
+    assert(not a.pending and not l.attackBlocked and e.calls==1)
+end)
+test('manual disarm before submission releases reservation without calling engine',function()
+    local e,l,g,a=fixture();assert(a:arm());assert(a:disarm())
+    assert(not a.armed and not l.attackBlocked and not a.pending and e.calls==0)
+    assert(a:arm())
+end)
 test('context reset preserves one-call lockout',function()
     local e,l,g,a=fixture();a:arm();a:request();a:reset('mission-change');assert(a.fault and not a:arm())
 end)

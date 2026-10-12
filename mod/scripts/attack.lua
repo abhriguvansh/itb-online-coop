@@ -62,11 +62,23 @@ function attack.new(env, lab, gate, emit, capture, json)
         return { actor = state(actor), target = state(target), observation = observed }
     end
     function self:arm()
+        if self.pending then
+            emit('attack_rejected', { reason = 'attack-in-progress' })
+            return false -- Preserve the reservation until outcome or lifecycle reset.
+        end
         local ok, value = pcall(validate)
         self.armed, lab.attackBlocked = ok, ok
         self.status = ok and 'Ready: punch Hornet (2,3)' or tostring(value)
         emit(ok and 'attack_lab_armed' or 'attack_rejected', { reason = self.status })
         return ok
+    end
+    function self:disarm()
+        if self.pending then
+            emit('attack_rejected', { reason = 'attack-in-progress' })
+            return false
+        end
+        self:reset('manual-disarm')
+        return true
     end
     function self:reset(reason)
         if self.pending then self.fault = true; emit('attack_failed', { reason = 'context:' .. reason }) end

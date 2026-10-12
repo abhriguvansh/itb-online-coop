@@ -48,3 +48,11 @@ Use the existing loader to establish whether its source-backed interception poin
 6. Any unblocked mutation is a failed gate; preserve the event/state sequence and stop. Passing selected controls establishes only their bounded coverage, not full authorization or quiescence.
 
 The initial gate and keyboard follow-up are complete within their stated scope. The next investigation is legal movement submission, including whether a UI-event bridge can reach normal commit handling without relying on selected units, fixed screen coordinates or untagged physical input. Transport remains deferred.
+
+## Movement follow-up after the attack milestone
+
+The pinned modApiExt scheduledMovePawns code is enemy-movement observation: it stores the starting position of a selected Vek and waits for the board to stop being busy. It does not submit a player move. The reviewed FireWeapon callers use equipped weapon slots; no source-backed Move slot was identified. Do not try undocumented slot numbers.
+
+Loader [global.lua](https://github.com/itb-community/ITB-ModLoader/blob/1c683d4fc29267044b6928be14d5270ae92ac43c/scripts/mod_loader/modapi/global.lua#L110) provides GetUiScale, getScreenRefs and screenPointToTile using current screen dimensions and GetBoardScale. [Board selection helpers](https://github.com/itb-community/ITB-ModLoader/blob/1c683d4fc29267044b6928be14d5270ae92ac43c/scripts/mod_loader/modapi/board.lua#L133) read the selected pawn by checking IsSelected; they do not select it. These are concrete building blocks for validating a UI bridge's geometry and selection, not an input-submission API. No native extension was installed in this follow-up.
+
+A bridge experiment must first round-trip its calculated tile centers through the loader's conversion, confirm the selected actor and unarmed movement mode, submit exactly one destination press/release through the ordinary game path, and require movement consumption plus native undo and execution hooks. It must reject a stale selection, changed phase, modal, resolution change or competing input. Save/reload must be checked because the prior normal-move persistence discrepancy remains unresolved. An assistant clicking a tile alone is only a baseline control; it is not a replay implementation.

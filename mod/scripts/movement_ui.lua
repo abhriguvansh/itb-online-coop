@@ -21,7 +21,7 @@ function ui.install(env, lab, gate, attack)
         if not root then return end
         if not controls.toggle then
             controls.attack = button(root, 556, 'Enable attack lab', function()
-                if attack.armed then attack:reset('manual-disarm') else attack:arm() end
+                if attack.armed then attack:disarm() else attack:arm() end
             end)
             controls.fire = button(root, 600, 'Punch Hornet at (2,3)', function() attack:request() end)
             controls.gate = button(root, 510, 'Block input 30s', function()

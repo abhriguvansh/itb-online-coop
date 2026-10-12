@@ -4,7 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.4.1, with a game-tested standard attack diagnostic, movement diagnostics, and a temporary input gate. Online co-op is not implemented.**
+**Current version: 0.4.2, with a game-tested standard attack diagnostic, movement diagnostics, and a temporary input gate. Online co-op is not implemented.**
+
+Version 0.4.2 adds an offline-tested fix that keeps other labs excluded while an attack is pending. The real-game attack evidence belongs to 0.4.1.
 
 The read-only trace captured normal movement bookkeeping: undo became available by the execution-start hook, and movement was consumed by execution end. This narrows the missing behavior without claiming a complete action API. [Trace results](docs/move-trace.md).
 
@@ -51,7 +53,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, 14 input-gate, and 23 attack contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, eight-, and nine-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
+The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, 14 input-gate, and 25 attack contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, eight-, and nine-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
 
 ## Prepare a real-game test
 

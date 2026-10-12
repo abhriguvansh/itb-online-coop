@@ -25,3 +25,7 @@ Private evidence remains under .local/evidence/attack-0.4.0/ and .local/evidence
 ## Remaining work
 
 Legal movement remains the primary execution blocker. General attack targeting, limited-use weapons, status interactions, collision variants, repair, serialized commands, complete input authorization and two-instance replay remain unproven. The next milestone combines a legal movement path with this bounded attack path before transport work begins.
+
+## 0.4.2 overlap correction (offline-tested)
+
+Review found that rearming during a pending call cleared the shared lab reservation, and the UI disable button could discard its observation. Rearming and manual disarming now reject while the attack is pending. Only measured completion, timeout or an explicit lifecycle reset releases it. Two regression contracts cover pending rejection through completion and ordinary pre-submission disarming. This version has not been installed or exercised in the real game; the runtime evidence above belongs to 0.4.1.
