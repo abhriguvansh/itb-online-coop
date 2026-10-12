@@ -1,0 +1,39 @@
+{
+  "reviewedAt": "2026-10-12",
+  "game": {
+    "platform": "Windows Steam",
+    "appId": "590380",
+    "candidateVersion": "1.2.93",
+    "installedBuildId": "13725832",
+    "evidence": "Installed executable string and Steam manifest; runtime probe pending",
+    "redistribute": false
+  },
+  "loader": {
+    "repository": "https://github.com/itb-community/ITB-ModLoader",
+    "tag": "v2.9.6",
+    "commit": "1c683d4fc29267044b6928be14d5270ae92ac43c",
+    "archive": "ITB-ModLoader-2.9.6.zip",
+    "url": "https://github.com/itb-community/ITB-ModLoader/releases/download/v2.9.6/ITB-ModLoader-2.9.6.zip",
+    "sha256": "0737255acbf07ca099f3f2f849c556e90d8995979d6d7210e5941acbde348cd2",
+    "licenseStatus": "Mixed distribution; no root license found in inspected tag. Obtain upstream; do not bundle.",
+    "redistribute": false
+  },
+  "extensions": [
+    {
+      "id": "modApiExt",
+      "version": "1.25",
+      "repository": "https://github.com/itb-community/ITB-ModUtils",
+      "commit": "21bcb56ba674aaaa6a940118b1cd527dfd38401b",
+      "licenseFile": "GPL version 2 text",
+      "usage": "Required loader extension; API calls only; not vendored"
+    },
+    {
+      "id": "memedit",
+      "version": "1.2.2",
+      "repository": "https://github.com/itb-community/memedit",
+      "commit": "24fb9af025d06fa225f645cb482f992208f17e04",
+      "licenseFile": "GPL version 3 text",
+      "usage": "Inspected only; optional getters reported unavailable when absent; not a required dependency"
+    }
+  ]
+}

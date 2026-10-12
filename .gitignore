@@ -1,0 +1,16 @@
+# Private machine evidence, upstream research and backups stay local.
+.local/
+node_modules/
+dist/
+*.log
+*.zip
+*.dll
+*.exe
+*.dat
+*.sav
+profile_*/
+saveData.lua
+settings.lua
+.env
+.env.*
+!.env.example
