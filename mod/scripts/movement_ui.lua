@@ -37,7 +37,7 @@ function ui.install(env, lab)
         end)
         visible = ok and visible == true
         controls.toggle.visible = visible
-        controls.toggle:caption(lab.armed and 'Disable move lab' or 'Enable move lab')
+        controls.toggle:caption((lab.armed and 'Disable ' or 'Enable ') .. lab.label)
         controls.toggle:settooltip(lab.status)
         local refresh = env.modApi:elapsedTime() >= nextRefresh
         if refresh then nextRefresh = env.modApi:elapsedTime() + 100 end

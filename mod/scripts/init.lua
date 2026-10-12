@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.2.1',
+    version = '0.2.2',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in one-tile movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -17,7 +17,7 @@ function mod:init()
     self.probe:subscribe()
     self.moveTrace = require(path .. 'move_trace').new(_G,
         function(kind, payload) self.probe:record(kind, payload) end, require(path .. 'json'))
-    self.movement = require(path .. 'movement').new(_G, function(kind, payload) self.probe:record(kind, payload) end)
+    self.movement = require(path .. 'movement').new(_G, function(kind, payload) self.probe:record(kind, payload) end, 'effect')
     require(path .. 'movement_ui').install(_G, self.movement)
     modApi.events.onMissionUpdate:subscribe(function() self.movement:update(); self.moveTrace:update() end)
     for _, name in ipairs({ 'onMissionChanged', 'onMissionEnd', 'onGameExited', 'onProfileChanged' }) do

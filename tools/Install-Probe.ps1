@@ -46,7 +46,7 @@ if ($Mode -eq 'Install') {
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.2.1';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.2.2';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }
@@ -54,7 +54,7 @@ if (-not (Test-Path -LiteralPath $markerPath -PathType Leaf)) { throw 'Ownership
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
 if ($marker.Version -in @('0.1.0','0.1.1')) { $files = $legacyFiles }
 elseif ($marker.Version -eq '0.2.0') { $files = $movementFiles }
-elseif ($marker.Version -ne '0.2.1') { throw 'Unrecognized probe version; preserve and inspect before removal.' }
+elseif ($marker.Version -notin @('0.2.1','0.2.2')) { throw 'Unrecognized probe version; preserve and inspect before removal.' }
 if ($marker.Id -ne 'aman_itb_coop_probe' -or $marker.Files.Count -ne $files.Count) { throw 'Unrecognized ownership manifest.' }
 $actualFiles = @(Get-ChildItem -LiteralPath $modRoot -File -Force -Recurse)
 if (Get-ChildItem -LiteralPath $modRoot -Force -Recurse | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Link in probe folder; refusing removal.' }

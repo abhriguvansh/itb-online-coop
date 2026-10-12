@@ -6,8 +6,11 @@ local function xy(p) return { x = p.x, y = p.y } end
 local function same(a, b) return a.x == b.x and a.y == b.y end
 local function integer(n) return type(n) == 'number' and n == n and n % 1 == 0 end
 
-function movement.new(env, emit)
+function movement.new(env, emit, path)
+    path = path or 'native'
+    assert(path == 'native' or path == 'effect', 'Unknown movement experiment')
     local self = { armed = false, blocked = false, pending = nil, fault = false, status = 'Move lab off' }
+    self.label = path == 'effect' and 'effect lab' or 'move lab'
     function self:profileAllowed()
         local key = env.modApi:getCurrentProfile()
         return type(key) == 'string' and key ~= '' and type(env.Profile) == 'table'
@@ -35,8 +38,10 @@ function movement.new(env, emit)
         end
     end
     local function pawnState(pawn)
-        return { position = xy(pawn:GetSpace()), health = pawn:GetHealth(), active = pawn:IsActive(),
+        local state = { position = xy(pawn:GetSpace()), health = pawn:GetHealth(), active = pawn:IsActive(),
             movementSpent = pawn:IsMovementSpent(), undoPossible = pawn:IsUndoPossible() }
+        if path == 'effect' then state.undoPosition = xy(pawn:GetUndoLoc()) end
+        return state
     end
     local function safeTile(p, origin)
         local b = env.Board
@@ -138,13 +143,27 @@ function movement.new(env, emit)
             mission = request.mission, turn = request.turn }
         self.pending = { command = command, before = before, since = env.modApi:elapsedTime(),
             samples = 0, nextSample = 0, startObserved = false, endObserved = false }
-        emit('move_requested', { request = command, before = before, inputGateImplemented = false })
+        emit('move_requested', { request = command, before = before, path = path, inputGateImplemented = false })
         local ok, result = pcall(function()
+            if path == 'effect' then
+                local pawn = env.Board:GetPawn(command.pawnId)
+                local route = env.Board:GetPath(env.Point(command.from.x, command.from.y),
+                    env.Point(command.to.x, command.to.y), pawn:GetPathProf())
+                need(route:size() == 2 and same(route:index(1), command.from)
+                    and same(route:index(2), command.to), 'unexpected-effect-path')
+                -- Standard ground Move uses this effect primitive. No allowance/undo setters,
+                -- global Pawn replacement, injected execution hooks, or forced save.
+                local effect = env.SkillEffect()
+                effect:AddMove(route, env.FULL_DELAY)
+                env.Board:AddEffect(effect) -- documented void return; observe state separately
+                return nil
+            end
             return env.Board:GetPawn(command.pawnId):Move(env.Point(command.to.x, command.to.y))
         end)
         emit('move_engine_return', { callSucceeded = ok, returnedTrue = result == true,
+            path = path, returnType = type(result),
             detail = not ok and tostring(result) or nil })
-        if not ok or result ~= true then
+        if not ok or (path == 'native' and result ~= true) then
             self.fault, self.armed, self.pending = true, false, nil
             self.status = 'Move failed: restart required'
             emit('move_failed', { reason = 'engine-call-failed-or-uncertain' })
@@ -174,15 +193,20 @@ function movement.new(env, emit)
         end)
         local matches = ok and same(after.position, p.command.to) and after.movementSpent == true
             and after.active == p.before.active and after.health == p.before.health
+        if path == 'effect' then
+            matches = matches and after.undoPossible == true and same(after.undoPosition, p.command.from)
+        end
         p.samples = matches and (p.samples + 1) or 0
         if p.samples >= 3 then
             emit('move_postconditions_observed', { request = p.command, before = p.before, after = after,
                 startObserved = p.startObserved, endObserved = p.endObserved,
+                path = path, persistenceVerified = false,
                 proofOfQuiescence = false, coverage = 'one-tile-manual-lab-only' })
             self.pending = nil
             self.status = 'Move outcome observed'
         elseif now - p.since > 5000 then
             emit('move_failed', { reason = 'postconditions-not-observed', request = p.command,
+                path = path, startObserved = p.startObserved, endObserved = p.endObserved,
                 after = ok and after or nil, detail = not ok and tostring(after) or nil })
             self.pending, self.armed, self.fault = nil, false, true
             self.status = 'Move failed: restart required'

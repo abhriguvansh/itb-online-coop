@@ -8,7 +8,7 @@ end
 local function list(values)
     return { size = function() return #values end, index = function(_, i) return values[i] end }
 end
-local function fixture()
+local function fixture(path)
     local env = { TEAM_PLAYER = 1, TEAM_ANY = 2, TERRAIN_ROAD = 0, TERRAIN_FOREST = 6, clock = 0,
         Profile = { visible_name = 'ITB_Coop_Probe' }, ArtiMech = {}, calls = 0,
         mission = { ID = 'Mission_Artillery' }, turn = 2, phase = 1, logs = {} }
@@ -25,6 +25,7 @@ local function fixture()
     pawn.IsActive = function() return pawn.active end
     pawn.IsMovementSpent = function() return pawn.spent end
     pawn.IsUndoPossible = function() return pawn.spent end
+    pawn.GetUndoLoc = function() return env.Point(1,3) end
     pawn.IsPowered = function() return true end
     for _, key in ipairs({'IsBusy','IsDead','IsFrozen','IsGrappled','IsFlying','IsJumper',
             'IsTeleporter','IsFire','IsAcid','IsAbility'}) do pawn[key] = function() return false end end
@@ -46,7 +47,12 @@ local function fixture()
     env.memedit = {get=function() return {} end}
     env.Game = {GetTeamTurn=function() return env.phase end, GetTurnCount=function() return env.turn end}
     env.GetCurrentMission = function() return env.mission end
-    local lab = movement.new(env, function(kind,payload) env.logs[#env.logs+1]={kind=kind,payload=payload} end)
+    env.FULL_DELAY = 1
+    env.Board.GetPath = function(_,from,to) return list({from,to}) end
+    env.SkillEffect = function() return {AddMove=function(_,route,delay) env.effectRoute=route; assert(delay==1) end} end
+    env.effectCalls=0
+    env.Board.AddEffect = function() env.effectCalls=env.effectCalls+1 end
+    local lab = movement.new(env, function(kind,payload) env.logs[#env.logs+1]={kind=kind,payload=payload} end, path)
     local request = {pawnId=2,from=env.Point(1,3),to=env.Point(1,2),mission='Mission_Artillery',turn=2}
     return env, lab, request
 end
@@ -139,5 +145,38 @@ test('burning forest origin is rejected before native call',function()
     e.Board.GetTerrain=function(_,p) return p.y==3 and 6 or 0 end
     e.Board.IsFire=function(_,p) return p.y==3 end
     assert(not l:request(r)); assert(e.calls==0)
+end)
+test('effect path submits once with void return and never calls native Move',function()
+    local e,l,r=fixture('effect'); l:arm(); assert(l:request(r)); assert(not l:request(r))
+    assert(e.effectCalls==1 and e.calls==0 and l.pending and not l.fault)
+end)
+test('effect rejection checks run before building or submitting',function()
+    local e,l,r=fixture('effect'); l:arm(); e.pawn.spent=true
+    assert(not l:request(r) and e.effectCalls==0 and e.effectRoute==nil)
+end)
+test('unexpected engine path fails without submission and latches fault',function()
+    local e,l,r=fixture('effect'); l:arm(); e.Board.GetPath=function() return list({r.to,r.from}) end
+    assert(not l:request(r) and e.effectCalls==0 and l.fault and not l:arm())
+end)
+test('effect exception is not retried through native Move',function()
+    local e,l,r=fixture('effect'); l:arm()
+    e.Board.AddEffect=function() e.effectCalls=e.effectCalls+1; error('uncertain') end
+    assert(not l:request(r)); assert(not l:request(r)); assert(e.effectCalls==1 and e.calls==0)
+end)
+test('spent movement without undo remains an effect failure',function()
+    local e,l,r=fixture('effect'); l:arm(); l:request(r)
+    e.pawn.position=r.to; e.pawn.spent=true; e.pawn.IsUndoPossible=function() return false end
+    e.clock=5100; l:update(); assert(l.fault and e.logs[#e.logs].kind=='move_failed')
+end)
+test('wrong undo origin remains an effect failure',function()
+    local e,l,r=fixture('effect'); l:arm(); l:request(r)
+    e.pawn.position=r.to; e.pawn.spent=true; e.pawn.GetUndoLoc=function() return r.to end
+    e.clock=5100; l:update(); assert(l.fault)
+end)
+test('effect postconditions explicitly leave persistence unverified',function()
+    local e,l,r=fixture('effect'); l:arm(); l:request(r); e.pawn.position=r.to; e.pawn.spent=true
+    for i=1,3 do e.clock=i*100; l:update() end
+    local log=e.logs[#e.logs]; assert(log.kind=='move_postconditions_observed')
+    assert(log.payload.path=='effect' and log.payload.persistenceVerified==false)
 end)
 print('Movement contract tests: '..passed..' passed.')
