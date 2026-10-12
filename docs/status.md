@@ -32,7 +32,7 @@ The initial profile check compared the displayed name with the internal folder k
 
 Legal programmatic movement/attacks, pre-mutation input gating, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
 
-GitHub publication is pending destination/visibility approval. No remote has been created or pushed. The workflow is configured, not GitHub-tested. Source licensing is undecided; no game or upstream code is included.
+Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/abhriguvansh/itb-online-coop), explicitly approved on October 12, 2026. [Live CI results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) are the authority for each pushed revision; local checks alone are not evidence of a successful GitHub run. Source licensing is undecided; no game or upstream code is included.
 
 ## Single next engineering experiment
 

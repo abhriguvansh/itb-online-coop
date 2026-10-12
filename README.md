@@ -1,5 +1,7 @@
 # Into the Breach — Native Online Co-op Research
 
+[![Probe checks](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml/badge.svg)](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml)
+
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
 **Current version: 0.1.1, an observer-only capability probe verified in the real game. Online co-op is not implemented.**
@@ -36,7 +38,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 Lua contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. The separate in-game smoke test is documented below. CI has been configured but has not run on GitHub.
+The current offline suite validates Lua 5.1 syntax, executes 19 Lua contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. The separate in-game smoke test is documented below. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
 
 ## Prepare a real-game test
 
@@ -90,4 +92,4 @@ This removes only unchanged files owned by this probe. It refuses to remove edit
 - [Repeatable tests and restoration](docs/test-plan.md)
 - [Dependency and license notes](THIRD_PARTY.md)
 
-The Git history is intended to show implementation and QA decisions as the experiment develops. Public release and source licensing are not yet selected. This is an independent fan project, unaffiliated with Subset Games.
+The [public GitHub repository](https://github.com/abhriguvansh/itb-online-coop) records implementation and QA decisions as the experiment develops. No packaged release or source distribution license has been selected. This is an independent fan project, unaffiliated with Subset Games.
