@@ -8,7 +8,7 @@
 
 The mod calls the existing loader extension API; it does not copy or vendor it. memedit is optional for observation and required for the manually armed movement diagnostic. The development Node dependencies are never installed in the game.
 
-**ADR 002: stability is a measurement, not a lock.** Three unchanged idle observations are labeled `settled_candidate`, with `proofOfQuiescence=false`. The first real-game test produced candidates between portions of enemy activity, before later effects. They do not authorize actions or assert full synchronization. Input remains normal single-player input. A future executor needs a stronger boundary that accounts for phase and pending work.
+**ADR 002: stability is a measurement, not a lock.** Three unchanged idle observations are labeled `settled_candidate`, with `proofOfQuiescence=false`. The first real-game test produced candidates between portions of enemy activity, before later effects. They do not authorize actions or assert full synchronization. Input remains normal single-player input outside the explicitly armed temporary gate. A future executor needs a stronger boundary that accounts for phase and pending work.
 
 **ADR 003: separate local evidence from publishable source.** `.local/` stores downloaded upstream sources/binaries, backups, inert test fixtures, and logs. Git contains this project's source, tests, dependency pins and documentation. Publication must use reviewed tracked files only. `package.json` is private; source licensing is undecided.
 
@@ -20,7 +20,7 @@ The real 0.2.0 test returned true and changed position but left movement unused.
 
 ## Proposed after the probe
 
-**ADR 006: investigate existing input interception before replacing native libraries.** The [native boundary audit](native-boundary.md) finds event suppression in the installed loader's source lineage, but no exposed complete command-submission operation. A timed diagnostic gate can test that existing path. Hook ordering, exception fall-through, release handling, and polled-state bypasses must be measured before treating it as authorization. A future command bridge needs a verified native entry point; DLL exports and movement flag setters do not establish one. No native extension is currently selected or installed.
+**ADR 006: investigate existing input interception before replacing native libraries.** The [native boundary audit](native-boundary.md) finds event suppression in the installed loader's source lineage, but no exposed complete command-submission operation. Probe 0.3.0 tested that path with a timed diagnostic gate: the selected mouse move was blocked, then succeeded after timeout. [Evidence](input-gate.md). Hook ordering, exception fall-through, release handling, and polled-state bypasses must be measured before treating it as authorization. A future command bridge needs a verified native entry point; DLL exports and movement flag setters do not establish one. No native extension is currently selected or installed.
 
 The 0.2.2 direct skill-effect experiment also failed allowance/undo equivalence, although its position persisted across a controlled reload. The selected lab path is now `effect`; the earlier `native` path remains a regression case. Neither is a legal executor. Investigate the complete native player-command boundary before extending the action layer. [Evidence](effect-experiment.md).
 

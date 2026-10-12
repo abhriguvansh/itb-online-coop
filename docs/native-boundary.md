@@ -38,7 +38,7 @@ An SDL event-submission bridge would be a different design: it would need local 
 
 ## Next runnable experiment: bounded event-consumption lab
 
-Use the existing loader to establish whether its source-backed interception point actually blocks the chosen mouse/keyboard actions on the disposable profile. This lab is **not implemented or game-verified yet**.
+Use the existing loader to establish whether its source-backed interception point actually blocks the chosen mouse/keyboard actions on the disposable profile. Probe 0.3.0 completed the initial mouse test with a positive control; see [results and remaining coverage](input-gate.md). The steps below remain the test protocol; keyboard, held-input and broader route coverage are still unverified.
 
 1. Back up and preserve current evidence. Start in the named disposable profile with the movement-effect lab off. Record one selected pawn, turn, grid, and action availability before arming.
 2. Add a manually armed, visibly labeled, time-bounded input diagnostic. Retain the hook object for its lifetime. Keep context changes, exceptions, and emergency exit behavior explicit; it must not trap the user indefinitely. A diagnostic timeout is not an acceptable multiplayer fail-open policy.

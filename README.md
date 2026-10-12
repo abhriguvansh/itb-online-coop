@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.2.2, an observer with a normal-move trace and an opt-in movement diagnostic. Online co-op is not implemented.**
+**Current version: 0.3.0, an observer with movement diagnostics and a temporary input-blocking lab. Online co-op is not implemented.**
 
 The read-only trace captured normal movement bookkeeping: undo became available by the execution-start hook, and movement was consumed by execution end. This narrows the missing behavior without claiming a complete action API. [Trace results](docs/move-trace.md).
 
@@ -18,8 +18,9 @@ The 0.2.2 follow-up submitted a movement effect directly. Its position survived 
 
 ## What exists
 
-The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The next experiment is a bounded input-blocking lab; no complete move-command API or new native extension has been established.
+The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Keyboard and broader input coverage remain unproven. No complete move-command API or new native extension has been established.
 
+- A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
 - A manually armed, one-tile movement experiment with validation, outcome checks, and a fault lockout; disabled by default.
@@ -29,13 +30,13 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 - A local log summary and field-level comparison tool. Matching digests cover only the observed fields.
 - A targeted probe installer with ownership checks, a verified backup/staging workflow, offline tests, and a GitHub Actions configuration.
 
-There is no action replay, input gate, transport, deterministic replay claim, or automatic resynchronization. Undo/reset are merely observed in this diagnostic build. The probe cannot be used as a multiplayer session.
+There is no action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/reset are merely observed in this diagnostic build. The probe cannot be used as a multiplayer session.
 
 ## Baseline
 
 The tested Steam build is `13725832`, game `1.2.93`, with [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6) and its bundled modApiExt `1.25`. Main-menu versions and runtime logs agree. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). This is one tested baseline, not a compatibility claim for other versions.
 
-Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's eight Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
+Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's nine Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
 
 ## Test the project code
 
@@ -48,7 +49,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 observer, 48 movement, and ten trace contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five- and seven-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
+The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, and 14 input-gate contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, and eight-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
 
 ## Prepare a real-game test
 

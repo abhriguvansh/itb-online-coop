@@ -1,11 +1,11 @@
 # Status — October 12, 2026
 
-**Latest increment: source audit identified the native input-event consumption path, its ordering/error limitations, and the missing command-submission interface. Runtime remains probe 0.2.2; both direct movement paths remain unsuitable. Milestone 1 (legal programmatic actions and input gating) remains incomplete. Online co-op is not implemented.**
+**Latest increment: probe 0.3.0 demonstrated bounded mouse input blocking, automatic release, and a successful normal-move positive control. Keyboard and broader input coverage remain unproven; both direct movement executors remain unsuitable. Milestone 1 remains incomplete. Online co-op is not implemented.**
 
 ## Implemented
 
 - Local Git repository with original source, tests, dependency pins, and project records.
-- Probe 0.2.2 retains version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
+- Probe 0.3.0 retains version logs, execution/build distinction, mission-phase observations, partial state capture, unavailable-field reporting, and candidate stability observations.
 - Read-only normal Move trace: bounded logging, deduplicated preview state, separate execution states, allowance/undo reads, and a two-second change watch. [Trace evidence](move-trace.md).
 - Opt-in one-tile movement diagnostic, immediate request validation, measured postconditions and fault lockout. It is a known failing engine experiment, not a legal movement executor. [Test record](movement-experiment.md).
 - The selected diagnostic now submits a direct movement effect with path checks and strict undo postconditions. The earlier native path remains covered offline. [Effect test](effect-experiment.md).
@@ -13,14 +13,16 @@
 - Verified backup/staging tool and scoped probe install/uninstall with ownership and hash checks.
 - A GitHub Actions workflow for offline checks; it does not launch the game.
 
+- Manually armed 30-second input gate with paired-release tracking and bounded logs. [Coverage and limits](input-gate.md).
+
 ## Actually checked
 
-- Native source provenance and input bindings audited: installed SDL2.dll matches the pinned loader file; its update points to the reviewed native source. PollEvent can suppress delivery, but hook order, exception fall-through, separate input-state reads, and earlier Lua UI handlers limit what a late hook can guarantee. No complete player-command submission API was identified. This increment changed documentation/dependency records only; no new game test or native installation. [Audit and next test](native-boundary.md).
+- Native source provenance and input bindings audited: installed SDL2.dll matches the pinned loader file; its update points to the reviewed native source. PollEvent can suppress delivery, but hook order, exception fall-through, separate input-state reads, and earlier Lua UI handlers limit what a late hook can guarantee. No complete player-command submission API was identified. That source-audit increment changed documentation/dependency records only. [Audit and next test](native-boundary.md).
 
 - Windows Steam build 13725832, game 1.2.93, loader 2.9.6, and modApiExt 1.25. Versions agree in the menu and runtime log. memedit was disabled for the observer baseline, then enabled at 1.2.2 for the movement experiment; Easy Edit remained disabled.
 - The loader release checksum matched upstream metadata. Ten save files and four affected game files were backed up and hash-verified before installation. Private baseline manifest: `.local/backups/baseline-20261012-151451/manifest.json` on the originating machine.
 - The reviewed loader was installed, and the owned probe was installed, removed, and updated while the game was closed. Full loader/save restoration is documented but has not been exercised.
-- Eight mod files pass Lua 5.1 syntax parsing. Nineteen observer, 48 movement, ten trace contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures cover scoped installation/removal and legacy five-/seven-file upgrade removal.
+- Nine mod files pass Lua 5.1 syntax parsing. Nineteen observer, 49 movement, ten trace and 14 input-gate contract tests and eleven log-analysis assertions pass. Contract execution uses Fengari/Lua 5.3 and engine doubles. Installer fixtures cover scoped installation/removal and legacy five-/seven-/eight-file upgrade removal.
 - In the disposable `ITB_Coop_Probe` profile, Test Mech and a normal Archive mission produced real execution events, matching partial snapshots, damage, pushes, a collision, and normal attack consumption. Preview-only activity produced no corresponding execution events.
 - One normal team turn continued through enemy attacks, planning, and spawning to the next player turn. The preserved log contains 92 records, including three queued-attack start/end pairs, with no capture failures or missing-hook records. The game's error file was empty. [Detailed evidence](feasibility.md#runtime-evidence--october-12-2026).
 - After the observer test, the run was saved and the game closed. Steam showed Cloud up to date before and after that test; its settings were not changed. All four pre-existing normal-profile files matched their baseline hashes. Global loader/settings files and the disposable save changed as expected.
@@ -42,10 +44,12 @@ Movement setup corrected Artillery's internal type to `ArtiMech` and allowed lea
 
 `settled_candidate` appeared between portions of enemy activity, including before subsequent effects. It is a diagnostic observation, not evidence that all work has drained. memedit now supplies movement-spent reads, with one manual baseline comparison; this does not solve the action authorization boundary or prove full state capture.
 
-Legal programmatic movement/attacks, pre-mutation input gating, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
+Legal programmatic movement/attacks, complete input authorization, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
 
 Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/abhriguvansh/itb-online-coop), explicitly approved on October 12, 2026. [Live CI results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) are the authority for each pushed revision; local checks alone are not evidence of a successful GitHub run. Source licensing is undecided; no game or upstream code is included.
 
 ## Single next engineering experiment
 
-Implement and run the [bounded event-consumption lab](native-boundary.md#next-runnable-experiment-bounded-event-consumption-lab) using the existing loader: arm explicitly on the disposable profile, consume paired mouse/keyboard events, attempt a legal move and end turn, compare state, and repeat a normal action after disarming as a positive control. Record bypasses, context changes, held inputs, and timeout behavior. This will test input interception; complete legal command submission remains independently unresolved. Do not repeat failing movement primitives, patch flags to claim success, or add transport.
+The initial mouse experiment is complete: two click pairs were consumed, arming/timeout partial snapshots matched, and the same move executed normally after release. Eighteen records, empty error file, normal saves unchanged, game closed and Cloud up to date. [Detailed result](input-gate.md).
+
+Next validate physical keyboard down/up and held-key release across timeout, with a harmless shortcut positive control. The injected repair key produced only text input; it is not keyboard-action evidence. Expand undo/reset/menu coverage separately. Complete legal command submission remains independently unresolved. Do not repeat failing movement primitives, patch flags to claim success, or add transport.
