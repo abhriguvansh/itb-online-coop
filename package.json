@@ -1,0 +1,16 @@
+{
+  "name": "itb-online-coop-probe",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Source-backed capability probe for native Into the Breach co-op research",
+  "license": "UNLICENSED",
+  "scripts": {
+    "test": "node tests/run.cjs",
+    "check:tracked": "node tools/check-tracked.cjs",
+    "report": "node tools/probe-report.cjs"
+  },
+  "devDependencies": {
+    "fengari": "0.1.5",
+    "luaparse": "0.3.1"
+  }
+}

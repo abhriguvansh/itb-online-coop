@@ -1,0 +1,38 @@
+$ErrorActionPreference = 'Stop'
+$repoPath = Split-Path -Parent $PSScriptRoot
+$fixtureRoot = Join-Path $repoPath ('.local\tests\install-' + [guid]::NewGuid().ToString('N'))
+$gameRoot = Join-Path $fixtureRoot 'fake-game'
+New-Item -ItemType Directory -Path (Join-Path $gameRoot 'scripts\mod_loader\modapi') -Force | Out-Null
+New-Item -ItemType Directory -Path (Join-Path $gameRoot 'mods\unrelated') -Force | Out-Null
+Set-Content -LiteralPath (Join-Path $gameRoot 'Breach.exe') -Value 'inert test fixture, not executable'
+Set-Content -LiteralPath (Join-Path $gameRoot 'scripts\mod_loader\modapi\init.lua') -Value 'self.version = "2.9.6"'
+Set-Content -LiteralPath (Join-Path $gameRoot 'mods\unrelated\keep.txt') -Value 'preserve'
+$installer = Join-Path $repoPath 'tools\Install-Probe.ps1'
+$modRoot = Join-Path $gameRoot 'mods\aman_itb_coop_probe'
+function Assert-Condition($Condition, $Message) { if (-not $Condition) { throw $Message } }
+function Expect-Failure([scriptblock]$Action) {
+    $failed = $false
+    try { & $Action | Out-Null } catch { $failed = $true }
+    Assert-Condition $failed 'Expected rejection.'
+}
+& $installer -GamePath $gameRoot -Mode Plan | Out-Null
+Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Plan wrote into fixture.'
+& $installer -GamePath $gameRoot -Mode Install | Out-Null
+Assert-Condition (Test-Path -LiteralPath (Join-Path $modRoot 'scripts\init.lua')) 'Probe missing.'
+Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 6) 'Unexpected install payload.'
+Expect-Failure { & $installer -GamePath $gameRoot -Mode Install }
+$initPath = Join-Path $modRoot 'scripts\init.lua'
+$original = [IO.File]::ReadAllBytes($initPath)
+Add-Content -LiteralPath $initPath -Value '-- local edit'
+Expect-Failure { & $installer -GamePath $gameRoot -Mode Uninstall }
+Assert-Condition (Test-Path -LiteralPath (Join-Path $modRoot '.itb-coop-probe.json')) 'Partial uninstall after failed preflight.'
+[IO.File]::WriteAllBytes($initPath, $original)
+Set-Content -LiteralPath (Join-Path $modRoot 'unowned.txt') -Value 'preserve'
+Expect-Failure { & $installer -GamePath $gameRoot -Mode Uninstall }
+Remove-Item -LiteralPath (Join-Path $modRoot 'unowned.txt')
+& $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
+Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Owned folder remains.'
+Assert-Condition ((Get-Content -LiteralPath (Join-Path $gameRoot 'mods\unrelated\keep.txt') -Raw).Trim() -eq 'preserve') 'Unrelated mod changed.'
+Assert-Condition (Test-Path -LiteralPath (Join-Path $gameRoot 'scripts\mod_loader\modapi\init.lua')) 'Loader changed.'
+Write-Output 'Installer fixture checks passed: plan, exact payload, duplicate rejection, changed-file rejection, unowned-file rejection, uninstall, unrelated-mod preservation.'
+Write-Output "Inert test evidence retained at $fixtureRoot"
