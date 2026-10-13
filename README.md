@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.11.1. Interactive moves require fresh, action-specific preparation from both game runtimes before dispatch. A real two-game test passed the missing-response check: pausing the host prevented all execution, and both observed boards stayed unchanged. Successful paired interactive movement remains unverified. Playable human-selected online co-op is not yet available.**
+**Current source: 0.11.1. Interactive moves require fresh, action-specific preparation from both game runtimes before dispatch. A real two-game test passed the missing-response check: pausing the host prevented all execution, and both observed boards stayed unchanged. One guest-selected move now completed in both games with matching observations. A subsequent host draft was rejected by the bounded validator because its path crosses an ally; the full two-move experiment remains incomplete. Playable human-selected online co-op is not yet available.**
 
 The prior 0.10.0 fixed scripted sequence passed in two independent real game instances: movement, punch, protected native End Turn with unused-unit confirmation, full enemy phase, then another legal move. That evidence remains separate from the [interactive failure](docs/command-session.md#interactive-movement--probe-0110-october-13) and the [readiness correction's bounded live proof](docs/command-session.md#approved-launch-and-real-stopped-peer-test).
 
@@ -14,7 +14,7 @@ Cannon moved three tiles and Artillery moved two through the game's normal UI pa
 
 That earlier movement evidence is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-**October 13 scripted network increment:** the [shared command session](docs/command-session.md#network-coordinated-phase-proof--probe-0100-october-13) uses fixed ownership, same-state readiness, duplicate/stale rejection and stop-on-uncertainty. Both actual games rejected eight early commands. All 26 partial-state candidates and 26 ordered execution/phase payloads match each other and the preserved vanilla reference. Full-state equality and general determinism remain unproven. Next: require fresh readiness from both actual game runtimes before dispatching an interactive move; a connected TCP bridge alone is insufficient.
+**October 13 scripted network increment:** the [shared command session](docs/command-session.md#network-coordinated-phase-proof--probe-0100-october-13) uses fixed ownership, same-state readiness, duplicate/stale rejection and stop-on-uncertainty. Both actual games rejected eight early commands. All 26 partial-state candidates and 26 ordered execution/phase payloads match each other and the preserved vanilla reference. Full-state equality and general determinism remain unproven. Fresh runtime preparation now passed a stopped-peer check and one paired interactive move. Next: remove the demonstrated friendly-transit restriction with engine-backed validation and verify host-selected movement.
 
 The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Restricted runtime ownership and readiness are tested with scripted peers; campaign voting, rotation and general multiplayer interaction are not implemented.
 
@@ -23,7 +23,7 @@ The approved design is two persistent primary mechs, one per player, plus a thir
 The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. The original native input bridge now supplies the narrowly tested movement path described above.
 
 - An opt-in four-command TCP experiment with connection-bound peer roles, two-peer observation barriers, same-state End Turn readiness and no action retries.
-- An experimental two-move chooser with owned-mech selection, destination validation, cancel and explicit confirmation. Ordinary clicks remain blocked from game input. Its two-replica completion is unverified; a real one-sided execution failure is preserved.
+- An experimental two-move chooser with owned-mech selection, destination validation, cancel and explicit confirmation. Ordinary clicks remain blocked from game input. One guest-selected move completed in both replicas; the full two-move experiment remains incomplete. The preceding one-sided execution failure is preserved.
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
@@ -53,7 +53,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 16 Lua files as Lua 5.1 and runs 221 core Lua contracts under Fengari/Lua 5.3, six mailbox framing contracts, seven coordinator contracts, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 17 Lua files as Lua 5.1 and runs 224 core Lua contracts under Fengari/Lua 5.3, ten mailbox framing contracts, eight runtime preparation contracts, eight chooser contracts, thirteen coordinator contracts, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 
