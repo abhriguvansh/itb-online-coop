@@ -68,7 +68,7 @@ function ui.install(env, lab, gate, attack)
                 else
                     b:caption(names[id] .. ': unavailable')
                 end
-                b:settooltip(request and 'One adjacent clear ground tile. Click to execute the diagnostic move.' or reason)
+                b:settooltip(request and 'Validated clear ground path. One move per mech per launch.' or reason)
             elseif not b.visible then
                 lastRequests[id] = nil
             end

@@ -9,7 +9,7 @@ local function integer(n) return type(n) == 'number' and n == n and n % 1 == 0 e
 function movement.new(env, emit, path)
     path = path or 'native'
     assert(path == 'native' or path == 'effect' or path == 'ui', 'Unknown movement experiment')
-    local self = { armed = false, blocked = false, pending = nil, fault = false, status = 'Move lab off' }
+    local self = { armed = false, blocked = false, pending = nil, fault = false, usedPawns = {}, status = 'Move lab off' }
     self.label = path == 'ui' and 'UI move lab' or (path == 'effect' and 'effect lab' or 'move lab')
     function self:profileAllowed()
         local key = env.modApi:getCurrentProfile()
@@ -57,9 +57,9 @@ function movement.new(env, emit, path)
     local function validate(request, allowPending)
         need(self.armed and not self.fault, 'not-armed')
         need(allowPending or not self.pending, 'move-pending')
-        need(path ~= 'ui' or allowPending or not self.used, 'ui-one-call-lockout')
         local mission = context()
         need(type(request) == 'table' and integer(request.pawnId) and types[request.pawnId], 'invalid-pawn')
+        need(path ~= 'ui' or allowPending or not self.usedPawns[request.pawnId], 'ui-one-call-per-pawn-lockout')
         need(request.mission == mission.ID and request.turn == env.Game:GetTurnCount(), 'stale-context')
         for _, p in ipairs({ request.from or {}, request.to or {} }) do
             need(integer(p.x) and integer(p.y), 'invalid-point')
@@ -79,7 +79,8 @@ function movement.new(env, emit, path)
         need(pawn:IsAbility('Adjacent_Heal') == false and pawn:IsAbility('Web_Vek') == false, 'post-move-ability')
         local from, to = pawn:GetSpace(), env.Point(request.to.x, request.to.y)
         need(same(from, request.from), 'stale-origin')
-        need(math.abs(from.x - to.x) + math.abs(from.y - to.y) == 1, 'one-tile-only')
+        local distance=math.abs(from.x-to.x)+math.abs(from.y-to.y)
+        need(path == 'ui' and distance>=1 or distance==1, 'one-tile-only')
         need(env.Board:IsPawnSpace(to) == false, 'occupied-target')
         safeTile(from, true); safeTile(to, false)
         local speed = pawn:GetMoveSpeed()
@@ -89,6 +90,25 @@ function movement.new(env, emit, path)
         local found = false
         for i = 1, reachable:size() do if same(reachable:index(i), to) then found = true end end
         need(found, 'unreachable-target')
+        if path == 'ui' then
+            local route=env.Board:GetPath(from,to,pawn:GetPathProf())
+            local count=route:size()
+            need(integer(count) and count>=2 and count<=speed+1,'unsupported-path-length')
+            need(same(route:index(1),from) and same(route:index(count),to),'path-endpoints-changed')
+            local visited={}
+            for i=1,count do
+                local point=route:index(i)
+                need(integer(point.x) and integer(point.y) and env.Board:IsValid(point)==true,'invalid-path-point')
+                local key=point.x..':'..point.y
+                need(not visited[key],'path-cycle');visited[key]=true
+                safeTile(point,i==1)
+                if i>1 then
+                    local previous=route:index(i-1)
+                    need(math.abs(point.x-previous.x)+math.abs(point.y-previous.y)==1,'nonadjacent-path-step')
+                    need(env.Board:IsPawnSpace(point)==false,'occupied-path')
+                end
+            end
+        end
         return pawnState(pawn)
     end
     function self:validate(request)
@@ -120,9 +140,25 @@ function movement.new(env, emit, path)
             need(pawn, 'missing-pawn')
             local from = xy(pawn:GetSpace())
             local lastReason = 'no-safe-neighbor'
-            for _, delta in ipairs({ {0,-1}, {-1,0}, {1,0}, {0,1} }) do
+            local destinations={}
+            if path=='ui' then
+                local reachable=env.Board:GetReachable(pawn:GetSpace(),pawn:GetMoveSpeed(),pawn:GetPathProf())
+                need(integer(reachable:size()) and reachable:size()<=1024,'unexpected-target-count')
+                for i=1,reachable:size() do destinations[#destinations+1]=xy(reachable:index(i)) end
+                table.sort(destinations,function(a,b)
+                    local da,db=math.abs(a.x-from.x)+math.abs(a.y-from.y),math.abs(b.x-from.x)+math.abs(b.y-from.y)
+                    if da~=db then return da>db end
+                    if a.y~=b.y then return a.y<b.y end
+                    return a.x<b.x
+                end)
+            else
+                for _,delta in ipairs({{0,-1},{-1,0},{1,0},{0,1}}) do
+                    destinations[#destinations+1]={x=from.x+delta[1],y=from.y+delta[2]}
+                end
+            end
+            for _, destination in ipairs(destinations) do
                 local request = { pawnId = id, from = from,
-                    to = { x = from.x + delta[1], y = from.y + delta[2] },
+                    to = destination,
                     mission = m.ID, turn = env.Game:GetTurnCount() }
                 local valid, reason = self:validate(request)
                 if valid then return request end
@@ -148,7 +184,7 @@ function movement.new(env, emit, path)
         emit('move_requested', { request = command, before = before, path = path, inputGateImplemented = false })
         local ok, result = pcall(function()
             if path == 'ui' then
-                self.used = true
+                self.usedPawns[command.pawnId] = true
                 need(self.bridge, 'ui-bridge-unavailable')
                 self.bridge:start(command, function() return pcall(validate, command, true) end)
                 return nil
@@ -194,8 +230,17 @@ function movement.new(env, emit, path)
         local now = env.modApi:elapsedTime()
         if now < p.nextSample then return end
         p.nextSample = now + 100
+        if self.bridge then
+            local bridgeOk,reason=pcall(function() self.bridge:update() end)
+            if not bridgeOk then
+                self.bridge:stop()
+                self.pending,self.armed,self.fault=nil,false,true
+                self.status='Move failed: restart required'
+                emit('move_failed',{reason='bridge-validation-failed',detail=tostring(reason),request=p.command})
+                return -- Never continue a partially submitted command after a guard failed.
+            end
+        end
         local ok, after = pcall(function()
-            if self.bridge then self.bridge:update() end
             local mission = context()
             need(mission.ID == p.command.mission and env.Game:GetTurnCount() == p.command.turn, 'context-changed')
             idle()
@@ -212,7 +257,7 @@ function movement.new(env, emit, path)
             emit('move_postconditions_observed', { request = p.command, before = p.before, after = after,
                 startObserved = p.startObserved, endObserved = p.endObserved,
                 path = path, persistenceVerified = false,
-                proofOfQuiescence = false, coverage = 'one-tile-manual-lab-only' })
+                proofOfQuiescence = false, coverage = path=='ui' and 'validated-ground-path-lab-only' or 'one-tile-manual-lab-only' })
             if self.bridge then self.bridge:stop() end
             self.pending = nil
             self.status = 'Move outcome observed'

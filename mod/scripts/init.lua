@@ -1,10 +1,10 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.5.10',
+    version = '0.6.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
-    description = 'Research probe with an opt-in one-tile movement lab on ITB_Coop_Probe. No multiplayer yet.',
+    description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',
     dependencies = { modApiExt = '1.25' },
     -- Enable this and modApiExt in Configure Mods, then restart the game.
     enabled = false,
@@ -63,6 +63,7 @@ function mod:init()
         end)
     end
     modapiext.events.onSkillBuild:subscribe(function(_, pawn, weapon, from, to)
+        self.movement.bridge:observePreview(pawn, weapon, from, to)
         self.moveTrace:observe('build', pawn, weapon, from, to)
     end)
 end

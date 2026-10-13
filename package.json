@@ -1,6 +1,6 @@
 {
   "name": "itb-online-coop-probe",
-  "version": "0.5.10",
+  "version": "0.6.0",
   "private": true,
   "description": "Source-backed capability probe for native Into the Breach co-op research",
   "license": "UNLICENSED",

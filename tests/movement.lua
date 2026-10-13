@@ -207,4 +207,44 @@ test('UI bridge failure faults without a fallback relocation',function()
     l.bridge={start=function()error('uncertain queue')end,stop=function()stops=stops+1 end}
     l:arm();assert(not l:request(r));assert(l.fault and stops==1 and e.calls==0 and e.effectCalls==0)
 end)
+local function longRoute()
+    local e,l,r=fixture('ui');r.to=e.Point(1,0)
+    local points={r.from,e.Point(1,2),e.Point(1,1),r.to}
+    e.Board.GetReachable=function()return list({r.to})end
+    e.Board.GetPath=function()return list(points)end
+    assert(l:arm());return e,l,r,points
+end
+test('UI path accepts a reachable three-step clear ground path',function()
+    local e,l,r=longRoute();assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0)
+end)
+for _,problem in ipairs({'hazard','occupancy','terrain','jump','cycle','end','length'}) do
+    test('UI path rejects unsafe or malformed intermediate path: '..problem,function()
+        local e,l,r,points=longRoute()
+        if problem=='hazard' then e.Board.IsFire=function(_,p)return p.y==2 end
+        elseif problem=='occupancy' then e.Board.IsPawnSpace=function(_,p)return p.y==2 end
+        elseif problem=='terrain' then e.Board.GetTerrain=function(_,p)return p.y==2 and 3 or 0 end
+        elseif problem=='jump' then points[2]=e.Point(2,2)
+        elseif problem=='cycle' then points[3]=points[1]
+        elseif problem=='end' then points[4]=e.Point(2,0)
+        else points[5]=r.to end
+        assert(not l:request(r) and e.calls==0 and e.effectCalls==0 and not l.usedPawns[2])
+    end)
+end
+test('UI bridge validation failure stops immediately without a retry',function()
+    local e,l,r=fixture('ui');local updates,stops=0,0
+    l.bridge={start=function()end,update=function()updates=updates+1;error('preview-mismatch')end,
+        stop=function()stops=stops+1 end}
+    l:arm();assert(l:request(r));l:update();assert(l.fault and not l.pending and stops==1)
+    e.clock=1000;l:update();assert(updates==1 and not l:arm())
+end)
+test('one successful pawn cannot repeat but another pawn can submit',function()
+    local e,l,r=fixture('ui');local starts=0
+    l.bridge={start=function()starts=starts+1 end,update=function()end,stop=function()end}
+    l:arm();assert(l:request(r));e.pawn.position=r.to;e.pawn.spent=true
+    l:skillEvent('onSkillStart',e.pawn,'Move');l:skillEvent('onSkillEnd',e.pawn,'Move')
+    for i=1,3 do e.clock=i*100;l:update()end
+    e.pawn.position=r.from;e.pawn.spent=false;assert(not l:request(r))
+    e.pawn.GetId=function()return 1 end;e.pawn.GetType=function()return 'TankMech'end;e.TankMech={};r.pawnId=1
+    assert(l:request(r) and starts==2 and l.usedPawns[1] and l.usedPawns[2])
+end)
 print('Movement contract tests: '..passed..' passed.')

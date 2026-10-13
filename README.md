@@ -4,11 +4,11 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.5.10. A bounded native movement path now passes movement consumption, undo, execution-hook and pawn persistence checks alongside the standard attack lab. Online co-op is not implemented.**
+**Current version: 0.6.0. Cannon and Artillery completed different multi-tile moves in one game session, with native preview validation, consumed movement, undo bookkeeping and pawn persistence. Online co-op is not implemented.**
 
-Two fresh-process runs moved Artillery through the game's normal UI path. One verified Undo; the other followed movement with a Combat Mech punch, then saved and reloaded with all observed pawn outcomes intact. Two terrain-health readings changed on reload, so full-state equality is still unresolved. [Movement evidence, failures and limits](docs/ui-movement.md).
+Cannon moved three tiles and Artillery moved two through the game's normal UI path. Both retained their ability to attack, and all observed pawn fields survived save/reload. Four terrain-health readings changed, so full-state equality remains unresolved. Earlier tests verified normal Undo and a subsequent Combat Mech punch. [Movement evidence, failures and limits](docs/ui-movement.md).
 
-This is a working one-route diagnostic on one Windows game instance, not a general movement executor or multiplayer session. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
+This is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
 The goal remains two actual game instances sharing three mechs. The player controlling two mechs will alternate each battle; ownership will remain fixed through turns, resets and reconnects. That session rule and networking are not implemented yet.
 
@@ -19,7 +19,7 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
-- A manually armed, one-tile movement experiment with validation, outcome checks, and a fault lockout; disabled by default.
+- A manually armed movement experiment with full-path checks, fresh native-preview confirmation, outcome checks, and a fault lockout; disabled by default.
 - Versioned JSON diagnostic records through the loader's `LOG` function.
 - Partial tile, pawn, turn, and grid observations, with unavailable fields identified.
 - A deliberately labeled `settled_candidate` heuristic: three unchanged observations, at least 100 ms apart, with the board and observed pawns reporting idle.
@@ -32,7 +32,7 @@ There is no general action replay, production multiplayer input authorization, t
 
 The tested Steam build is `13725832`, game `1.2.93`, with [ITB-ModLoader v2.9.6](https://github.com/itb-community/ITB-ModLoader/releases/tag/v2.9.6) and its bundled modApiExt `1.25`. Main-menu versions and runtime logs agree. Exact source revisions and the release checksum are in [dependencies.json](dependencies.json). This is one tested baseline, not a compatibility claim for other versions.
 
-Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's ten Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
+Obtain the loader separately from its upstream release. This repository contains no game files, loader binaries, upstream source copies, saves, or credentials. `mod/` contains only this project's Lua source files. The movement experiment additionally requires the loader's bundled, calibrated memedit 1.2.2; observation alone does not. The trace marks unavailable bookkeeping reads when memedit is absent.
 
 ## Test the project code
 
@@ -45,7 +45,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 11 Lua files as Lua 5.1 and runs 136 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 11 Lua files as Lua 5.1 and runs 151 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 

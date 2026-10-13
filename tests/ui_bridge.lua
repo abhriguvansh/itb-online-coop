@@ -23,6 +23,7 @@ local function fixture()
     n.finish=function()n.finishes=n.finishes+1 end
     local b=module.new(e,n,function(k,v)e.logs[#e.logs+1]={kind=k,value=v}end)
     local c={pawnId=2,from={x=0,y=3},to={x=0,y=2}}
+    e.preview=function()b:observePreview(e.pawn,'Move',c.from,c.to)end
     return e,n,b,c,function()return e.valid,'stale-command'end
 end
 test('selection must be observed before exactly one destination submission',function()
@@ -30,11 +31,11 @@ test('selection must be observed before exactly one destination submission',func
     assert(#n.aims==2 and n.aims[1].x==712 and n.aims[2].x==708)
     e.clock=200;b:update();assert(#n.calls==1)
     e.selected=e.pawn;b:update();e.clock=300;b:update();assert(#n.calls==1)
-    e.clock=400;b:update();assert(#n.calls==2 and b.phase=='submitted' and #n.aims==4)
+    e.preview();e.clock=400;b:update();assert(#n.calls==2 and b.phase=='submitted' and #n.aims==4)
     b:update();assert(#n.calls==2);b:stop();assert(b.phase=='off' and n.finishes==1)
 end)
 test('already selected actor needs only destination click',function()
-    local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);assert(#n.calls==0);e.clock=100;b:update();assert(#n.calls==0);e.clock=200;b:update();assert(#n.calls==1)
+    local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);assert(#n.calls==0);e.clock=100;b:update();assert(#n.calls==0);e.preview();e.clock=200;b:update();assert(#n.calls==1)
 end)
 for _,change in ipairs({'valid','roundtrip','width','scale','weapon'}) do
     test('reject changed '..change..' before destination',function()
@@ -47,14 +48,14 @@ for _,change in ipairs({'valid','roundtrip','width','scale','weapon'}) do
 end
 test('partial queue acceptance is uncertain and never retried',function()
     local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v)
-    e.clock=100;b:update();e.clock=200;n.click=function()n.calls[#n.calls+1]={};return false,1 end
+    e.clock=100;b:update();e.preview();e.clock=200;n.click=function()n.calls[#n.calls+1]={};return false,1 end
     assert(not pcall(function()b:update()end));assert(b.phase=='submitted' and #n.calls==1)
     b:update();assert(#n.calls==1)
 end)
-test('uncalibrated routes and layouts cannot arm native input',function()
+test('UI-overlapping endpoints and uncalibrated layouts cannot arm native input',function()
     for _,change in ipairs({'route','width','height','scale'}) do
         local e,n,b,c,v=fixture()
-        if change=='route' then c.to={x=1,y=3}
+        if change=='route' then c.to={x=0,y=0}
         elseif change=='width' then e.width=1280
         elseif change=='height' then e.height=720
         else e.scale=2 end
@@ -97,4 +98,31 @@ test('missing native module cannot submit',function()
     local e,n,b,c,v=fixture();b=module.new(e,nil,function()end)
     assert(not pcall(function()b:start(c,v)end));b:stop();assert(#n.calls==0)
 end)
+test('destination is never clicked without a fresh native preview',function()
+    local e,n,b,c,v=fixture();e.selected=e.pawn
+    b:observePreview(e.pawn,'Move',c.from,c.to) -- A stale pre-session preview is ignored.
+    b:start(c,v);e.clock=100;b:update();e.clock=200;b:update()
+    assert(#n.calls==0 and b.phase=='aim-destination')
+    b:observePreview(e.pawn,'Prime_Punch',c.from,c.to);b:update();assert(#n.calls==0)
+    e.preview();b:update();assert(#n.calls==1)
+end)
+
+for _,field in ipairs({'pawn','from','to'}) do
+    test('mismatching native preview rejects '..field,function()
+        local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);e.clock=100;b:update()
+        local pawn,from,to=e.pawn,c.from,c.to
+        if field=='pawn' then pawn={GetId=function()return 1 end}
+        elseif field=='from' then from={x=1,y=3} else to={x=1,y=2} end
+        b:observePreview(pawn,'Move',from,to);e.clock=200
+        assert(not pcall(function()b:update()end) and #n.calls==0)
+    end)
+end
+
+test('a different actor and longer route require the same native preview guard',function()
+    local e,n,b,c,v=fixture();c.pawnId=1;c.from={x=1,y=5};c.to={x=1,y=2}
+    e.pawn.GetId=function()return 1 end;e.selected=e.pawn
+    b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();assert(#n.calls==0)
+    e.preview();b:update();assert(#n.calls==1 and b.phase=='submitted')
+end)
+
 print('UI bridge contracts: '..passed..' passed.')

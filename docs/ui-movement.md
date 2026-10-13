@@ -1,6 +1,36 @@
-# Legal movement through the native UI — 0.5.10
+# Legal movement through the native UI — 0.6.0
 
-## Result
+## Current result: multiple mechs and longer paths
+
+On October 12, 2026, probe 0.6.0 completed two sequential UI-submitted moves in one game process, on player turn 3 of the disposable Archive artillery mission:
+
+| Mech | Route | Result |
+|---|---|---|
+| Cannon (1) | (1,5) → (0,5) → (0,4) → (0,3) | Three steps; HP 3; active; movement consumed; undo origin (1,5) |
+| Artillery (2) | (0,2) → (1,1), two steps | HP 2; active; movement consumed; undo origin (0,2) |
+
+Both commands recorded a fresh native `Move` preview with the requested actor, origin and destination **before** the destination press. Both emitted native execution start/end hooks and passed the movement postconditions. No gameplay setters, save edits, or automatic retries were used. The turn was advanced through the ordinary End Turn confirmation before testing; that enemy phase is setup, not replicated enemy behavior.
+
+The bridge now permits one command per mech per process instead of one command total. Undo does not reset that limit. Any uncertain submission or bridge validation failure still faults the entire lab until restart. Supported requests require a reachable, contiguous ground path within movement allowance; every step must be unoccupied after the origin and free of the checked hazards. Clear roads and forests are allowed. Flying, jumping, teleporting, grappled and other unsupported actor states remain rejected. The original adjacent-only restrictions remain on the historical native/effect experiments.
+
+The previous actor/route pixel allowlist is replaced by the native-preview check plus the existing coordinate roundtrip, delivery agreement and fixed 1920×1081/scale-3 calibration. A conservative screen region rejects endpoints overlapping fixed UI or edges. This is broader bounded coverage, not support for every tile, layout, mission, weapon or mech. Candidate selection is a diagnostic convenience that prefers farther validated destinations; it is not a tactical planner.
+
+Save and Quit / relaunch retained **all observed pawn fields**. Comparing settled candidate 95 before exit with candidate 6 after reload found only four tile-health differences: (1,1), (0,3), and (2,3) changed 4 → 2; (1,5) changed 2 → 4. Each was terrain 0 without a building. Their meaning remains unresolved, and full observed-state equality did not pass. The observer and comparison retain these fields unchanged.
+
+Private originals under `.local/evidence/ui-bridge-0.6.0/`:
+
+| File | SHA-256 |
+|---|---|
+| `before-reload.log` | `f2efbe7a58e2eedeffd549db164c945952ed1f0246a6e025d79838fcb156015a` |
+| `after-reload.log` | `3c5326b7c3495fbf1223342167bbbc268e664afd3bf9638690c4d4720d24ca4c` |
+
+Move results are records 72 and 94; preview confirmations are 61 and 85. Seventeen save-area files were backed up and hash-verified before testing. All four normal-profile files matched afterward; the game error file was empty. Both exits completed and Steam Cloud showed up to date. The existing game-tested DLL was reused without native code changes.
+
+Offline checks passed: 11 Lua syntax parses, 151 Lua contracts (19 observer, 62 movement, 10 trace, 14 gate, 25 attack, 21 bridge), 11 log-analysis assertions, and inert installer fixtures. New contracts cover unsafe/malformed intermediate paths, stale/missing/mismatched previews, immediate failure lockout, and sequential distinct actors. These doubles do not establish additional game coverage. Consult CI for the exact published revision.
+
+Exclusive physical/synthetic input authorization, blocked multiplayer undo/reset, two-instance replay, and online sessions remain unimplemented. The evidence below preserves the narrower predecessor milestone and its failures.
+
+## Previous result: 0.5.10
 
 On October 12, 2026, two fresh-process tests moved Artillery from (0,3) to (0,2) through the game's normal input path. Both consumed movement, preserved HP 2 and the ability to attack, emitted Move execution start/end hooks, and established undo at (0,3). The first test used the game's Undo button: the mech returned to (0,3) with movement available. The process-level one-call lockout remained in place.
 
@@ -8,7 +38,7 @@ The second test followed that move with the existing Combat Mech punch: Hornet 1
 
 This completes a **bounded single-instance movement/attack/undo milestone**, not a general executor or playable co-op. The move is deliberately restricted to one actor, route, mission, profile, and calibrated layout. Two clear-ground tile health readings changed from 2 to 4 on reload: (0,3) and (2,3). All other captured fields matched. Full observed-state equality therefore failed; the discrepancy remains unresolved. This observation must not be silently excluded from future synchronization comparisons.
 
-## Mechanism and diagnosis
+## Mechanism and original calibration diagnosis
 
 `native/input_bridge.c` is original project code. It dynamically resolves public Lua 5.1 and SDL2 APIs and uses Windows mouse input in the foreground game process. It uses no game addresses, game-state writes, network listener, persistent service, or event-filter replacement. One session lasts at most five seconds and permits at most two presses: selection and destination. A separate 80 ms timer submits button release even if Lua frames stop advancing.
 
@@ -70,4 +100,4 @@ The installed game-tested DLL SHA-256 was `eabe2f049f590f7df518d2d2c5f8904266816
 
 ## Next milestone
 
-Generalize validated movement beyond this calibration, establish exclusive command ownership while preserving intended synthetic input, block unsupported undo/reset, and resolve observation boundaries and the terrain-health discrepancy. Then demonstrate matching serialized actions on two actual game instances before exposing an online session. Keep the required battle-by-battle 2/1 mech ownership rotation; it is still a future session rule.
+Establish exclusive command ownership while preserving intended synthetic input, block unsupported undo/reset, and resolve observation boundaries and the terrain-health discrepancy. Broaden layout and action coverage with explicit evidence. Then demonstrate matching serialized actions on two actual game instances before exposing an online session. Keep the required battle-by-battle 2/1 mech ownership rotation; it is still a future session rule.

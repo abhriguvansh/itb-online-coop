@@ -12,12 +12,14 @@ function bridge.new(env, native, emit)
         local p={x=math.floor(origin.x+tw*scale*(tile.x-tile.y)+0.5),
             y=math.floor(origin.y+th*scale*(tile.x+tile.y+1)+0.5)+34}
         assert(same(env.screenPointToTile(p,false),tile),'coordinate-roundtrip-failed')
+        assert(p.x>=300 and p.x<=1580 and p.y>=150 and p.y<=975,'tile-overlaps-ui-or-edge')
         return p
     end
     local function aim(p,phase)
         -- The loader can consume the first motion while its old button hover is cached.
         -- Leave that button, allow a draw, then deliver a distinct motion over the tile.
         local approach={x=p.x+4,y=p.y}
+        self.preview=nil
         local ok,detail=native.aim(approach.x,approach.y);assert(ok,detail)
         self.phase,self.aimedAt='prepare',env.modApi:elapsedTime()
         self.finalPoint,self.finalPhase=p,phase
@@ -26,6 +28,13 @@ function bridge.new(env, native, emit)
     function self:stop()
         if native then native.finish() end
         self.phase='off'
+        self.preview=nil
+    end
+    function self:observePreview(pawn,weapon,from,to)
+        if self.phase=='off' or self.phase=='submitted' or not self.command then return end
+        if self.finalPhase~='aim-destination' or not pawn or weapon~='Move' then return end
+        -- Copies only. This is a fresh native preview, not a claim of execution.
+        self.preview={pawnId=pawn:GetId(),from={x=from.x,y=from.y},to={x=to.x,y=to.y}}
     end
     function self:start(command, validate)
         assert(self.phase=='off','bridge-already-active')
@@ -38,10 +47,9 @@ function bridge.new(env, native, emit)
         self.from,self.to=center(command.from),center(command.to)
         emit('ui_bridge_layout',{width=env.screen:w(),height=env.screen:h(),scale=env.GetBoardScale(),
             fromPixel=self.from,toPixel=self.to})
-        -- Only these two pixel/tile pairs have an independent native-game positive control.
-        assert(command.pawnId==2 and same(command.from,{x=0,y=3}) and same(command.to,{x=0,y=2})
-            and same(self.from,{x=708,y=323}) and same(self.to,{x=792,y=260}),
-            'uncalibrated-route-or-layout')
+        -- Keep the tested projection/layout; native preview now verifies each destination.
+        assert(env.screen:w()==1920 and env.screen:h()==1081 and env.GetBoardScale()==3,
+            'uncalibrated-layout')
         self.width,self.height=env.screen:w(),env.screen:h()
         local ok,detail=native.begin();assert(ok,detail)
         emit('ui_bridge_started',{command=command,fromPixel=self.from,toPixel=self.to,
@@ -96,6 +104,11 @@ function bridge.new(env, native, emit)
         elseif self.phase=='aim-destination' then
             assert(pawn and pawn:GetId()==self.command.pawnId,'selection-changed')
             assert(pawn:GetArmedWeaponId()==0,'movement-not-armed-after-selection')
+            local preview=self.preview
+            if not preview then return end -- Bounded outer timeout; no destination press.
+            assert(preview.pawnId==self.command.pawnId and same(preview.from,self.command.from)
+                and same(preview.to,self.command.to),'native-preview-mismatch')
+            emit('ui_bridge_preview_verified',preview)
             self.phase='submitted'
             local sent,count=native.click(self.to.x,self.to.y)
             emit('ui_bridge_destination_queued',{accepted=sent,events=count,pawnId=pawn:GetId(),native=native.info()})

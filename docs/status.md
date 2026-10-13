@@ -1,6 +1,6 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.5.10 passed two bounded programmatic moves, normal undo, a subsequent standard punch, and persisted pawn outcomes after save/reload. Two terrain-health readings differed. This completes the one-scenario single-instance action milestone; general commands, exclusive input ownership and online co-op remain incomplete.**
+**Latest increment: probe 0.6.0 passed sequential three-tile Cannon and two-tile Artillery moves in one process. Fresh native previews matched each request; both consumed movement, retained attack availability, and established undo. All observed pawn fields survived reload; four terrain-health readings differed. Exclusive input ownership and online co-op remain incomplete.**
 
 See [the current movement evidence and build procedure](ui-movement.md). The older increments below are historical, not the current capability boundary.
 
@@ -52,7 +52,7 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Next playable milestone
 
-Generalize the validated movement route, establish exclusive command ownership, block unsupported undo/reset, and resolve observation/persistence discrepancies before two-instance serialized action replay. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule.
+Establish exclusive command ownership, block unsupported undo/reset, and resolve observation/persistence discrepancies before two-instance serialized action replay. Movement now supports bounded validated paths; broader layouts and attacks still need evidence. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule.
 
 ## Current verification: 0.5.10
 
