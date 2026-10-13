@@ -4,9 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.8.0, an experimental protected-session mode awaiting live verification. The completed 0.7.2 milestone verified guarded movement, Undo, Tab/Escape and Reset-button blocking with unblocked controls. Online co-op is not implemented.**
+**Current source: 0.8.0. Real-game checks verified protected movement, continued blocking after focus loss or heartbeat expiry, and explicit exit restoring local controls. Earlier checks covered Undo, Tab/Escape and Reset-button blocking. Online co-op is not implemented.**
 
-The [new guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Its bounded timeout is a diagnostic, not a multiplayer failure policy.
+The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
 Cannon moved three tiles and Artillery moved two through the game's normal UI path. Both retained their ability to attack, and all observed pawn fields survived save/reload. Four terrain-health readings changed, so full-state equality remains unresolved. Earlier tests verified normal Undo and a subsequent Combat Mech punch. [Movement evidence, failures and limits](docs/ui-movement.md).
 

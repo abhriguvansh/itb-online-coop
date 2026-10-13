@@ -1,6 +1,6 @@
-# Game-window input guard — 0.7.2 experiment
+# Game-window input guard — 0.8.0 experiment
 
-## Protected-session mode — 0.8.0, live check pending
+## Protected-session mode — 0.8.0
 
 ABI v3 adds a distinct protected session. A five-second native lease is renewed by the mod's frame callback. Expiry, focus loss, command/context failure or a release failure stops the session while retaining the window input block. A late heartbeat cannot resume it. Ordinary bridge finish/guard-end calls cannot unlock it; successful command completion leaves protection active. Tagged motion/down messages queued after a stop are rejected; tagged button-up may drain an already accepted press. An in-flight game effect cannot be rolled back by this filter.
 
@@ -8,7 +8,22 @@ ABI v3 adds a distinct protected session. A five-second native lease is renewed 
 
 The new **Session test - Esc exits** control arms protection without actions. With the movement lab armed, it becomes **Protected move - Esc exits** and submits one validated move. **Session timeout test - Esc exits** deliberately withholds the heartbeat; the real native lease must expire and remain blocked. These controls are opt-in and restricted by the standalone guard's disposable-profile/tactical checks.
 
-Local compilation, 174 Lua contracts, 11 log-analysis assertions and installer fixtures pass. Native contracts run only in GitHub CI. Live validation must show a successful protected move, continued blocking beyond five seconds with heartbeat, latched timeout/focus loss, refused further input, and explicit exit with working local controls. There is no peer connection, ownership enforcement or network failure propagation yet; this is a local protection foundation, not a usable multiplayer session. Controller/polled-state and held-across-failure coverage remain incomplete.
+Local compilation, 174 Lua contracts, 11 log-analysis assertions and installer fixtures pass. Both GitHub jobs, including mocked native contracts, passed implementation revision `9184b6a906447ad6ee015c69d574d83690c7f2e8` ([run](https://github.com/abhriguvansh/itb-online-coop/actions/runs/38338445351)). There is no peer connection, ownership enforcement or network failure propagation yet; this is a local protection foundation, not a usable multiplayer session. Controller/polled-state and held-across-failure coverage remain incomplete.
+
+### Live protected-session evidence — October 12, 2026
+
+Two fresh processes used the disposable Artillery mission, player turn 3. No command failure was deliberately induced live; command/release failure, late heartbeat refusal and queued tagged-input refusal have mocked contract coverage only.
+
+- **Protected move and focus loss:** session start 8; Cannon moved from (1,5) to (0,3), with execution hooks and postconditions at 31: movement spent, HP 3, active, undo origin (1,5). Two clicks were released and eight tagged messages passed. Protection remained active beyond the five-second lease with frame heartbeats. Tab left Cannon selected and added three blocked keyboard messages. Switching to Steam and back produced state 2, `focus-lost`, at 34 with the guard still active. Undo was blocked. Escape produced state 3, `explicit-exit`, at 35 without opening a menu. Partial states at 33, 34 and 35 match exactly; selection at 34 and 35 also matches. Mouse blocking rose from 8 to 18 across the stopped interval. The same Undo click after exit succeeded (hook 36, settled state 37), restoring origin and movement allowance. A fresh Escape opened the menu normally.
+- **Missing heartbeat:** start 7 deliberately withheld renewal; 8 recorded state 2, `heartbeat-expired`, with guard active and remaining time zero. Tab did not select a pawn. Escape explicitly exited at 9; all partial-state and selection fields match across 7–9. A fresh Tab then selected Combat, and a fresh Escape opened the menu. No gameplay command was submitted in this run.
+
+Exit records were sampled during the Escape press, so `guardHeld: 1` is the consumed Escape tail, not evidence of a stuck key. Subsequent fresh input worked. Holding other inputs across failure still needs separate evidence. Focus loss was tested after movement completed, not during an engine effect; rollback is not claimed.
+
+Both runs ended with normal Save and Quit. Steam Cloud showed up to date, the error file was empty, and all four normal-profile files matched the 18-file pre-install backup manifest. No local native test executable or antivirus changes were used. Private evidence remains excluded from Git:
+
+- `session-0.8.0/focus.log`: SHA-256 `f0680455cf428b57998a32c27ff02be71055cb3fcd3d0ae584a1a305bf30c192`.
+- `session-0.8.0/timeout.log`: SHA-256 `15fb70d262264feda9b8176f4af6a39306deb0dd416bf9c7435b3a118f494e86`.
+- Tested ABI v3 DLL: SHA-256 `135ec0eff52c9112545255b4cc4ea6d02e31f893400bebe5d05cdcdb08517a40`.
 
 ## Evidence status
 

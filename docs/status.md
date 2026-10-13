@@ -1,6 +1,6 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.7.2 adds paired real-game Tab, Escape and available Reset-button blocking tests, plus idle focus-loss recovery. All four guard intervals preserved every observed game-state and selection field. Version 0.7.1's guarded move/Undo evidence remains valid. Session-wide input ownership and online co-op remain incomplete.**
+**Latest increment: probe 0.8.0 verifies a protected move and continued input blocking after focus loss or heartbeat expiry. Explicit Escape exit restores local controls; ordinary completion or late heartbeat cannot resume a stopped session. Two live runs passed with unchanged observed state during stopped intervals and working post-exit Undo/Tab controls. Online co-op remains incomplete.**
 
 See [the guard evidence, preserved failure and limits](window-guard.md). The earlier 0.6.0 sequential Cannon/Artillery moves and pawn persistence remain valid; four terrain-health readings differed on reload and remain unresolved.
 
@@ -54,7 +54,7 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Next playable milestone
 
-Implement a stopped-session input policy before extending transport: timeout, focus loss, command failure or divergence must prevent further gameplay until an explicit session exit. The current diagnostic deliberately unlocks and is not that policy. Next test held input across failure/expiry and the remaining shortcut routes, then resolve observation/persistence discrepancies before two-instance serialized replay. Movement supports bounded validated paths; broader layouts and attacks still need evidence. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule. A second Windows PC/tester is not yet confirmed; the user may recruit a friend, and no purchase is needed for current local work.
+The local stopped-session foundation now has live movement, focus-loss and heartbeat-expiry evidence. Next connect validated movement and attack execution to one serialized protected command lifecycle, including a deliberate command-failure check. Test held input across failure and the remaining shortcut routes, then resolve observation/persistence discrepancies before two-instance serialized replay. Divergence detection and peer failure propagation are not implemented. Movement supports bounded validated paths; broader layouts and attacks still need evidence. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule. A second Windows PC/tester is not yet confirmed; the user may recruit a friend, and no purchase is needed for current local work.
 
 ## Current verification: 0.5.10
 
