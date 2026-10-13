@@ -4,9 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.11.1. Interactive moves now require fresh, action-specific preparation from both game runtimes before dispatch. This correction passes offline tests but awaits live validation. The preceding 0.11.0 test executed the guest's selected move while the host refused after heartbeat expiry; paired interactive gameplay has not passed. Playable human-selected online co-op is not yet available.**
+**Current source: 0.11.1. Interactive moves require fresh, action-specific preparation from both game runtimes before dispatch. A real two-game test passed the missing-response check: pausing the host prevented all execution, and both observed boards stayed unchanged. Successful paired interactive movement remains unverified. Playable human-selected online co-op is not yet available.**
 
-The prior 0.10.0 fixed scripted sequence passed in two independent real game instances: movement, punch, protected native End Turn with unused-unit confirmation, full enemy phase, then another legal move. That evidence remains separate from the [interactive failure](docs/command-session.md#interactive-movement--probe-0110-october-13) and the [untested-in-game readiness correction](docs/command-session.md#runtime-preparation--probe-0111-october-13).
+The prior 0.10.0 fixed scripted sequence passed in two independent real game instances: movement, punch, protected native End Turn with unused-unit confirmation, full enemy phase, then another legal move. That evidence remains separate from the [interactive failure](docs/command-session.md#interactive-movement--probe-0110-october-13) and the [readiness correction's bounded live proof](docs/command-session.md#approved-launch-and-real-stopped-peer-test).
 
 The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
