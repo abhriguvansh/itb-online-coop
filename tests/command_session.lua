@@ -46,6 +46,44 @@ local function completeAttack(e,s)
     s:skillEvent('onSkillEnd',e.actor,'Prime_Punchmech')
     for i=1,3 do e.clock=e.clock+100;s:update()end
 end
+local function endFixture()
+    local e,o,r=fixture();e.endCalls=0
+    o.endTurn={new=function(_,_,emit)
+        local lab={arm=function()return true end}
+        lab.request=function()e.endCalls=e.endCalls+1;lab.pending=true;return true end
+        lab.update=function()if e.phaseComplete then lab.pending=nil;emit('end_turn_postconditions_observed',{}) end end
+        lab.phaseEvent=function()end;lab.draw=function()end;lab.missionUpdate=function()end
+        return lab
+    end}
+    local s=session.new(o)
+    local req={id='end',session='s1',encounter='enc1',phase='player2',revision=0,witness=e.witness,kind='end-turn',confirmUnused=true}
+    local function ready() assert(s:setReady('host','player2',0,e.witness,true));assert(s:setReady('guest','player2',0,e.witness,true)) end
+    return e,o,s,req,ready,r
+end
+test('End Turn requires two same-state readiness records',function()
+    local e,_,s,r,ready=endFixture();assert(s:submit('host',r).reason=='both-players-must-be-ready')
+    r.id='new';ready();assert(s:submit('host',r).status=='pending' and e.endCalls==1)
+    assert(s:submit('host',r).status=='duplicate' and e.endCalls==1)
+    r.witness='changed';assert(s:submit('host',r).reason=='request-id-conflict' and e.endCalls==1)
+end)
+test('End Turn rejects stale observation and unauthorized caller',function()
+    local e,_,s,r,ready=endFixture();ready();assert(s:submit('outsider',r).reason=='unknown-peer')
+    e.witness='changed';assert(s:submit('host',r).reason=='stale-observation-renew-intent' and e.endCalls==0)
+end)
+test('phase pending rejects moves even when engine temporarily reports player idle',function()
+    local e,_,s,r,ready,move=endFixture();ready();s:submit('host',r)
+    assert(s:submit('guest',move('move','early')).reason=='command-pending-renew-intent' and e.moveCalls==0)
+    e.phaseComplete=true;e.turn=3;s:update();assert(s.phase=='player3' and s.turn==3 and s.revision==1)
+    local nextRequest=move('move','next');nextRequest.phase='player3';nextRequest.revision=1
+    assert(s:submit('guest',nextRequest).status=='pending' and e.moveCalls==1)
+end)
+test('End Turn readiness is invalidated by an intervening admitted action',function()
+    local e,_,s,r,ready,move=endFixture();ready();s:submit('guest',move());completeMove(e,s)
+    r.revision=1;assert(s:submit('host',r).reason=='both-players-must-be-ready' and e.endCalls==0)
+end)
+test('unsolicited phase transition stops all commands',function()
+    local e,_,s= endFixture();s:phaseEvent('onNextTurn',e.mission);assert(s.stopped and e.endCalls==0)
+end)
 test('guest movement then host punch use real diagnostic modules and one revision stream',function()
     local e,o,r=fixture();local s=session.new(o);local a=r();assert(s:submit('guest',a).status=='pending')
     assert(s:submit('guest',a).status=='duplicate' and e.moveCalls==1)

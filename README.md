@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.8.0. Real-game checks verified protected movement, continued blocking after focus loss or heartbeat expiry, and explicit exit restoring local controls. Earlier checks covered Undo, Tab/Escape and Reset-button blocking. Online co-op is not implemented.**
+**Current source: 0.9.0. One actual game instance completed protected movement, punch, native End Turn with its unused-unit confirmation, the full enemy phase, and another legal move on the next player turn. Online co-op is not implemented.**
 
 The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
@@ -12,9 +12,9 @@ Cannon moved three tiles and Artillery moved two through the game's normal UI pa
 
 This is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-**October 13 increment:** the [provisional v0.1 ruleset](docs/co-op-design.md) is approved with qualified Undo/Reset and voting boundaries. An [offline shared command experiment](docs/command-session.md) now wraps the real movement/punch Lua diagnostics with ownership, duplicate/stale rejection and shared failure handling. It is not installed or connected to transport; probe 0.8.0 remains the runtime build.
+**October 13 increment:** the [shared command session](docs/command-session.md) now runs in the game with fixed ownership, same-state readiness, duplicate/stale rejection and shared failure handling. Eight commands attempted during phase transitions were rejected. Observed states and execution events matched the preserved normal-play sequence. This uses scripted peer intent; a second isolated instance and transport are still missing.
 
-The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Runtime ownership, voting, readiness and networking are not implemented yet.
+The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Restricted runtime ownership and readiness are tested with scripted peers; campaign voting, rotation and networking are not implemented.
 
 ## What exists
 
@@ -30,7 +30,7 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 - A local log summary and field-level comparison tool. Matching digests cover only the observed fields.
 - A targeted probe installer with ownership checks, a verified backup/staging workflow, offline tests, and a GitHub Actions configuration.
 
-There is no general action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/reset are merely observed in this diagnostic build. The probe cannot be used as a multiplayer session.
+There is no general action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/Reset remain blocked during the restricted protected session. The probe cannot be used as a multiplayer session.
 
 ## Baseline
 
@@ -49,7 +49,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 11 Lua files as Lua 5.1 and runs 174 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 15 Lua files as Lua 5.1 and runs 218 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 

@@ -77,7 +77,7 @@ function ui.install(env, lab, gate, attack)
             return lab:profileAllowed() and env.sdlext.isGame() and not lab.blocked
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID and mission.ID ~= 'Mission_Test'
         end)
-        tactical = ok and tactical == true
+        tactical = ok and tactical == true and not lab.sessionOwned
         controls.session.visible=tactical and not gate.active and not attack.armed
         controls.timeout.visible=controls.session.visible and not lab.bridge.sessionWatching
         controls.session:caption(lab.bridge.sessionStatus or (lab.armed and 'Protected move - Esc exits' or 'Session test - Esc exits'))

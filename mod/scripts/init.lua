@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.8.0',
+    version = '0.9.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -83,9 +83,11 @@ function mod:init()
         self.movement.bridge:observePreview(pawn, weapon, from, to)
         self.moveTrace:observe('build', pawn, weapon, from, to)
     end)
+    if loaded then self.phaseLab=require(path..'phase_lab').install(_G,self,native,path) end
 end
 
 function mod:load()
+    if self.phaseLab and self.phaseLab.session then self.phaseLab.session:stop('mod-load') end
     self.attack:reset('mod-load')
     self.inputGate:stop('mod-load', true)
     self.probe:load()
