@@ -162,6 +162,21 @@ function M.new(o)
         if not called or not accepted or self.stopped then self:stop('dispatch-rejected-or-uncertain') end
         return result(rec)
     end
+    -- Read-only draft check; never reserves a command or crosses the input boundary.
+    function self:previewMove(peer,r)
+        if not players[peer] or not envelope(r) or r.kind~='move' then return false,'invalid-move-draft' end
+        if not health() then return false,self.reason end
+        if pending then return false,'command-pending-renew-intent' end
+        if r.session~=o.session or r.encounter~=o.encounter or r.phase~=self.phase
+            or r.revision~=self.revision or r.witness~=witness() then return false,'stale-draft-renew-intent' end
+        local entity=registry[r.actor]
+        if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
+        if not move:arm() then return false,move.status end
+        local ok,reason=move:validate({pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
+            mission='Mission_Artillery',turn=self.turn})
+        move.armed=false
+        return ok,ok and 'supported-move' or tostring(reason)
+    end
     function self:update()
         if not health() then return end
         local ok = pcall(function() move:update(); attack:update();if ending then ending:update() end end)

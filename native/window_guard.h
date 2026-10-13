@@ -15,8 +15,13 @@ static int guard_active, guard_owned, guard_expired;
 /* 0: diagnostic only, 1: protected, 2: stopped/latched, 3: explicitly ended.
  * Ended sessions reject queued tagged presses until a new explicit session. */
 static int session_state;
+/* Read-only intent mailbox. Untagged clicks remain blocked from SDL/game UI.
+ * Lua must validate context/ownership and explicitly confirm before submission. */
+static unsigned intent_serial;
+static int intent_down,intent_x,intent_y,intent_down_x,intent_down_y;
 static const char *session_reason="none";
 static void session_fault(const char *reason) {
+    intent_down=0;
     if(session_state==1) { session_state=2;session_reason=reason;armed=0;guard_expired=1; }
 }
 static Uint32 guard_started,guard_duration;
@@ -84,6 +89,17 @@ static LRESULT CALLBACK guard_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp,UINT_P
         if(guard_active)passed_tagged++;
         return next_subclass(hwnd,msg,wp,lp);
     }
+    if(guard_active && session_state==1 && !armed && !pressed) {
+        int x=(int)(short)LOWORD(lp),y=(int)(short)HIWORD(lp);
+        if(msg==WM_LBUTTONDOWN) { intent_down=1;intent_down_x=x;intent_down_y=y; }
+        if(msg==WM_LBUTTONUP) {
+            if(intent_down && x>=intent_down_x-4 && x<=intent_down_x+4 &&
+                y>=intent_down_y-4 && y<=intent_down_y+4) {
+                intent_x=x;intent_y=y;intent_serial++;
+            }
+            intent_down=0;
+        }
+    } else intent_down=0;
     if((mouse_message || key_message) &&
         (guard_active || (key>=0 && blocked_held[key]) || (key_message && key<0 && guard_tails()))) {
         if(key>=0) { if(down)blocked_held[key]=1;else if(up)blocked_held[key]=0; }
@@ -115,5 +131,6 @@ static int guard_install(Uint32 duration,int owned) {
     guard_started=p_SDL_GetTicks();guard_duration=duration;
     blocked_mouse=blocked_keys=passed_tagged=blocked_raw=0;
     guard_trace[0]=0;guard_trace_count=0;
+    intent_serial=0;intent_down=0;
     return 1;
 }

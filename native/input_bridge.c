@@ -89,6 +89,7 @@ static int held(void) {
 static int begin(lua_State *L) {
     SDL_EventFilter filter=NULL; void *data=NULL; SDL_SysWMinfo wm;
     guard_tick();
+    intent_down=0;
     if(session_state>=2)return result(L,0,"protected-session-stopped");
     if(armed) return result(L,0,"session-already-active");
     target=p_SDL_GetKeyboardFocus();
@@ -232,6 +233,9 @@ static int info(lua_State *L) {
     p_lua_pushnumber(L,blocked_raw);p_lua_setfield(L,-2,"blockedRaw");
     p_lua_pushnumber(L,passed_tagged);p_lua_setfield(L,-2,"passedTagged");
     p_lua_pushnumber(L,guard_tails());p_lua_setfield(L,-2,"guardHeld");
+    p_lua_pushnumber(L,intent_serial);p_lua_setfield(L,-2,"intentSerial");
+    p_lua_pushnumber(L,intent_x);p_lua_setfield(L,-2,"intentX");
+    p_lua_pushnumber(L,intent_y);p_lua_setfield(L,-2,"intentY");
     p_lua_pushstring(L,guard_trace);p_lua_setfield(L,-2,"guardTrace");
     p_lua_pushnumber(L,sizeof(void*)*8);p_lua_setfield(L,-2,"bits");
     p_lua_pushnumber(L,clicks);p_lua_setfield(L,-2,"clicks");

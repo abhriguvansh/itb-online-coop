@@ -158,6 +158,16 @@ int main(void){
     setup();session_begin(NULL);front=NULL;session_pulse(NULL);assert(!ok_value && session_state==2 && guard_active);
     setup();session_begin(NULL);release_failed=1;session_pulse(NULL);assert(!ok_value && session_state==2);
     setup();clock_value=0xfffffff0u;session_begin(NULL);clock_value=4984;guard_tick();assert(session_state==2 && guard_active);
+    setup();session_begin(NULL);
+    assert(intent_serial==0);message(WM_LBUTTONUP,0);assert(intent_serial==0);
+    message(WM_LBUTTONDOWN,0);message(WM_LBUTTONUP,0);
+    assert(intent_serial==1 && forwarded==0 && guard_active);
+    extra_value=INPUT_MARKER;message(WM_LBUTTONDOWN,0);message(WM_LBUTTONUP,0);
+    assert(intent_serial==1);extra_value=0;
+    begin(NULL);message(WM_LBUTTONDOWN,0);message(WM_LBUTTONUP,0);assert(intent_serial==1);finish(NULL);
+    message(WM_LBUTTONDOWN,0);session_stop(NULL);message(WM_LBUTTONUP,0);assert(intent_serial==1);
+    setup();session_begin(NULL);message(WM_LBUTTONDOWN,0);
+    guard_proc((HWND)2,WM_LBUTTONUP,0,MAKELPARAM(20,20),INPUT_MARKER,0);assert(intent_serial==0);
     puts("Native contracts passed: input submission, diagnostic guard, latched session failures, explicit exit, stale tagged-input rejection, lifecycle and time bounds.");
     return 0;
 }

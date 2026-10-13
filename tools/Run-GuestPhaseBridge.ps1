@@ -7,9 +7,15 @@ $config=Get-Content -LiteralPath (Join-Path $Root 'connection.json') -Raw | Conv
 if($config.host-ne'10.0.2.2' -or $config.peer-notin@('host','guest') -or $config.session-notmatch'^[a-f0-9-]{36}$' -or $config.token-notmatch'^[a-f0-9]{48}$' -or $config.port-lt1 -or $config.port-gt65535){throw 'Invalid private connection configuration'}
 $utf8=[Text.UTF8Encoding]::new($false,$true);$incoming=1;$outgoing=1;$complete=$false
 function Write-Frame($frame){
-    if($script:incoming-gt512){throw 'Incoming frame limit'}
-    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt4 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
-    $text=($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id -join '|')+"`n"+$frame.witness
+    if($script:incoming-gt1024){throw 'Incoming frame limit'}
+    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt4 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
+    $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
+    if($null-ne$frame.move){
+        if($frame.kind-ne'EXEC' -or $frame.move.actor-notin@('combat','cannon','artillery')){throw 'Invalid move payload'}
+        foreach($key in @('fromX','fromY','toX','toY')){if($frame.move.$key-notmatch'^[0-7]$'){throw 'Invalid move coordinate'}}
+        $header+=@($frame.move.actor,$frame.move.fromX,$frame.move.fromY,$frame.move.toX,$frame.move.toY)
+    }
+    $text=($header -join '|')+"`n"+$frame.witness
     $target=Join-Path $Root ('in-{0:d4}.txt'-f$script:incoming)
     [IO.File]::WriteAllText($target+'.tmp',$text,$utf8)
     [IO.File]::Move($target+'.tmp',$target);$script:incoming++
@@ -17,6 +23,7 @@ function Write-Frame($frame){
 $client=[Net.Sockets.TcpClient]::new()
 try{
     $waiting=[Diagnostics.Stopwatch]::StartNew()
+    [IO.File]::WriteAllText((Join-Path $Root 'bridge-ready.txt'),$config.session,$utf8)
     while(-not(Test-Path -LiteralPath (Join-Path $Root 'out-0001.json'))){
         if($waiting.Elapsed.TotalSeconds-gt300){throw 'Game was not armed before startup deadline'}
         Start-Sleep -Milliseconds 100
@@ -33,7 +40,7 @@ try{
     Send-Message @{type='hello';session=$config.session;peer=$config.peer;token=$config.token}
     $buffer='';$bytes=[byte[]]::new(8192);$chars=[char[]]::new(8192);$decoder=$utf8.GetDecoder()
     $last=[Diagnostics.Stopwatch]::StartNew();$total=[Diagnostics.Stopwatch]::StartNew()
-    while($total.Elapsed.TotalSeconds-lt190){
+    while($total.Elapsed.TotalSeconds-lt610){
         if($client.Client.Poll(0,[Net.Sockets.SelectMode]::SelectRead)-and$client.Available-eq0){
             if($complete){Write-Output 'Guest phase bridge completed';exit 0};throw 'Coordinator disconnected'
         }

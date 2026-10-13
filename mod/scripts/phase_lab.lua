@@ -22,6 +22,10 @@ function M.install(env,mod,native,path)
         else return request('complete','complete'),'host' end
     end
     local function check(value,reason) assert(value,reason) end
+    if wire and wire.interactive then
+        self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit})
+        self.status='Interactive co-op moves'
+    end
     local function start()
         check(not self.used and not mod.movement.armed and not mod.movement.pending
             and not mod.attack.armed and not mod.attack.pending and not mod.inputGate.active,'other-diagnostic-active')
@@ -42,7 +46,7 @@ function M.install(env,mod,native,path)
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
         self.stage=0;self.status='Running protected phase sequence'
         if wire then wire:arm(planned());self.status='Waiting for network peer' end
-        emit('phase_lab_started',{scriptedPeers=true,networked=wire~=nil,state=state})
+        emit('phase_lab_started',{scriptedPeers=not (wire and wire.interactive),networked=wire~=nil,state=state})
     end
     local function advance()
         local s=self.session
@@ -60,6 +64,7 @@ function M.install(env,mod,native,path)
                 self.status='Network sequence passed - Esc exits';self.done=true
                 native.sessionStop();native.finish()
             end
+            if self.intent then self.status=self.intent:update(s,self.done) end
             return
         end
         if s.revision~=self.stage then return end
@@ -105,6 +110,7 @@ function M.install(env,mod,native,path)
             self.button:caption(self.status)
             if self.startAt and env.modApi:elapsedTime()>=self.startAt then self.startAt=nil;start() end
             if self.session and not self.done then self.session:draw();advance() end
+            if self.intent then self.intent:draw(env.sdlext.getUiRoot(),self.session~=nil and self.button.visible) end
         end)
         if not ok then
             self.status='Sequence stopped - Esc exits';self.done=true

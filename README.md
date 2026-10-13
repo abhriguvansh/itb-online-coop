@@ -4,7 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.10.0. Two independent real game instances completed a network-coordinated move, punch, protected native End Turn with unused-unit confirmation, full enemy phase, and another legal move. Requests and outcomes crossed real TCP, with matching observations after each action. This is a fixed scripted experiment; playable human-selected online co-op is not yet available.**
+**Current source: 0.11.0. A player-operated move chooser now submits a legal movement through the protected TCP path. The guest executed it, but the host's gameplay heartbeat had expired: the paired interactive test stopped without retry and did not pass. Playable human-selected online co-op is not yet available.**
+
+The prior 0.10.0 fixed scripted sequence passed in two independent real game instances: movement, punch, protected native End Turn with unused-unit confirmation, full enemy phase, then another legal move. That evidence remains separate from the new [interactive experiment and runtime-liveness blocker](docs/command-session.md#interactive-movement--probe-0110-october-13).
 
 The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
@@ -12,7 +14,7 @@ Cannon moved three tiles and Artillery moved two through the game's normal UI pa
 
 That earlier movement evidence is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-**October 13 network increment:** the [shared command session](docs/command-session.md#network-coordinated-phase-proof--probe-0100-october-13) uses fixed ownership, same-state readiness, duplicate/stale rejection and stop-on-uncertainty. Both actual games rejected eight early commands. All 26 partial-state candidates and 26 ordered execution/phase payloads match each other and the preserved vanilla reference. Full-state equality and general determinism remain unproven. Next: a human-chosen owned-mech move through this protected network path.
+**October 13 scripted network increment:** the [shared command session](docs/command-session.md#network-coordinated-phase-proof--probe-0100-october-13) uses fixed ownership, same-state readiness, duplicate/stale rejection and stop-on-uncertainty. Both actual games rejected eight early commands. All 26 partial-state candidates and 26 ordered execution/phase payloads match each other and the preserved vanilla reference. Full-state equality and general determinism remain unproven. Next: require fresh readiness from both actual game runtimes before dispatching an interactive move; a connected TCP bridge alone is insufficient.
 
 The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Restricted runtime ownership and readiness are tested with scripted peers; campaign voting, rotation and general multiplayer interaction are not implemented.
 
@@ -21,6 +23,7 @@ The approved design is two persistent primary mechs, one per player, plus a thir
 The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. The original native input bridge now supplies the narrowly tested movement path described above.
 
 - An opt-in four-command TCP experiment with connection-bound peer roles, two-peer observation barriers, same-state End Turn readiness and no action retries.
+- An experimental two-move chooser with owned-mech selection, destination validation, cancel and explicit confirmation. Ordinary clicks remain blocked from game input. Its two-replica completion is unverified; a real one-sided execution failure is preserved.
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
