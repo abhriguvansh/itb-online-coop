@@ -19,6 +19,30 @@ Reviewed October 12, 2026. **Observation has been verified in the real game with
 | Read partial state | Vanilla Board/Pawn/Game getters; optional memedit getters | Compare positions, health, action state, grapple status, turn and grid with the visible board | Selected fields matched. Enabling memedit 1.2.2 supplied movementSpent and queuedTarget; one normal Cannon move established false-to-true movement consumption. Queued targets and every tile field were not independently checked. No full export/import or cross-PC entity mapping. | Partial game verification |
 | Enemy/environment phases | `onNextTurn`, environment/plan/spawn hooks; queued skill hooks | End one normal team turn through queued attacks and spawning | Three queued-attack pairs and phase hooks were logged; next player turn reached. Hooks do not control AI, spawn choices or RNG. No environmental hazard replication test. | Observation game verified; synchronization unknown |
 
+## Checkpoint replay — October 13, 2026
+
+**Game-verified, bounded positive result:** two fresh launches of the unchanged installed probe 0.8.0 replayed one verified `Mission_Artillery` checkpoint through player turn 3. All 26 partial-state candidates matched in order, without excluding terrain health or any other captured field. The ordered execution-event and phase-event payloads matched too. This supports proceeding with a restricted coordinated replay experiment; it does not establish general determinism or two-instance synchronization.
+
+Both runs used the same three hash-verified disposable-profile checkpoint files, restored with the game closed. The action sequence was Artillery 2 from (0,3) to (1,1); Combat 0 at (3,3) punching Hornet 101 at (2,3), reducing HP 3→1 and pushing it to (1,3); native End Turn with the unused-unit confirmation; then Cannon 1 from (1,5) to (0,3) on player turn 3. Both moves passed the existing path, allowance, health/active, undo and start/end checks. The punch passed its fixed scenario and outcome checks. The controllable mission ally 100 remained included in observations.
+
+Run B additionally inspected the generator, selected Combat through its portrait, armed Titan Fist targeting, right-clicked over the Hornet to cancel, and right-clicked again into enemy inspection before the first move. No extra execution occurred. The first post-move candidate reported 31 build calls since the initial candidate versus 29 in run A; totals were 1,278 versus 1,276. These are aggregate build-hook counts, not proof of exhaustive teammate previews or arbitrary effect-builder safety. Wall-clock timing and ordinary cursor histories were not identical.
+
+| Equivalent boundary | Run A / B record | Result |
+|---|---|---|
+| Loaded player turn 2 | 6 / 6 | All observed fields equal |
+| Completed Artillery move | 32 / 30 | All observed fields equal |
+| Punch outcome | 40 / 41 | All observed fields equal |
+| Completed next-player transition | 83 / 83 | Player turn 3, grid 2; all observed fields equal |
+| Completed Cannon move | 107 / 109 | All observed fields equal |
+
+Each log contains 109 probe records, 26 candidates, five ordinary skill start/end pairs (including two AI-planning skill pairs), four queued-attack pairs and eight phase notifications. Those phases were pre/post environment, next turn, spawn removed/spawning end, pre/post environment planned, and next turn. The final player-turn candidate follows the last phase notification. No capture-failure, missing-hook or fault events were recorded; both game error files were empty. Candidates still occurred during intermediate enemy work and are not a general completion barrier.
+
+Final observed-state SHA-256 in both runs: `415fdf4c0989779f9ce2990077cc2b903a38043a391ffab60af388fd0bfbdb83`. Private log SHA-256: A `19ac8529a4f788bff94bc24f907052adbc68ca1713b3bfac98cb447d313eddbd`; B `e3ae87f9baf2e5fabcad399a82ca44bb42e6f946ebb7774336fefa22cabad375`. Original logs, resulting saves and the field comparison remain private under `.local/evidence/phase-replay-20261013/`; compare using the existing `tools/probe-report.cjs`, selecting the explicit boundary records above.
+
+The game exited normally after both runs. Steam showed Cloud up to date before checkpoint restores and after the final exit. Afterwards, all six original disposable-profile files were restored and matched their pre-experiment hashes; all four normal-profile files remained unchanged. The final restoration is verified locally, not a claim that its contents have already uploaded to Cloud. No Cloud/security settings, runtime files or game installation changed, and the flagged native test executable was not run or rebuilt.
+
+**Limits and decision:** this was one process at a time on one machine, ordinary singleplayer End Turn and the existing short movement guard. It did not exercise the offline command coordinator, peer ownership, transport, an End Turn adapter, continuous session protection, another machine, or general attack coverage. RNG, pending effects/callbacks, mission scripts and other excluded state remain unobserved. Earlier save/reload terrain-health differences remain unresolved; equality in this checkpoint pair does not erase them. Next implement the smallest protected End Turn/next-player-phase path, then run the same sequence across safely isolated instances. Defer campaign machinery, generic recovery and polished UI.
+
 ## Runtime evidence — October 12, 2026
 
 Probe **0.1.1**, one Steam game instance, disposable profile displayed as `ITB_Coop_Probe`. Rift Walkers with standard weapons, Normal difficulty, advanced content off. Only the probe and modApiExt were enabled; memedit and Easy Edit were disabled. Coordinates below are the engine's zero-based board coordinates. Pawn IDs are local to this session.

@@ -2,6 +2,15 @@
 
 Build native shared-squad PvE co-op for two actual Windows Steam game instances. No streaming, hotseat PvP, browser recreation, or mock-network demonstration as a substitute.
 
+## Standing milestone directive — October 13, 2026
+
+- Start each run by inspecting current repository state and choosing the highest-impact obstacle to two real instances executing legal coordinated actions through a complete enemy phase.
+- Prefer the smallest complete interaction across the actual game boundary. A live capability or controlled experiment that changes the engineering direction is progress; CI, documentation, refactoring and more mocked tests alone are not.
+- Challenge earlier implementation choices when they delay that proof. Keep confirmed gameplay requirements and input protection, action legality, save isolation and stop-on-uncertainty. Preserve failed evidence and test a materially different hypothesis rather than repeating unchanged investigations.
+- Defer campaign voting, polished UI, generic frameworks, elaborate persistence/recovery, reconnection, host migration and broad compatibility unless the immediate proof requires them. Keep records and regression tests proportional.
+- Continue autonomously within existing access and authorization. Request intervention only for genuinely unavailable information/equipment, required approval or manual interaction. Independent inspection remains required for usable co-op, but completing its UI is not a prerequisite for controlled replay feasibility experiments.
+- End each run with Milestone, Progress, Evidence (game versus mock/source), Remaining blocker, Next step and Scope discipline. Never substitute a one-instance replay for networking or synchronization proof.
+
 Design approval (October 13, 2026): the user approved R1–R9 provisionally with the R5/R6 qualifications in docs/co-op-design.md. Proceed incrementally toward the restricted two-instance tactical proof in docs/command-session.md. No broad rewrite, deployment, security/Cloud changes or campaign infrastructure under this approval. Read the specification and acceptance matrix; approval does not mean implementation.
 
 This repository is separate from the project's read-only synced `sources/`. Keep development separate from the game installation. The original handoff is supplied in the originating chat; these are its implementation constraints.
