@@ -1,6 +1,6 @@
 # Test plan
 
-For the design-review acceptance matrix, see [co-op-acceptance.md](co-op-acceptance.md). Those are proposed future scenarios, not tests already implemented or passed. Gameplay expansion is paused pending approval of [design-review.md](design-review.md); the historical probe procedures below remain evidence-specific.
+For the approved ruleset's acceptance matrix, see [co-op-acceptance.md](co-op-acceptance.md). Those are future scenarios, not passing evidence. The [shared command experiment](command-session.md) adds 26 offline integration contracts to `npm test`; real diagnostic Lua runs against game/guard doubles. Follow its restricted two-instance protocol next; the historical probe procedures below remain evidence-specific. Do not launch or install a new build under the October 13 documentation/source approval.
 
 ## Evidence labels
 

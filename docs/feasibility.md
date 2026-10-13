@@ -1,6 +1,6 @@
 # Capability evidence
 
-Current design authority: [October 12 review](design-review.md) and [co-op specification](co-op-design.md), pending approval. Current runtime protection evidence is [0.8.0](window-guard.md); older tables below preserve their historical scopes. No networking or complete synchronized state has been established. Feature expansion is paused.
+Current design authority: [co-op specification](co-op-design.md), provisionally approved October 13 with R5/R6 qualifications. The [shared command experiment](command-session.md) is offline only. Runtime protection evidence remains [0.8.0](window-guard.md); older tables retain their historical scopes. No networking or complete synchronized state has been established.
 
 Reviewed October 12, 2026. **Observation has been verified in the real game within the smoke-test scope below. Probe 0.2.0 demonstrated native relocation without normal movement consumption; 0.2.1 traced the missing normal bookkeeping. Probe 0.5.10 now game-verifies a bounded UI movement path, undo, a subsequent standard attack and persisted pawn outcomes. General action coverage and synchronization remain unproven; two terrain-health readings differed on reload. See [current movement evidence](ui-movement.md).** Offline tests validate only our code's behavior against explicit doubles.
 

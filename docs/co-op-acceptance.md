@@ -1,6 +1,6 @@
 # Co-op edge cases and acceptance plan
 
-October 12, 2026. **Proposed tests, not implemented tests or passing evidence.** The current probe's passing contracts do not satisfy these scenarios. Rules and approval IDs are in [co-op-design.md](co-op-design.md) and [design-review.md](design-review.md).
+Updated October 13, 2026 after qualified approval. **Acceptance requirements, not passing evidence.** The probe and new [offline command contracts](command-session.md) do not satisfy the full scenarios. Rules and approved IDs are in [co-op-design.md](co-op-design.md) and [design-review.md](design-review.md).
 
 Modes: **A** = automated pure/session/transport-fault test with explicit doubles; **G** = actual game test on the pinned build, comparing with normal game controls; **2P** = two separate game processes on two PCs with their own copies; **H** = two humans assessing experience. Automated packet/crash tests can support but never replace G/2P outcome evidence.
 
@@ -38,6 +38,7 @@ Use disposable profiles, verified backups, pinned versions/configuration and sep
 | T14 Failure window | Drop link/focus/heartbeat before submission, during press, after engine accepts but before acknowledgement | Both sessions stop admission, held input drains, no implicit local continuation or retried uncertain action. Known completed effects stay recorded; no rollback claim | A, G, 2P |
 | T15 Input routes | Under healthy/stopped session try mouse, keyboard selection/repair/Undo/Reset/End Turn, held release tails and any supported controller | Every mutation requires authorization; inspection is usable. Unsupported controller modes rejected before start. No effect on other applications | A, G, 2P |
 | T16 Network conditions | Introduce 50/150/500 ms delay, jitter, disconnects and duplicate/reordered application messages; test actual Internet connection when claiming online support | Stable ordering/deduplication, visible pending state, no optimistic game mutation or timed default vote. Bounded queues/payloads; wrong-seat/session requests rejected. LAN success alone is labeled LAN evidence | A, 2P |
+| T17 Teammate inspection | Inspect teammate-owned actor and preview its supported action independently while partner commands elsewhere | Vanilla-visible planning information remains usable without granting command rights. No hidden information. Draft retained, preview invalidated with reason, renewed intent required. Demonstrate preview safety with unequal hover/cancel histories, not assumed purity | A, G, 2P |
 
 ## Undo, readiness and Reset
 
@@ -60,7 +61,7 @@ Use disposable profiles, verified backups, pinned versions/configuration and sep
 | V02 Split/3+ choices | A selects X, B selects Z where Y is also offered | Only X or Z may win, with one equally weighted selection; Y is impossible | A, 2P |
 | V03 Fair mapping | Inject random bit 0 then 1 for ordered frozen votes; swap player slots/options. Separately exercise production dedicated RNG over many independent decision IDs | Both bit branches map symmetrically to submitted choices, no modulo/time/host bias. Statistical test over e.g. 10,000 independent IDs uses a predeclared tolerance/test; a distribution check alone is not proof and must not “repair” unlucky streaks. Deterministic unit tests are not flaky random CI gates | A |
 | V04 Combat RNG isolation | Identical game checkpoint/commands with and without numerous vote resolutions and UI coin reveals | Vote-only operations do not consume/seed game RNG; subsequent native outcomes match the controlled baseline | A, G, 2P |
-| V05 Duplicate/reopen | Deliver repeated votes/results; close/reopen menu; resubmit unchanged rejected purchase; reconnect/reload | Same semantic decision ID/result, one draw/application. A split no-buy result cannot be rerolled by reopening unchanged context | A, G, 2P |
+| V05 Duplicate/reopen | Repeat votes/results; rename proposals; reorder baskets; reopen; reconnect/reload; change unrelated revision | Same semantic decision/result, one draw/application. Cosmetic changes and unrelated revisions cannot reroll a split no-buy result | A, G, 2P |
 | V06 Crash boundaries | Crash before second vote, before durable resolution, after resolution, during application, after game save but before journal completion | Resume known durable result without reroll only where checkpoint association proves safe. Otherwise mark uncertain and stop; never duplicate purchase/reward or silently retry application | A, G, 2P |
 | V07 Stale options | Option disappears, reward replaced, budget changes or old inventory index reused before closure/application | Reject/invalidate stale decision, preserve history and explain. No silent selection substitution; new decision only for changed context/options | A, G, 2P |
 | V08 Unanimous exception | A approves sale/pilot loss/abandon/Reset, B rejects; repeat both approve | Disagreement has no effect and consumes no random draw. Agreed action applied once after live validation | A, G, 2P |
@@ -68,6 +69,9 @@ Use disposable profiles, verified backups, pinned versions/configuration and sep
 | V10 Composite proposal | Loadout/deployment contains conflicting tiles, unavailable weapon, unpowered requirement or hidden disposal | Invalid proposal never becomes a legal option. Destructive component requires unanimity; no partial ordinary-vote purchase/loadout application | A, G, 2P |
 | V11 Missing voter | Peer disconnects before voting; old vote packet arrives from replaced connection | Suspend without timeout/substitute vote. Reconnect identity/options checked; obsolete connection rejected. Both players see pending status | A, 2P, H |
 | V12 Result display | Matching vote, split vote, RNG streak, replayed resolved decision and skipped animation | Display the one persisted winner and whether tie occurred. Animation never draws again or delays required input. No compensating streak weighting | A, 2P, H |
+| V13 Unanimous reconsideration | After resolved disagreement, both deliberately submit the same later legal reconsideration | Apply the genuinely unanimous legal choice without another random draw; do not mistake it for reroll abuse | A, G, 2P |
+| V14 Compatible drafts | Both edit nonconflicting deployment/loadout portions, then introduce one genuine conflict | Merge compatible parts; resolve only a coherent conflicting choice. No artificial whole-squad rivalry or vote on every edit | A, G, 2P, H |
+| V15 Final submission | Browse/hover/change temporary selection, then submit both valid final choices after reviewing costs/consequences | Browsing casts no vote; two final votes resolve automatically with no extra approval round | A, 2P, H |
 
 ## Entities, saves and experience
 
@@ -86,6 +90,7 @@ Use disposable profiles, verified backups, pinned versions/configuration and sep
 ## Exit criteria by milestone
 
 - **Design approved:** approval IDs resolved or explicitly deferred; all confirmed rules represented in the session design. No production implementation inferred from this document.
+- **Restricted technical proof:** two real safely isolated instances execute guest action → host action → complete enemy/environment/planning phase → another legal player action through real ordered transport. Independent inspection is usable without command rights. Vary hover/preview/cancel histories and compare fields plus subsequent outcomes at equivalent boundaries; preserve terrain-health discrepancies. Reject unauthorized/duplicate/stale requests, stop uncertainty/desync and never retry uncertain actions. Undo/Reset may be explicitly absent and blocked. No full-mission, balance, recovery or human-experience claim. If a second instance is unavailable, report that boundary; mocks/replay alone cannot pass this gate.
 - **First two-PC mission:** relevant O/T/U/S cases for the supported configuration pass, including real enemy/environment phase and mission outcome. V campaign-menu tests may wait, but action dedup, identity, input permissions and checkpoint association cannot be replaced by mocks.
 - **Campaign-capable:** consecutive real missions, final-phase identity, campaign voting transactions, resources, loadout/deployment decisions, supported save/continuation and carryover pass on two PCs.
 - **Wider compatibility:** repeat with supported special pilots/abilities, summons, multi-target/limited weapons, new missions/difficulties and layouts. Keep excluded cases explicitly listed; adding a configuration is a tested capability expansion, not a label change.

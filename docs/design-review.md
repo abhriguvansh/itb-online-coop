@@ -2,11 +2,17 @@
 
 October 12, 2026. Audited source: `7d59b48d09f413970c8fd9c354b7c1ae372d388e`, probe 0.8.0. Review-only change; no gameplay implementation, game launch, installation or save mutation. The [ruleset](co-op-design.md) separates confirmed requirements from recommendations; the [acceptance plan](co-op-acceptance.md) is future work, not passing test evidence.
 
+**October 13 disposition:** user approval reconciled against review commit `4aaac65`. R1–R4 and R7–R9 are approved provisionally. R5 permits an earlier restricted technical experiment without Undo/Reset; representative co-op still targets both. R6 requires deliberate final votes with automatic resolution, merged compatible drafts, semantic reroll prevention across unrelated revisions, and later legal unanimous reconsideration. See the updated ruleset for exact boundaries. The historical audit is preserved; this is not a second comprehensive review. Implementation resumes with the [bounded command experiment](command-session.md).
+
+### Source basis clarification
+
+Matthew Davis's official [GDC 2019 session](https://gdcvault.com/play/1026333/-Into-the-Breach-Design) and [presentation deck](https://gdcvault.com/play/mediaProxy.php?sid=1026333) support a slide-grounded discussion of constraints, readability, informed tactical choices, UI limitations and reducing strategic complexity (PDF pages 4, 8, 13–14, 22, 26, 29–37, 40–45, 47–48; cover is page 1). The spoken recording and timestamps were not verified. “Deterministic during player turn” on page 14 does not establish cross-instance replay or preview/RNG equivalence. Ownership rotation and campaign voting are our design choices, not recommendations attributed to Davis.
+
 ## Recommendation
 
 Keep two persistent primary mechs and one shared mech alternating by distinct campaign encounter. Keep interleaved tactical actions, normal game balance, equal ordinary votes with a persisted 50/50 tiebreak, unanimous destructive decisions and same-state readiness. This design does not inherently require extra resources or different enemies. Its feasibility is conditional on complete legal execution, inspection without mutation, checkpoint identity and two-engine synchronization. None of those can be replaced by a successful isolated engine call.
 
-No serious flaw justifies replacing the confirmed ownership or voting model. Several boundary rules do need approval. Most importantly, command serialization is compatible with free interleaving; alternating whole human turns is not. Technical host authority must never imply an extra human vote.
+No serious flaw justifies replacing the confirmed ownership or voting model. The boundary defaults below received the qualified October 13 approval. Command serialization is compatible with free interleaving; alternating whole human turns is not. Technical host authority must never imply an extra human vote.
 
 ## Evidence ledger
 
@@ -100,7 +106,9 @@ With consent, log timestamps for planning, submission, resolution, stale rejecti
 
 **Go/no-go:** any unauthorized/duplicate action, rerolled committed vote, extra reward/reset, wrong ownership rotation or desync is a correctness blocker. A reproduced legal tactic denied by the mod is a compatibility defect, not balance. Repeated long unwanted waits, low agency or misunderstood votes trigger UI/loan design review. Do not tune enemies from a small sample. Fixed numerical engagement targets should be set after a pilot session provides a baseline.
 
-## Decisions for approval
+## Decisions and October 13 approval
+
+All R1–R9 are provisionally approved with the qualifications above and in the ruleset. The options/costs below preserve the review record, not a pending permission request.
 
 The two primary mechs, alternating third, equal 50/50 ordinary vote and confirmed unanimity categories are settled. The following fill gaps; defaults remain proposals until approved.
 
@@ -118,15 +126,15 @@ The two primary mechs, alternating third, equal 50/50 ordinary vote and confirme
 
 R6 does not let unanimity replace ordinary competing choices. Its extra exceptions address explicit forfeiture/retirement/overwrite; ordinary purchases, mission options and valid deployments still follow the user's 50/50 rule. R9 does not promise immunity from local Steam achievement effects; that is a technical isolation test.
 
-## Development priorities after approval
+## Development priorities under the qualified approval
 
-### Must resolve before the next gameplay milestone
+### Restricted two-instance technical proof first
 
-- Approve the boundary/default decisions above. Keep the confirmed rules fixed.
-- Define session/player/entity/encounter/action/decision identities, monotonic revisions and reset generations; specify persistence/crash states before adapters depend on them.
+- Contain movement and attack within one validated, deduplicated path and session/failure state; preserve the current labs' restrictions until replacements are tested.
+- Build only bounded session/player/entity/encounter/action identity, ordered transport and evidence. Define future persistence interfaces; defer campaign journals, voting machinery and general recovery.
 - Investigate safe independent inspection, preview side effects and the complete command boundary. Resolve/classify observed reload differences and expand state coverage; demonstrate a trustworthy phase completion barrier.
 - Choose synchronization only after evidence: two-instance deterministic replay experiments covering different preview histories and enemy/environment phases. If replay fails, investigate whether sufficient authoritative outcome/state restoration is actually possible. Do not assume a hybrid repairs hidden state.
-- Design ownership/rotation persistence and vote dedup together even though campaign UI is deferred. No combat RNG for voting.
+- Demonstrate a guest action, interleaved host action, complete enemy/environment/planning phase and another legal action on two safely isolated real instances. Controlled replay is useful earlier but does not prove networking. Native Undo/Reset may remain blocked in this restricted experiment; do not use it for representative balance conclusions.
 
 ### Needed before the first genuinely playable co-op mission
 
@@ -139,7 +147,7 @@ R6 does not let unanimity replace ordinary competing choices. Its extra exceptio
 ### Can wait for campaign functionality
 
 - Campaign voting UI and adapters, shared resource/purchase/reward transactions, loadout proposals and island selection.
-- Full multi-battle rotation and final-phase lifecycle acceptance, checkpoint continuation and carryover. Their identity models are P0; live campaign integration is later.
+- Full multi-battle rotation and final-phase lifecycle acceptance, checkpoint continuation and carryover. Preserve their interfaces now; durable campaign machinery follows tactical proof.
 - Wider pilot, weapon, summon and mission coverage. Any special case present in the selected first mission moves forward to P1; it cannot simply be ignored.
 - Guest progression policy beyond no merging, authenticated checkpoint reconnect and host migration research if desired.
 

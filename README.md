@@ -12,9 +12,9 @@ Cannon moved three tiles and Artillery moved two through the game's normal UI pa
 
 This is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-**Development pause:** the [game design review](docs/design-review.md), [recommended ruleset](docs/co-op-design.md) and [acceptance scenarios](docs/co-op-acceptance.md) are ready for user approval. No new gameplay features are implemented by that review.
+**October 13 increment:** the [provisional v0.1 ruleset](docs/co-op-design.md) is approved with qualified Undo/Reset and voting boundaries. An [offline shared command experiment](docs/command-session.md) now wraps the real movement/punch Lua diagnostics with ownership, duplicate/stale rejection and shared failure handling. It is not installed or connected to transport; probe 0.8.0 remains the runtime build.
 
-The confirmed design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two votes; destructive choices need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Ownership, voting, readiness and networking are not implemented yet.
+The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Runtime ownership, voting, readiness and networking are not implemented yet.
 
 ## What exists
 

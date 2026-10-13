@@ -5,14 +5,14 @@ const luaparse = require('luaparse');
 const { runReportTests } = require('./report.cjs');
 
 process.chdir(path.resolve(__dirname, '..'));
-const files = fs.readdirSync('mod/scripts').filter(name => name.endsWith('.lua'));
+const files = ['mod/scripts', 'experiments'].flatMap(dir => fs.readdirSync(dir).filter(name => name.endsWith('.lua')).map(name => `${dir}/${name}`));
 for (const file of files) {
-  luaparse.parse(fs.readFileSync(`mod/scripts/${file}`, 'utf8'), { luaVersion: '5.1' });
+  luaparse.parse(fs.readFileSync(file, 'utf8'), { luaVersion: '5.1' });
 }
-console.log(`Lua 5.1 syntax: ${files.length} mod files passed.`);
+console.log(`Lua 5.1 syntax: ${files.length} mod/experiment files passed.`);
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
-for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.lua', 'tests/input_gate.lua', 'tests/attack.lua', 'tests/ui_bridge.lua']) {
+for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.lua', 'tests/input_gate.lua', 'tests/attack.lua', 'tests/ui_bridge.lua', 'tests/command_session.lua']) {
   if (lauxlib.luaL_dofile(L, to_luastring(suite)) !== lua.LUA_OK) {
     console.error(lua.lua_tojsstring(L, -1));
     process.exitCode = 1;
