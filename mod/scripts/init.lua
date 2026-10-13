@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.7.1',
+    version = '0.7.2',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -34,6 +34,14 @@ function mod:init()
                     return require(path..'snapshot').capture(_G,GetCurrentMission(),require(path..'json'))
                 end)
                 payload.state=ok and state or {unavailable=tostring(state)}
+                local uiOk,uiState=pcall(function()
+                    assert(self.movement:profileAllowed(),'outside-disposable-profile')
+                    local pawn=Board:GetSelectedPawn()
+                    return {selectedPawnId=pawn and pawn:GetId() or -1,
+                        armedWeaponId=pawn and pawn:GetArmedWeaponId() or -1,
+                        modalObserved=self.movement.blocked}
+                end)
+                payload.ui=uiOk and uiState or {unavailable=tostring(uiState)}
             end
             self.probe:record(kind,payload)
         end)

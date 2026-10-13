@@ -43,6 +43,21 @@ function movement.new(env, emit, path)
         if path ~= 'native' then state.undoPosition = xy(pawn:GetUndoLoc()) end
         return state
     end
+    function self:lockInput()
+        -- A separate diagnostic: no move, attack, reset or allowance write.
+        need(self:profileAllowed(), 'wrong-profile')
+        need(env.modApi:getGameVersion() == '1.2.93', 'wrong-game-version')
+        need(env.sdlext.isGame() and not env.sdlext.isConsoleOpen() and not self.blocked
+            and not self.gateBlocked and not self.attackBlocked, 'not-tactical-ui')
+        local mission = env.GetCurrentMission()
+        need(mission and mission.ID and mission.ID ~= 'Mission_Test', 'no-normal-mission')
+        need(env.Board and env.Game and env.Board:IsTipImage() == false, 'no-normal-board')
+        need(not env.modApi.deployment:isDeploymentPhase() and not env.modApi.deployment:isLandingPhase(), 'deployment')
+        need(env.Game:GetTeamTurn() == env.TEAM_PLAYER, 'wrong-phase')
+        need(not self.pending and self.bridge and not self.bridge.guardWatching, 'guard-busy')
+        idle()
+        self.bridge:lock()
+    end
     local function safeTile(p, origin)
         local b = env.Board
         local terrain = b:GetTerrain(p)

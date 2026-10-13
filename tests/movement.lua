@@ -247,4 +247,31 @@ test('one successful pawn cannot repeat but another pawn can submit',function()
     e.pawn.GetId=function()return 1 end;e.pawn.GetType=function()return 'TankMech'end;e.TankMech={};r.pawnId=1
     assert(l:request(r) and starts==2 and l.usedPawns[1] and l.usedPawns[2])
 end)
+test('standalone guard needs no available move and submits no action',function()
+    local e,l=fixture('ui');local locked=0
+    l.bridge={lock=function()locked=locked+1 end};e.pawn.spent=true;e.mission.ID='Mission_Survive';e.turn=0
+    l:lockInput();assert(locked==1 and e.calls==0 and e.effectCalls==0 and not l.armed and not l.pending)
+end)
+for _,case in ipairs({
+    {'normal profile',function(e) e.Profile.visible_name='Aman' end},
+    {'wrong version',function(e)e.modApi.getGameVersion=function()return 'other'end end},
+    {'modal',function(e,l)l.blocked=true end},
+    {'console',function(e)e.sdlext.isConsoleOpen=function()return true end end},
+    {'non tactical',function(e)e.sdlext.isGame=function()return false end end},
+    {'test mission',function(e)e.mission.ID='Mission_Test'end},
+    {'deployment',function(e)e.modApi.deployment.isDeploymentPhase=function()return true end end},
+    {'landing',function(e)e.modApi.deployment.isLandingPhase=function()return true end end},
+    {'enemy phase',function(e)e.phase=6 end},
+    {'pending move',function(e,l)l.pending={}end},
+    {'active guard',function(e,l)l.bridge.guardWatching=true end},
+    {'busy board',function(e)e.Board.IsBusy=function()return true end end},
+    {'busy pawn',function(e)e.pawn.IsBusy=function()return true end end},
+    {'attack lab',function(e,l)l.attackBlocked=true end},
+    {'SDL gate',function(e,l)l.gateBlocked=true end},
+}) do
+    test('standalone guard rejects '..case[1],function()
+        local e,l=fixture('ui');local locked=false;l.bridge={lock=function()locked=true end}
+        case[2](e,l);assert(not pcall(function()l:lockInput()end) and not locked and e.calls==0)
+    end)
+end
 print('Movement contract tests: '..passed..' passed.')

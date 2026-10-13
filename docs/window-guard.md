@@ -1,8 +1,29 @@
-# Game-window input guard — 0.7.1 experiment
+# Game-window input guard — 0.7.2 experiment
 
 ## Evidence status
 
-Game-verified on the disposable profile: one tagged Artillery move completed during the 20-second guard; a competing Undo click left the observed state unchanged; after expiry, Undo restored origin and movement allowance. This does not establish complete multiplayer authorization. Local DLL compilation and 154 Lua contracts plus 11 log-analysis assertions pass. Native executable contracts run only on GitHub's Windows runner; consult the exact revision's Actions result.
+Game-verified on the disposable profile: a tagged move completed while guarded; competing Undo, Tab, Escape and an available Reset Turn were blocked in separate checks, with working unblocked controls. This does not establish complete multiplayer authorization. Version 0.7.2 adds a repeatable guard-only button and selection observations, retaining the tested 0.7.1 DLL. The local suite passes 170 Lua contracts plus 11 log-analysis assertions and installer fixtures. Native executable contracts run only on GitHub's Windows runner; consult the exact revision's Actions result.
+
+## Keyboard and Reset follow-up — 0.7.2
+
+The new **Guard only 20s** button submits no game action and requires the disposable profile, tested game version, a normal tactical mission, player phase, idle board/pawns, no deployment and no competing lab/command. Unlike the move lab, this input-only diagnostic does not require an unused mech or the Artillery mission. Execution remains restricted to the original tested scenario. Guard start/end records now include selected pawn and armed weapon; the modal field observes loader window events only, not every native dialog.
+
+Four intervals were tested in the real Artillery mission:
+
+| Interval | Input / control | Recorded result |
+|---|---|---|
+| 7–8 | Tab through the approved short scan-code helper | Three keyboard messages blocked; Combat remained selected. Partial state and selection fields unchanged. Before arming, Tab changed Cannon to Combat; after expiry it changed Combat to Cannon. |
+| 9–10 | Escape through the same helper | Three keyboard messages blocked; no menu opened. Partial state and selection fields unchanged. Escape outside the interval opened the menu, including after the later focus check. |
+| 14–15 | Double-click available Reset Turn | Eleven mouse messages blocked, no reset dialog or reset hook. Partial state and selection fields unchanged. Normal post-expiry input opened the dialog; confirming it produced `onResetTurn` at 17 and the reset state at 19. |
+| 20–21 | Switch focus to Steam and back | Diagnostic filtering ended; no held tails and no partial-state or selection changes. Escape then opened the game menu normally. There was no in-flight command in this focus check. |
+
+Reset was initially disabled because no attack action had been taken in the loaded turn. A normal Cannon shot at the 1-HP Hornet enabled it. The shot killed that Hornet and caused collision damage to Combat. After guard expiry the reset restored the Hornet, Combat HP and Cannon's turn-start position/allowance. The UI displayed **RESET USED**. This consumed the disposable battle's one reset; no reset counter or save field was edited. Multiple short post-expiry clicks initially only hovered; a sustained mouse gesture followed by a click opened the confirmation. These automation timing limits are retained rather than counted as blocks.
+
+An Escape attempt after the first Tab interval arrived after expiry and opened the menu. It is the unblocked control, not a failed guard or a blocked Escape result; the separate 9–10 interval provides the blocking evidence. Keyboard counters include message classes, not a claim of three physical key presses.
+
+All four start/end partial-state comparisons have zero differences, and all four selected-pawn/weapon comparisons match. Every interval ended with zero tracked held inputs. Held-across-expiry behavior, other shortcuts, controllers and separately polled input still need live evidence; these short presses do not cover them. The focus behavior is appropriate only for this timed diagnostic: a multiplayer session must stop on focus/lease failure without restoring unrestricted gameplay automatically.
+
+Private log `.local/evidence/keyboard-reset-0.7.2/modloader.log`, SHA-256 `43d7f710ed5dd3c2576a9d82686a6ddcb8cdc06ef26702452fb554eccd98a396`. Seventeen save-area files were backed up and hash-verified before installation. After normal Save and Quit, all four normal-profile files matched, the game error file was empty, and Steam Cloud showed up to date. No local native test executable was run.
 
 ## Live evidence — October 12, 2026
 
@@ -18,7 +39,7 @@ Version 0.7.1 adds `MOUSEEVENTF_MOVE_NOCOALESCE` to bridge motion and a bounded 
 
 Private evidence: `.local/evidence/window-guard-0.7.0-failed/modloader.log`, SHA-256 `aa2ead4a6dbf672d57196c1f471b6a9e0051581c16e820a92eb405827329b7dc`; successful retry `.local/evidence/window-guard-0.7.1/modloader.log`, SHA-256 `9941fc683f3c8c971ca0d14e69387000712f91f44701891577b3eca46d7d8dd1`. Tested DLL SHA-256 `2b52c5df0c8e07abb78e6f53429d0eaf8768445ab645694c304e20a7cc290aa3`. Raw logs and binaries remain untracked.
 
-The new guard still needs live keyboard/menu, available Reset, held-across-expiry and focus-loss checks. Earlier SDL-gate evidence does not transfer automatically. The diagnostic trace records mouse message identifiers, coordinates and extra-info markers only; it does not record keyboard text.
+The 0.7.2 follow-up above adds bounded keyboard, Reset and idle focus-loss evidence. Held-across-expiry coverage remains incomplete. Earlier SDL-gate evidence does not transfer automatically. The diagnostic trace records mouse message identifiers, coordinates and extra-info markers only; it does not record keyboard text.
 
 ## Boundary
 
@@ -30,7 +51,7 @@ Each movement command requires the window guard; missing installation, wrong thr
 
 Suppressed presses remain tracked after expiry until their releases arrive; fresh presses then pass. Focus loss aborts the command and ends active filtering while preserving tracked release tails. Expiry is checked by window callbacks and regular status polls; a frozen game cannot run either, but the guard does not affect other applications. Callback code does not call Lua. The DLL is pinned for the process lifetime to prevent a dangling callback during Lua teardown; destruction removes the subclass. Counters describe blocked message classes and tagged passes without recording key text.
 
-This is an opt-in, bounded diagnostic that releases on failure/timeout. A future multiplayer session needs a distinct stopped-session policy, ownership validation, controller policy, and confirmed blocking for every supported mutation route. One Undo route now has paired evidence; Reset remains untested. Never promote its mocked contracts into real-game evidence.
+This is an opt-in, bounded diagnostic that releases on failure/timeout. A future multiplayer session needs a distinct stopped-session policy, ownership validation, controller policy, and confirmed blocking for every supported mutation route. One Undo route and one Reset button route have paired evidence; the Reset shortcut is not separately game-tested. Never promote its mocked contracts into real-game evidence.
 
 ## Planned live check
 

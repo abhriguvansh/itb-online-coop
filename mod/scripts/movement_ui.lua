@@ -21,6 +21,10 @@ function ui.install(env, lab, gate, attack)
         local root = env.sdlext.getUiRoot()
         if not root then return end
         if not controls.toggle then
+            controls.lockOnly = button(root, 698, 'Guard only 20s', function()
+                local ok, reason = pcall(function() lab:lockInput() end)
+                if not ok then lab.status=tostring(reason) end
+            end)
             controls.guarded = button(root, 654, 'Guarded move + lock 20s', function()
                 if not lab.armed or lab.pending or lab.fault or not lab.bridge then return end
                 for id=0,2 do
@@ -51,12 +55,16 @@ function ui.install(env, lab, gate, attack)
                 end)
             end
         end
-        local ok, visible = pcall(function()
+        local ok, tactical = pcall(function()
             local mission = env.GetCurrentMission()
             return lab:profileAllowed() and env.sdlext.isGame() and not lab.blocked
-                and not env.sdlext.isConsoleOpen() and mission and mission.ID == 'Mission_Artillery'
+                and not env.sdlext.isConsoleOpen() and mission and mission.ID and mission.ID ~= 'Mission_Test'
         end)
-        visible = ok and visible == true
+        tactical = ok and tactical == true
+        local visible = tactical and env.GetCurrentMission().ID == 'Mission_Artillery'
+        controls.lockOnly.visible = tactical and not gate.active and not attack.armed
+        controls.lockOnly:caption(lab.bridge.guardStatus or 'Guard only 20s')
+        controls.lockOnly:settooltip('Block ordinary window input without submitting a game action. Releases after 20 seconds. ' .. lab.status)
         controls.guarded.visible=visible and (lab.armed or lab.bridge.guardWatching) and not gate.active and not attack.armed
         controls.guarded:caption(lab.bridge.guardStatus or 'Guarded move + lock 20s')
         controls.guarded:settooltip('One validated move, then block window mouse/keyboard until the 20-second diagnostic expires.')
