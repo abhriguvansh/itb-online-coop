@@ -43,7 +43,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.11.1',interactive=self.interactive})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.11.2',interactive=self.interactive})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')

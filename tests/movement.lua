@@ -170,6 +170,36 @@ end
 test('UI path accepts a reachable three-step clear ground path',function()
     local e,l,r=longRoute();assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0)
 end)
+local function friendlyRoute()
+    local e,l,r,points=longRoute()
+    local ally={GetId=function()return 100 end,GetTeam=function()return e.TEAM_PLAYER end,
+        IsDead=function()return false end,GetSpace=function()return points[2] end}
+    e.Board.IsPawnSpace=function(_,p)return p.x==points[2].x and p.y==points[2].y end
+    e.Board.GetPawn=function(_,id)return type(id)=='table' and ally or e.pawn end
+    return e,l,r,points,ally
+end
+test('UI path permits engine-reachable friendly intermediate transit without dispatch',function()
+    local e,l,r=friendlyRoute();assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0 and not l.pending)
+end)
+for _,problem in ipairs({'enemy','dead','wrong-position','same-actor','missing','destination','unreachable','hazard'}) do
+    test('friendly transit retains rejection for '..problem,function()
+        local e,l,r,points,ally=friendlyRoute()
+        if problem=='enemy' then ally.GetTeam=function()return 6 end
+        elseif problem=='dead' then ally.IsDead=function()return true end
+        elseif problem=='wrong-position' then ally.GetSpace=function()return r.to end
+        elseif problem=='same-actor' then ally.GetId=function()return e.pawn:GetId()end
+        elseif problem=='missing' then e.Board.GetPawn=function(_,id)if type(id)~='table' then return e.pawn end end
+        elseif problem=='destination' then e.Board.IsPawnSpace=function()return true end
+        elseif problem=='unreachable' then e.Board.GetReachable=function()return list({})end
+        else e.Board.IsFire=function(_,p)return p.y==2 end end
+        assert(not l:request(r) and e.calls==0 and e.effectCalls==0 and not l.usedPawns[2])
+    end)
+end
+test('friendly route is rechecked if its occupant changes team before submission',function()
+    local e,l,r,points,ally=friendlyRoute();assert(l:validate(r))
+    ally.GetTeam=function()return 6 end
+    assert(not l:request(r) and not l.pending and not l.usedPawns[2] and e.calls==0)
+end)
 for _,problem in ipairs({'hazard','occupancy','terrain','jump','cycle','end','length'}) do
     test('UI path rejects unsafe or malformed intermediate path: '..problem,function()
         local e,l,r,points=longRoute()

@@ -37,7 +37,7 @@ class PhaseCoordinator{
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.11.1' && m.interactive===this.interactive,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.11.2' && m.interactive===this.interactive,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }

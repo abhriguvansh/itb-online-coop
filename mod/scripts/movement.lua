@@ -120,7 +120,14 @@ function movement.new(env, emit, path)
                 if i>1 then
                     local previous=route:index(i-1)
                     need(math.abs(point.x-previous.x)+math.abs(point.y-previous.y)==1,'nonadjacent-path-step')
-                    need(env.Board:IsPawnSpace(point)==false,'occupied-path')
+                    if env.Board:IsPawnSpace(point) then
+                        -- Reachability and the route are engine-derived. Only a living
+                        -- friendly may occupy an intermediate tile; never the destination.
+                        local ally=env.Board:GetPawn(point)
+                        need(i<count and ally and ally:GetId()~=pawn:GetId()
+                            and ally:GetTeam()==env.TEAM_PLAYER and ally:IsDead()==false
+                            and same(ally:GetSpace(),point),'occupied-path')
+                    end
                 end
             end
         end
