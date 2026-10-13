@@ -12,7 +12,9 @@ Cannon moved three tiles and Artillery moved two through the game's normal UI pa
 
 This is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-The goal remains two actual game instances sharing three mechs. The player controlling two mechs will alternate each battle; ownership will remain fixed through turns, resets and reconnects. That session rule and networking are not implemented yet.
+**Development pause:** the [game design review](docs/design-review.md), [recommended ruleset](docs/co-op-design.md) and [acceptance scenarios](docs/co-op-acceptance.md) are ready for user approval. No new gameplay features are implemented by that review.
+
+The confirmed design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two votes; destructive choices need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Ownership, voting, readiness and networking are not implemented yet.
 
 ## What exists
 

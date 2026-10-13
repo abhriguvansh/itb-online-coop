@@ -1,5 +1,7 @@
 # Capability evidence
 
+Current design authority: [October 12 review](design-review.md) and [co-op specification](co-op-design.md), pending approval. Current runtime protection evidence is [0.8.0](window-guard.md); older tables below preserve their historical scopes. No networking or complete synchronized state has been established. Feature expansion is paused.
+
 Reviewed October 12, 2026. **Observation has been verified in the real game within the smoke-test scope below. Probe 0.2.0 demonstrated native relocation without normal movement consumption; 0.2.1 traced the missing normal bookkeeping. Probe 0.5.10 now game-verifies a bounded UI movement path, undo, a subsequent standard attack and persisted pawn outcomes. General action coverage and synchronization remain unproven; two terrain-health readings differed on reload. See [current movement evidence](ui-movement.md).** Offline tests validate only our code's behavior against explicit doubles.
 
 | Capability | Source/API | Smallest completed check | Result and limit | Confidence |
@@ -54,7 +56,7 @@ RNG state, engine effect/callback queues, full mission script state, spawn plans
 
 State SHA-256 is computed offline over sorted JSON keys. Equality means only equality of captured fields, including missing-field markers. It is neither a full-state hash nor a resynchronization method. Explicit local pawn IDs remain local until an independently validated mapping exists.
 
-## Next blocking experiment
+## Historical next experiments (superseded by later evidence)
 
 The [0.2.0 experiment](movement-experiment.md) established a bounded trigger but native Move did not consume allowance. The [0.2.1 trace](move-trace.md) found undo available before effect start and movement consumed by effect end. The [0.2.2 effect submission](effect-experiment.md) also failed bookkeeping, although its position persisted through one reload. Next audit native player-command acceptance/commitment and input interception, identifying whether the existing loader exposes a complete path or needs a narrow extension. The current idle heuristic cannot authorize actions. Transport remains deferred.
 

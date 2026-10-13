@@ -2,6 +2,8 @@
 
 Build native shared-squad PvE co-op for two actual Windows Steam game instances. No streaming, hotseat PvP, browser recreation, or mock-network demonstration as a substitute.
 
+Design review pause (October 12, 2026): do not expand gameplay features until the user approves the recommendations in docs/design-review.md. Read docs/co-op-design.md and docs/co-op-acceptance.md first. Confirmed rules in that specification supersede older proposed architecture; recommendations remain pending, not implemented.
+
 This repository is separate from the project's read-only synced `sources/`. Keep development separate from the game installation. The original handoff is supplied in the originating chat; these are its implementation constraints.
 
 - First finish safe baseline and real-game capabilities. Do not expand transport before legal movement, attack execution, input gating, and useful settled observations are demonstrated.
@@ -16,7 +18,7 @@ This repository is separate from the project's read-only synced `sources/`. Keep
 - Mod installation is scoped to `mods/aman_itb_coop_probe`. Do not overwrite an existing mod or recursively delete a game/mods/save tree. Preserve partial/failing evidence.
 - Use small local Git commits. `package.json` is private to prevent accidental npm publication. No source distribution license has been selected yet; do not vendor upstream code.
 - The user approved public publication at `abhriguvansh/itb-online-coop` on October 12, 2026. Keep pushes limited to reviewed project source, tests, and documentation. Git identities in this repository use the account's no-reply address; do not change global Git settings.
-- Two-player defaults remain three shared mechs with the two-mech allocation alternating each battle: host two/guest one in battle 1, host one/guest two in battle 2, then repeat. Ownership stays fixed within a battle; reconnects, reloads, and turn resets do not advance the rotation. This is a required future session rule, not implemented behavior. Keep serialized actions, host deployment/campaign controls, both ready before end turn, and accepted actions invalidating readiness. A labeled single-token prototype is acceptable later.
+- Confirmed gameplay: each human chooses one primary mech for the run; the third mech alternates controller every battle, including no extra rotation on reload, reconnect, Reset or linked final phases. Both may freely interleave legal actions; serialization is per action, never a whole human turn. One shared economy. Ordinary campaign disagreements resolve once with a persisted 50/50 choice between the two votes; host authority confers no superior vote. Destructive decisions and Reset need unanimity; End Turn needs both ready for the same state, invalidated by gameplay actions. None of the ownership/voting/readiness rules is implemented yet. See docs/co-op-design.md for confirmed requirements and pending boundary decisions.
 - Unsupported undo/reset must be blocked before a multiplayer session exists. Observing them in this first diagnostic build is not such a block.
 - Compare partial observed state only at equivalent boundaries. Local IDs are not cross-instance entity mappings. Stop on divergence once a gameplay session is implemented; a hash cannot repair state.
 - Windows mouse control through the computer-use skill worked in the originating session. Keyboard injection did not enter a profile name; the user created the named test profile. Do not assume either capability in another session; inspect available tools.

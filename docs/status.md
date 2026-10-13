@@ -1,5 +1,7 @@
 # Status — October 12, 2026
 
+**Feature expansion paused for design approval.** The [comprehensive review](design-review.md), [ruleset](co-op-design.md) and [acceptance plan](co-op-acceptance.md) supersede older proposed ownership/campaign rules. They are documentation, not implemented capabilities.
+
 **Latest increment: probe 0.8.0 verifies a protected move and continued input blocking after focus loss or heartbeat expiry. Explicit Escape exit restores local controls; ordinary completion or late heartbeat cannot resume a stopped session. Two live runs passed with unchanged observed state during stopped intervals and working post-exit Undo/Tab controls. Online co-op remains incomplete.**
 
 See [the guard evidence, preserved failure and limits](window-guard.md). The earlier 0.6.0 sequential Cannon/Artillery moves and pawn persistence remain valid; four terrain-health readings differed on reload and remain unresolved.
@@ -54,7 +56,7 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Next playable milestone
 
-The local stopped-session foundation now has live movement, focus-loss and heartbeat-expiry evidence. Next connect validated movement and attack execution to one serialized protected command lifecycle, including a deliberate command-failure check. Test held input across failure and the remaining shortcut routes, then resolve observation/persistence discrepancies before two-instance serialized replay. Divergence detection and peer failure propagation are not implemented. Movement supports bounded validated paths; broader layouts and attacks still need evidence. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule. A second Windows PC/tester is not yet confirmed; the user may recruit a friend, and no purchase is needed for current local work.
+After user approval, follow the priorities in [the design review](design-review.md#development-priorities-after-approval): establish session identities, legal serialized actions, independent inspection and synchronization evidence before expanding toward a two-PC playable mission. The 0.8.0 protected-session foundation remains valid. Neither deterministic replay nor hidden-state recovery has been established. A second PC/tester remains unconfirmed; no purchase is needed for design review.
 
 ## Current verification: 0.5.10
 

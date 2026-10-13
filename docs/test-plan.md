@@ -1,5 +1,7 @@
 # Test plan
 
+For the design-review acceptance matrix, see [co-op-acceptance.md](co-op-acceptance.md). Those are proposed future scenarios, not tests already implemented or passed. Gameplay expansion is paused pending approval of [design-review.md](design-review.md); the historical probe procedures below remain evidence-specific.
+
 ## Evidence labels
 
 Record source revision, API/hook, exact action, observed result, limitations, and confidence for every capability. `PASS (offline)` never means `PASS (game)`. Capture failures are failures to investigate before expanding scope.
