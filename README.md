@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.9.0. One actual game instance completed protected movement, punch, native End Turn with its unused-unit confirmation, the full enemy phase, and another legal move on the next player turn. Online co-op is not implemented.**
+**Current source: 0.9.1. Two isolated Windows guests run the actual game. Each completed protected movement, punch, native End Turn with its unused-unit confirmation, the full enemy phase, and another legal move. A basic TCP exchange also passed, but gameplay commands are not yet connected across the two games. Online co-op is not implemented.**
 
 The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
@@ -49,7 +49,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 15 Lua files as Lua 5.1 and runs 218 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 15 Lua files as Lua 5.1 and runs 220 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 

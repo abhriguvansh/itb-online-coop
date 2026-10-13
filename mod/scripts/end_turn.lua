@@ -91,10 +91,12 @@ function M.new(env,native,emit,capture)
                     busy=env.Board:GetBusyState(),state=state,proofOfGeneralQuiescence=false,proofOfPeerAgreement=false})
                 self.pending=nil;self.armed=false;self.status='Next player phase admitted';return
             end
-            if p.stage=='transition' then return end
+            -- After Yes is submitted, only ordered phase evidence can complete the action.
+            -- Slow rendering can delay the first hook past the UI deadline; retain the
+            -- overall phase deadline and protection, without sending another click.
+            if p.stage=='transition' or p.stage=='wait-transition' then return end
             assert(env.modApi:elapsedTime()-p.since<4500,'end-turn-ui-timeout')
             if n.pressed then return end
-            if p.stage=='wait-transition' then return end
             if p.stage=='wait-dialog' then
                 if not p.releasedFrame then p.releasedFrame=self.frame;return end
                 if self.frame<=p.releasedFrame+2 then return end

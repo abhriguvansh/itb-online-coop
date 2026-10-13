@@ -37,6 +37,21 @@ end)
 test('one-pixel native cursor rounding still permits the single click',function()
     local e,l,t,start=fixture();e.offset=1;start();assert(e.clicks==1 and not l.fault)
 end)
+test('confirmed transition waits beyond UI deadline without retry or early completion',function()
+    local e,l,t,start,phases,n=fixture();start()
+    e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60}
+    for i=1,10 do t() end
+    e.clock=5000;e.ready=true;t()
+    assert(l.pending and not l.fault and n.sessionState==1 and e.clicks==2)
+    phases();t();assert(not l.pending and not l.fault and e.clicks==2)
+end)
+test('confirmed transition with no hooks still times out protected without retry',function()
+    local e,l,t,start,_,n=fixture();start()
+    e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60}
+    for i=1,10 do t() end
+    e.clock=61000;t();t()
+    assert(l.fault and n.sessionState==2 and e.clicks==2)
+end)
 test('unknown modal is never clicked and timeout latches protection',function()
     local e,l,t,start,_,n=fixture();start();e.sdlext.CurrentWindowRect={x=765,y=385,w=390,h=219}
     t();assert(e.clicks==1);e.clock=5000;t();assert(l.fault and n.sessionState==2 and e.clicks==1)
