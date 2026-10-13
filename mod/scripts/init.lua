@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.7.2',
+    version = '0.8.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -23,12 +23,12 @@ function mod:init()
         local open, detail = package.loadlib(path .. '../itb_input.dll', 'luaopen_itb_input')
         assert(open, detail)
         native = open()
-        assert(type(native)=='table' and native.info().abi=='itb-win32-click-v2','unsupported-native-bridge')
+        assert(type(native)=='table' and native.info().abi=='itb-win32-click-v3','unsupported-native-bridge')
     end)
     self.probe:record('ui_bridge_loaded', {available=loaded, reason=not loaded and tostring(reason) or nil})
     self.movement.bridge = require(path .. 'ui_bridge').new(_G, loaded and native or nil,
         function(kind,payload)
-            if kind=='ui_guard_start' or kind=='ui_guard_end' then
+            if kind=='ui_guard_start' or kind=='ui_guard_end' or kind=='protected_session_start' or kind=='protected_session_changed' then
                 local ok,state=pcall(function()
                     assert(self.movement:profileAllowed(),'outside-disposable-profile')
                     return require(path..'snapshot').capture(_G,GetCurrentMission(),require(path..'json'))

@@ -88,6 +88,8 @@ static int held(void) {
 }
 static int begin(lua_State *L) {
     SDL_EventFilter filter=NULL; void *data=NULL; SDL_SysWMinfo wm;
+    guard_tick();
+    if(session_state>=2)return result(L,0,"protected-session-stopped");
     if(armed) return result(L,0,"session-already-active");
     target=p_SDL_GetKeyboardFocus();
     if(!target || held()) return result(L,0,"focus-or-held-input");
@@ -167,12 +169,12 @@ static int click(lua_State *L) {
 }
 static int finish(lua_State *L) {
     cleanup_press();armed=0;target=NULL;
-    if(guard_owned)guard_active=0;
+    if(guard_owned && session_state==0)guard_active=0;
     return result(L,1,"stopped");
 }
 static int guard_begin(lua_State *L) {
     SDL_SysWMinfo wm;
-    if(armed || guard_active || held())return result(L,0,"guard-busy-or-held");
+    if(armed || guard_active || session_state || held())return result(L,0,"guard-busy-or-held");
     SDL_Window *window=p_SDL_GetKeyboardFocus();
     if(!window)return result(L,0,"guard-no-focus");
     memset(&wm,0,sizeof(wm));SDL_VERSION(&wm.version);
@@ -182,7 +184,33 @@ static int guard_begin(lua_State *L) {
     if(!guard_install(20000,0))return result(L,0,"guard-install-failed");
     return result(L,1,"guarded-for-20-seconds");
 }
-static int guard_end(lua_State *L) { guard_active=0;guard_expired=1;return result(L,1,"guard-stopped"); }
+static int guard_end(lua_State *L) {
+    if(session_state==1 || session_state==2) { session_fault("context-ended");return result(L,0,"session-remains-blocked"); }
+    guard_active=0;guard_expired=1;return result(L,1,"guard-stopped");
+}
+static int session_begin(lua_State *L) {
+    SDL_SysWMinfo wm;
+    if(armed || guard_active || session_state || held() || guard_tails())return result(L,0,"session-busy-ended-or-held");
+    SDL_Window *window=p_SDL_GetKeyboardFocus();
+    if(!window)return result(L,0,"session-no-focus");
+    memset(&wm,0,sizeof(wm));SDL_VERSION(&wm.version);
+    if(!p_SDL_GetWindowWMInfo(window,&wm) || wm.subsystem!=SDL_SYSWM_WINDOWS)
+        return result(L,0,"session-window-backend");
+    native_window=wm.info.win.window;
+    if(!guard_install(5000,0))return result(L,0,"session-install-failed");
+    session_state=1;session_reason="protected";return result(L,1,"session-protected");
+}
+static int session_pulse(lua_State *L) {
+    guard_tick();
+    if(session_state!=1)return result(L,0,"session-not-running");
+    if(!own_foreground()) { session_fault("focus-lost");return result(L,0,"session-focus-lost"); }
+    if(release_failed) { session_fault("release-failed");return result(L,0,"session-release-failed"); }
+    guard_started=p_SDL_GetTicks();return result(L,1,"session-healthy");
+}
+static int session_stop(lua_State *L) {
+    session_fault("command-or-context-failed");cleanup_press();armed=0;
+    return result(L,session_state==2,"session-stopped");
+}
 static int info(lua_State *L) {
     int mx=0,my=0;POINT cursor={0,0};
     guard_tick();
@@ -194,9 +222,11 @@ static int info(lua_State *L) {
         p_lua_pushnumber(L,cursor.x);p_lua_setfield(L,-2,"cursorX");
         p_lua_pushnumber(L,cursor.y);p_lua_setfield(L,-2,"cursorY");
     }
-    p_lua_pushstring(L,"itb-win32-click-v2");p_lua_setfield(L,-2,"abi");
+    p_lua_pushstring(L,"itb-win32-click-v3");p_lua_setfield(L,-2,"abi");
+    p_lua_pushnumber(L,session_state);p_lua_setfield(L,-2,"sessionState");
+    p_lua_pushstring(L,session_reason);p_lua_setfield(L,-2,"sessionReason");
     p_lua_pushboolean(L,guard_active);p_lua_setfield(L,-2,"guardActive");
-    p_lua_pushnumber(L,guard_active?guard_duration-(p_SDL_GetTicks()-guard_started):0);p_lua_setfield(L,-2,"guardRemainingMs");
+    p_lua_pushnumber(L,guard_active && !guard_expired?guard_duration-(p_SDL_GetTicks()-guard_started):0);p_lua_setfield(L,-2,"guardRemainingMs");
     p_lua_pushnumber(L,blocked_mouse);p_lua_setfield(L,-2,"blockedMouse");
     p_lua_pushnumber(L,blocked_keys);p_lua_setfield(L,-2,"blockedKeys");
     p_lua_pushnumber(L,blocked_raw);p_lua_setfield(L,-2,"blockedRaw");
@@ -230,5 +260,8 @@ __declspec(dllexport) int __cdecl luaopen_itb_input(lua_State *L) {
     p_lua_pushcclosure(L,finish,0);p_lua_setfield(L,-2,"finish");
     p_lua_pushcclosure(L,info,0);p_lua_setfield(L,-2,"info");
     p_lua_pushcclosure(L,guard_begin,0);p_lua_setfield(L,-2,"guardBegin");
-    p_lua_pushcclosure(L,guard_end,0);p_lua_setfield(L,-2,"guardEnd");return 1;
+    p_lua_pushcclosure(L,guard_end,0);p_lua_setfield(L,-2,"guardEnd");
+    p_lua_pushcclosure(L,session_begin,0);p_lua_setfield(L,-2,"sessionBegin");
+    p_lua_pushcclosure(L,session_pulse,0);p_lua_setfield(L,-2,"sessionPulse");
+    p_lua_pushcclosure(L,session_stop,0);p_lua_setfield(L,-2,"sessionStop");return 1;
 }

@@ -43,7 +43,7 @@ function movement.new(env, emit, path)
         if path ~= 'native' then state.undoPosition = xy(pawn:GetUndoLoc()) end
         return state
     end
-    function self:lockInput()
+    function self:lockInput(sessionMode)
         -- A separate diagnostic: no move, attack, reset or allowance write.
         need(self:profileAllowed(), 'wrong-profile')
         need(env.modApi:getGameVersion() == '1.2.93', 'wrong-game-version')
@@ -54,9 +54,9 @@ function movement.new(env, emit, path)
         need(env.Board and env.Game and env.Board:IsTipImage() == false, 'no-normal-board')
         need(not env.modApi.deployment:isDeploymentPhase() and not env.modApi.deployment:isLandingPhase(), 'deployment')
         need(env.Game:GetTeamTurn() == env.TEAM_PLAYER, 'wrong-phase')
-        need(not self.pending and self.bridge and not self.bridge.guardWatching, 'guard-busy')
+        need(not self.pending and self.bridge and not self.bridge.guardWatching and not self.bridge.sessionWatching, 'guard-busy')
         idle()
-        self.bridge:lock()
+        if sessionMode then self.bridge:startSession(sessionMode=='timeout') else self.bridge:lock() end
     end
     local function safeTile(p, origin)
         local b = env.Board
@@ -274,7 +274,7 @@ function movement.new(env, emit, path)
                 startObserved = p.startObserved, endObserved = p.endObserved,
                 path = path, persistenceVerified = false,
                 proofOfQuiescence = false, coverage = path=='ui' and 'validated-ground-path-lab-only' or 'one-tile-manual-lab-only' })
-            if self.bridge then self.bridge:stop() end
+            if self.bridge then self.bridge:stop(true) end
             self.pending = nil
             self.status = 'Move outcome observed'
         elseif now - p.since > 5000 then

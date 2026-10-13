@@ -1,5 +1,15 @@
 # Game-window input guard — 0.7.2 experiment
 
+## Protected-session mode — 0.8.0, live check pending
+
+ABI v3 adds a distinct protected session. A five-second native lease is renewed by the mod's frame callback. Expiry, focus loss, command/context failure or a release failure stops the session while retaining the window input block. A late heartbeat cannot resume it. Ordinary bridge finish/guard-end calls cannot unlock it; successful command completion leaves protection active. Tagged motion/down messages queued after a stop are rejected; tagged button-up may drain an already accepted press. An in-flight game effect cannot be rolled back by this filter.
+
+**Escape explicitly exits this local session test.** Its press/character/release are consumed rather than opening the game menu. Other held-input tails remain suppressed. Normal local input then returns, but tagged command presses and new bridge sessions remain refused until the game restarts. This deliberate exit is distinct from automatic failure recovery. Window close/destruction remain supported. No other application is blocked.
+
+The new **Session test - Esc exits** control arms protection without actions. With the movement lab armed, it becomes **Protected move - Esc exits** and submits one validated move. **Session timeout test - Esc exits** deliberately withholds the heartbeat; the real native lease must expire and remain blocked. These controls are opt-in and restricted by the standalone guard's disposable-profile/tactical checks.
+
+Local compilation, 174 Lua contracts, 11 log-analysis assertions and installer fixtures pass. Native contracts run only in GitHub CI. Live validation must show a successful protected move, continued blocking beyond five seconds with heartbeat, latched timeout/focus loss, refused further input, and explicit exit with working local controls. There is no peer connection, ownership enforcement or network failure propagation yet; this is a local protection foundation, not a usable multiplayer session. Controller/polled-state and held-across-failure coverage remain incomplete.
+
 ## Evidence status
 
 Game-verified on the disposable profile: a tagged move completed while guarded; competing Undo, Tab, Escape and an available Reset Turn were blocked in separate checks, with working unblocked controls. This does not establish complete multiplayer authorization. Version 0.7.2 adds a repeatable guard-only button and selection observations, retaining the tested 0.7.1 DLL. The local suite passes 170 Lua contracts plus 11 log-analysis assertions and installer fixtures. Native executable contracts run only on GitHub's Windows runner; consult the exact revision's Actions result.

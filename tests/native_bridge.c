@@ -71,6 +71,7 @@ static BOOL WINAPI timer_fake(PHANDLE handle,HANDLE q,WAITORTIMERCALLBACK cb,PVO
 static BOOL WINAPI delete_fake(HANDLE q,HANDLE timer,HANDLE complete){assert(!q && timer==(HANDLE)3 && complete==INVALID_HANDLE_VALUE);timer_callback=NULL;return TRUE;}
 static void elapsed(void){assert(timer_callback);timer_callback(NULL,FALSE);}
 static void setup(void){
+    session_state=0;session_reason="none";
     guard_active=guard_owned=guard_expired=0;guarded_window=NULL;
     memset(blocked_held,0,sizeof(blocked_held));subclass_ok=1;extra_value=0;forwarded=raw_cleaned=0;
     set_subclass=subclass_fake;remove_subclass=remove_fake;next_subclass=next_fake;
@@ -131,6 +132,32 @@ int main(void){
     setup();begin(NULL);message(WM_KILLFOCUS,0);assert(!guard_active && !armed);
     setup();begin(NULL);assert(message(WM_CLOSE,0)==77 && guard_active);
     message(WM_NCDESTROY,0);assert(!guard_active && !guarded_window && !armed);
-    puts("Native contracts passed: input submission, window guard, tagged mouse, blocked keyboard/raw input, held tails, lifecycle and time bounds.");
+    setup();session_begin(NULL);assert(ok_value && session_state==1 && guard_active);
+    clock_value=4000;session_pulse(NULL);assert(ok_value);clock_value=8000;session_pulse(NULL);assert(ok_value);
+    begin(NULL);assert(ok_value);finish(NULL);assert(guard_active && session_state==1);
+    clock_value=13000;session_pulse(NULL);assert(!ok_value && session_state==2 && guard_active);
+    assert(strcmp(session_reason,"heartbeat-expired")==0);
+    begin(NULL);assert(!ok_value && !armed);guard_end(NULL);assert(!ok_value && guard_active);
+    extra_value=INPUT_MARKER;assert(message(WM_LBUTTONDOWN,0)==0 && message(WM_MOUSEMOVE,0)==0);
+    assert(message(WM_LBUTTONUP,0)==77); /* Drain an accepted press, never a new one. */
+    extra_value=0;assert(message(WM_KEYDOWN,VK_TAB)==0);assert(message(WM_KEYUP,VK_TAB)==0);
+    assert(message(WM_KEYDOWN,VK_ESCAPE)==0 && session_state==3 && !guard_active);
+    assert(message(WM_CHAR,27)==0 && message(WM_KEYUP,VK_ESCAPE)==0 && guard_tails()==0);
+    assert(message(WM_KEYDOWN,VK_TAB)==77);
+    extra_value=INPUT_MARKER;assert(message(WM_LBUTTONDOWN,0)==0);extra_value=0;
+    session_begin(NULL);assert(!ok_value && session_state==3);begin(NULL);assert(!ok_value);
+    setup();session_begin(NULL);message(WM_KILLFOCUS,0);
+    assert(session_state==2 && guard_active && strcmp(session_reason,"focus-lost")==0);
+    session_pulse(NULL);assert(!ok_value && session_state==2);
+    finish(NULL);assert(guard_active);assert(message(WM_LBUTTONDOWN,0)==0);
+    message(WM_KEYDOWN,VK_ESCAPE);assert(!guard_active && session_state==3);
+    assert(message(WM_LBUTTONUP,0)==0);assert(message(WM_KEYUP,VK_ESCAPE)==0);
+    setup();session_begin(NULL);begin(NULL);click(NULL);assert(pressed);
+    session_stop(NULL);assert(session_state==2 && guard_active && !armed && !pressed && ups==1);
+    assert(message(WM_CLOSE,0)==77);message(WM_NCDESTROY,0);assert(!guard_active && session_state==0);
+    setup();session_begin(NULL);front=NULL;session_pulse(NULL);assert(!ok_value && session_state==2 && guard_active);
+    setup();session_begin(NULL);release_failed=1;session_pulse(NULL);assert(!ok_value && session_state==2);
+    setup();clock_value=0xfffffff0u;session_begin(NULL);clock_value=4984;guard_tick();assert(session_state==2 && guard_active);
+    puts("Native contracts passed: input submission, diagnostic guard, latched session failures, explicit exit, stale tagged-input rejection, lifecycle and time bounds.");
     return 0;
 }

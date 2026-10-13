@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.7.2. Guarded movement, Undo blocking, Tab/Escape blocking and an available Reset Turn button now have real-game tests with unblocked controls. This is bounded evidence on one game instance; online co-op is not implemented.**
+**Current source: 0.8.0, an experimental protected-session mode awaiting live verification. The completed 0.7.2 milestone verified guarded movement, Undo, Tab/Escape and Reset-button blocking with unblocked controls. Online co-op is not implemented.**
 
 The [new guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Its bounded timeout is a diagnostic, not a multiplayer failure policy.
 
@@ -47,7 +47,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 11 Lua files as Lua 5.1 and runs 170 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 11 Lua files as Lua 5.1 and runs 174 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 

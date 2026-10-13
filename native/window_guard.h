@@ -12,6 +12,13 @@ static LPARAM (WINAPI *message_extra)(void)=OS_DEFAULT(GetMessageExtraInfo);
 static BOOL (WINAPI *pin_module)(DWORD,LPCSTR,HMODULE*)=OS_DEFAULT(GetModuleHandleExA);
 static HWND guarded_window;
 static int guard_active, guard_owned, guard_expired;
+/* 0: diagnostic only, 1: protected, 2: stopped/latched, 3: explicitly ended.
+ * Ended sessions reject queued tagged presses until a new explicit session. */
+static int session_state;
+static const char *session_reason="none";
+static void session_fault(const char *reason) {
+    if(session_state==1) { session_state=2;session_reason=reason;armed=0;guard_expired=1; }
+}
 static Uint32 guard_started,guard_duration;
 static unsigned blocked_mouse,blocked_keys,passed_tagged,blocked_raw;
 static unsigned char blocked_held[256];
@@ -22,7 +29,8 @@ static int guard_tails(void) {
 }
 static void guard_tick(void) {
     if(guard_active && p_SDL_GetTicks()-guard_started>=guard_duration) {
-        guard_active=0;guard_expired=1;
+        if(session_state==1)session_fault("heartbeat-expired");
+        else if(session_state!=2) { guard_active=0;guard_expired=1; }
     }
 }
 static LRESULT CALLBACK guard_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp,UINT_PTR id,DWORD_PTR data) {
@@ -30,12 +38,21 @@ static LRESULT CALLBACK guard_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp,UINT_P
     (void)data;
     guard_tick();
     if(msg==WM_NCDESTROY) {
-        guard_active=0;armed=0;guarded_window=NULL;
+        guard_active=0;armed=0;guarded_window=NULL;session_state=0;session_reason="window-destroyed";
         memset(blocked_held,0,sizeof(blocked_held));
         remove_subclass(hwnd,guard_proc,id);
         return next_subclass(hwnd,msg,wp,lp);
     }
-    if(msg==WM_KILLFOCUS) { guard_active=0;guard_expired=1;armed=0; }
+    if(msg==WM_KILLFOCUS) {
+        if(session_state==1 || session_state==2)session_fault("focus-lost");
+        else { guard_active=0;guard_expired=1;armed=0; }
+    }
+    /* Explicit local session exit. Consume Escape and its release, never feed
+     * it to the game or treat it as a resume. Works even if Lua has stopped. */
+    if((session_state==1 || session_state==2) && msg==WM_KEYDOWN && wp==VK_ESCAPE) {
+        cleanup_press();armed=0;session_state=3;session_reason="explicit-exit";
+        guard_active=0;guard_expired=1;blocked_held[VK_ESCAPE]=1;blocked_keys++;return 0;
+    }
     switch(msg) {
     case WM_KEYDOWN:case WM_SYSKEYDOWN: down=1;key_message=1;key=wp<256?(int)wp:-1;break;
     case WM_KEYUP:case WM_SYSKEYUP: up=1;key_message=1;key=wp<256?(int)wp:-1;break;
@@ -61,6 +78,9 @@ static LRESULT CALLBACK guard_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp,UINT_P
     }
     if((ULONG_PTR)message_extra()==INPUT_MARKER &&
         (msg==WM_MOUSEMOVE || msg==WM_LBUTTONDOWN || msg==WM_LBUTTONUP)) {
+        /* A release must drain an already accepted bridge press. No new tagged
+         * movement/press may pass a stopped or explicitly ended session. */
+        if(session_state>=2 && msg!=WM_LBUTTONUP) { blocked_mouse++;return 0; }
         if(guard_active)passed_tagged++;
         return next_subclass(hwnd,msg,wp,lp);
     }

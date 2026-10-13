@@ -17,10 +17,27 @@ function ui.install(env, lab, gate, attack)
     env.modApi.events.onWindowHidden:subscribe(function(id) windows[id] = nil; lab.blocked = next(windows) ~= nil end)
     env.modApi.events.onFrameDrawStart:subscribe(function()
         gate:update()
+        if lab.bridge then lab.bridge:pollSession() end
         if lab.bridge then lab.bridge:pollGuard() end
         local root = env.sdlext.getUiRoot()
         if not root then return end
         if not controls.toggle then
+            controls.session = button(root, 742, 'Session test - Esc exits', function()
+                local ok,reason=pcall(function()
+                    local request
+                    if lab.armed then
+                        for id=0,2 do request=lab:preview(id);if request then break end end
+                        assert(request,'No supported unused mech for protected move')
+                    end
+                    lab:lockInput('protected')
+                    if request and not lab:request(request) then lab.bridge:stop() end
+                end)
+                if not ok then lab.status=tostring(reason) end
+            end)
+            controls.timeout = button(root, 786, 'Session timeout test - Esc exits', function()
+                local ok,reason=pcall(function() lab:lockInput('timeout') end)
+                if not ok then lab.status=tostring(reason) end
+            end)
             controls.lockOnly = button(root, 698, 'Guard only 20s', function()
                 local ok, reason = pcall(function() lab:lockInput() end)
                 if not ok then lab.status=tostring(reason) end
@@ -61,6 +78,10 @@ function ui.install(env, lab, gate, attack)
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID and mission.ID ~= 'Mission_Test'
         end)
         tactical = ok and tactical == true
+        controls.session.visible=tactical and not gate.active and not attack.armed
+        controls.timeout.visible=controls.session.visible and not lab.bridge.sessionWatching
+        controls.session:caption(lab.bridge.sessionStatus or (lab.armed and 'Protected move - Esc exits' or 'Session test - Esc exits'))
+        controls.session:settooltip('Protected local test. Failure stays blocked. Escape ends it; restart required for another session.')
         local visible = tactical and env.GetCurrentMission().ID == 'Mission_Artillery'
         controls.lockOnly.visible = tactical and not gate.active and not attack.armed
         controls.lockOnly:caption(lab.bridge.guardStatus or 'Guard only 20s')

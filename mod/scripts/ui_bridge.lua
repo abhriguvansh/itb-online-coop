@@ -25,16 +25,38 @@ function bridge.new(env, native, emit)
         self.finalPoint,self.finalPhase=p,phase
         self.aimPoint,self.waitLogged=approach,false
     end
-    function self:stop()
+    function self:stop(completed)
         if native then
+            if completed~=true and native.sessionStop then native.sessionStop() end
             if self.phase~='off' then emit('ui_bridge_guard_result',native.info()) end
             native.finish()
         end
         self.phase='off'
         self.preview=nil
     end
+    function self:startSession(timeoutTest)
+        assert(self.phase=='off' and not self.guardWatching and not self.sessionWatching
+            and native and native.info().abi=='itb-win32-click-v3','session-unavailable')
+        local ok,reason=native.sessionBegin();assert(ok,reason)
+        self.sessionWatching=true;self.sessionHeartbeat=not timeoutTest;self.lastSessionState=1
+        emit('protected_session_start',native.info())
+    end
+    function self:pollSession()
+        if not self.sessionWatching then return end
+        -- Native code latches expiry before processing a pulse; late pulses cannot revive it.
+        if self.sessionHeartbeat then native.sessionPulse() end
+        local state=native.info()
+        self.sessionStatus=state.sessionState==1 and 'Session protected - Esc exits'
+            or 'SESSION STOPPED - Esc exits'
+        if state.sessionState~=self.lastSessionState then
+            emit('protected_session_changed',state);self.lastSessionState=state.sessionState
+        end
+        if state.sessionState==3 then
+            self.sessionWatching=false;self.sessionStatus='Session ended - restart game'
+        end
+    end
     function self:lock()
-        assert(self.phase=='off' and native and native.info().abi=='itb-win32-click-v2','guard-unavailable')
+        assert(self.phase=='off' and native and native.info().abi=='itb-win32-click-v3','guard-unavailable')
         local ok,reason=native.guardBegin();assert(ok,reason)
         self.guardWatching=true
         emit('ui_guard_start',native.info())
@@ -60,7 +82,7 @@ function bridge.new(env, native, emit)
     end
     function self:start(command, validate)
         assert(self.phase=='off','bridge-already-active')
-        assert(native and native.info().abi=='itb-win32-click-v2','native-bridge-unavailable')
+        assert(native and native.info().abi=='itb-win32-click-v3','native-bridge-unavailable')
         local valid,reason=validate();assert(valid,reason)
         local selected=env.Board:GetSelectedPawn()
         -- Pinned loader modapi/pawn.lua maps weapon index 0 to the Move skill.

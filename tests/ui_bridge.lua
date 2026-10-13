@@ -17,7 +17,7 @@ local function fixture()
     e.pawn={GetId=function()return 2 end,GetArmedWeaponId=function()return 0 end}
     n.aims={}
     n.aim=function(x,y)n.x,n.y=x,y;n.aims[#n.aims+1]={x=x,y=y};return true end
-    n.info=function()return {abi='itb-win32-click-v2',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
+    n.info=function()return {abi='itb-win32-click-v3',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
     n.begin=function()n.begins=n.begins+1;return true end
     n.click=function(x,y)n.calls[#n.calls+1]={x=x,y=y};return true,2 end
     n.finish=function()n.finishes=n.finishes+1 end
@@ -127,7 +127,7 @@ end)
 
 test('diagnostic guard records expiry and cannot silently stay watched',function()
     local e,n,b=fixture();local active=false
-    n.info=function()return {abi='itb-win32-click-v2',guardActive=active,guardRemainingMs=active and 20000 or 0}end
+    n.info=function()return {abi='itb-win32-click-v3',guardActive=active,guardRemainingMs=active and 20000 or 0}end
     n.guardBegin=function()active=true;return true end
     n.guardEnd=function()active=false end
     b:lock();assert(b.guardWatching and e.logs[1].kind=='ui_guard_start')
@@ -143,5 +143,31 @@ test('guard cannot overlap an already active command',function()
     local e,n,b,c,v=fixture();b:start(c,v)
     n.guardBegin=function()error('must not reach native lock')end
     assert(not pcall(function()b:lock()end) and not b.guardWatching and #n.calls==0)
+end)
+test('session heartbeat is explicit and stopped state never auto-resumes',function()
+    local e,n,b=fixture();local state=0;local pulses=0
+    n.info=function()return {abi='itb-win32-click-v3',sessionState=state}end
+    n.sessionBegin=function()state=1;return true end
+    n.sessionPulse=function()pulses=pulses+1;return state==1 end
+    b:startSession(false);b:pollSession();assert(pulses==1 and b.sessionWatching)
+    state=2;b:pollSession();assert(b.sessionWatching and b.sessionStatus=='SESSION STOPPED - Esc exits')
+    state=3;b:pollSession();assert(not b.sessionWatching and b.sessionStatus=='Session ended - restart game')
+    assert(#e.logs==3 and #n.calls==0)
+end)
+test('timeout diagnostic withholds heartbeat rather than simulating a native failure',function()
+    local e,n,b=fixture();n.sessionBegin=function()return true end
+    n.sessionPulse=function()error('must withhold heartbeat')end
+    n.info=function()return {abi='itb-win32-click-v3',sessionState=1}end
+    b:startSession(true);b:pollSession();assert(b.sessionWatching and not b.sessionHeartbeat)
+end)
+test('failed command or context stops protected session but success keeps protection',function()
+    local e,n,b=fixture();local stopped=0;n.sessionStop=function()stopped=stopped+1 end
+    b:stop(true);assert(stopped==0 and n.finishes==1)
+    b:stop();assert(stopped==1 and n.finishes==2)
+end)
+test('session cannot overlap a watched diagnostic guard',function()
+    local e,n,b=fixture();b.guardWatching=true
+    n.sessionBegin=function()error('overlap reached native')end
+    assert(not pcall(function()b:startSession(false)end))
 end)
 print('UI bridge contracts: '..passed..' passed.')
