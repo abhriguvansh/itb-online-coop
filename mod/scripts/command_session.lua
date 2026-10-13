@@ -1,5 +1,5 @@
--- Restricted command lifecycle. Runtime entry is a local diagnostic, not a network peer.
--- The caller is a trusted harness, not an authenticated network peer.
+-- Restricted command lifecycle. Runtime entry is the trusted diagnostic harness.
+-- The optional transport binds peer identity before this boundary.
 local M = {}
 local function id(v)
     return type(v) == 'string' and #v > 0 and #v <= 96 and v:match('^[%w_.:-]+$') ~= nil

@@ -2,7 +2,15 @@
 local bridge = {}
 local function same(a,b) return a and b and a.x==b.x and a.y==b.y end
 function bridge.new(env, native, emit)
-    local self = { phase = 'off' }
+    local self = { phase = 'off', releasesSeen = 0 }
+    -- Timer submission is not SDL delivery. The game can draw after the native
+    -- worker submits mouse-up but before SDL has processed that release.
+    self.releaseHook=env.sdl.eventHook(function(event)
+        if self.phase~='off' and event:type()==env.sdl.events.mousebuttonup and event:mousebutton()==1 then
+            self.releasesSeen=self.releasesSeen+1
+        end
+        return false
+    end)
     local function center(tile)
         local scale=env.GetBoardScale()
         -- Empirical lower-tile hit point from the disposable-profile positive control.
@@ -33,6 +41,7 @@ function bridge.new(env, native, emit)
         end
         self.phase='off'
         self.preview=nil
+        self.releaseExpected=nil
     end
     function self:startSession(timeoutTest)
         assert(self.phase=='off' and not self.guardWatching and not self.sessionWatching
@@ -107,6 +116,11 @@ function bridge.new(env, native, emit)
         local input=native.info()
         assert(not input.releaseFailed,'native-release-failed')
         if input.pressed then return end
+        if self.releaseExpected then
+            if self.releasesSeen<self.releaseExpected then return end
+            self.releaseExpected=nil
+            emit('ui_bridge_release_observed',{releases=self.releasesSeen})
+        end
         if self.phase=='submitted' then return end
         assert(self.width==env.screen:w() and self.height==env.screen:h(),'screen-changed')
         assert(same(center(self.command.to),self.to),'board-geometry-changed')
@@ -142,6 +156,7 @@ function bridge.new(env, native, emit)
             'delivered-cursor-wrong-tile')
         if self.phase=='aim-selection' then
             self.phase='selecting'
+            self.releaseExpected=self.releasesSeen+1
             local sent,count=native.click(self.from.x,self.from.y)
             emit('ui_bridge_selection_queued',{accepted=sent,events=count,native=native.info()})
             assert(sent,'selection-queue-failed')

@@ -4,22 +4,23 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.9.1. Two isolated Windows guests run the actual game. Each completed protected movement, punch, native End Turn with its unused-unit confirmation, the full enemy phase, and another legal move. A basic TCP exchange also passed, but gameplay commands are not yet connected across the two games. Online co-op is not implemented.**
+**Current source: 0.10.0. Two independent real game instances completed a network-coordinated move, punch, protected native End Turn with unused-unit confirmation, full enemy phase, and another legal move. Requests and outcomes crossed real TCP, with matching observations after each action. This is a fixed scripted experiment; playable human-selected online co-op is not yet available.**
 
 The [guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Protected sessions stay blocked after failure until explicit exit; the older timed diagnostic remains available separately.
 
 Cannon moved three tiles and Artillery moved two through the game's normal UI path. Both retained their ability to attack, and all observed pawn fields survived save/reload. Four terrain-health readings changed, so full-state equality remains unresolved. Earlier tests verified normal Undo and a subsequent Combat Mech punch. [Movement evidence, failures and limits](docs/ui-movement.md).
 
-This is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
+That earlier movement evidence is a bounded path diagnostic on one Windows game instance, with one command per mech per launch and a fixed tested display layout. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-**October 13 increment:** the [shared command session](docs/command-session.md) now runs in the game with fixed ownership, same-state readiness, duplicate/stale rejection and shared failure handling. Eight commands attempted during phase transitions were rejected. Observed states and execution events matched the preserved normal-play sequence. This uses scripted peer intent; a second isolated instance and transport are still missing.
+**October 13 network increment:** the [shared command session](docs/command-session.md#network-coordinated-phase-proof--probe-0100-october-13) uses fixed ownership, same-state readiness, duplicate/stale rejection and stop-on-uncertainty. Both actual games rejected eight early commands. All 26 partial-state candidates and 26 ordered execution/phase payloads match each other and the preserved vanilla reference. Full-state equality and general determinism remain unproven. Next: a human-chosen owned-mech move through this protected network path.
 
-The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Restricted runtime ownership and readiness are tested with scripted peers; campaign voting, rotation and networking are not implemented.
+The approved design is two persistent primary mechs, one per player, plus a third whose controller alternates each battle. Ordinary campaign disagreements use a persisted 50/50 choice between the two final votes; destructive exceptions need unanimity. Both humans can interleave legal actions and must be ready before End Turn. Restricted runtime ownership and readiness are tested with scripted peers; campaign voting, rotation and general multiplayer interaction are not implemented.
 
 ## What exists
 
 The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. The original native input bridge now supplies the narrowly tested movement path described above.
 
+- An opt-in four-command TCP experiment with connection-bound peer roles, two-peer observation barriers, same-state End Turn readiness and no action retries.
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
@@ -30,7 +31,7 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 - A local log summary and field-level comparison tool. Matching digests cover only the observed fields.
 - A targeted probe installer with ownership checks, a verified backup/staging workflow, offline tests, and a GitHub Actions configuration.
 
-There is no general action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/Reset remain blocked during the restricted protected session. The probe cannot be used as a multiplayer session.
+There is no general action replay, production multiplayer input authorization, general determinism claim or automatic resynchronization. Undo/Reset remain blocked during the restricted protected session. The fixed network fixture is not a playable co-op release.
 
 ## Baseline
 
@@ -40,7 +41,7 @@ Obtain the loader separately from its upstream release. This repository contains
 
 ## Test the project code
 
-Node.js and PowerShell are used only for development; the game mod itself is Lua.
+Node.js and PowerShell run the development checks and restricted network harness; the game mod itself is Lua.
 
 ```powershell
 npm ci --ignore-scripts --no-audit --no-fund
@@ -49,7 +50,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 15 Lua files as Lua 5.1 and runs 220 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 16 Lua files as Lua 5.1 and runs 221 core Lua contracts under Fengari/Lua 5.3, six mailbox framing contracts, seven coordinator contracts, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 
@@ -74,7 +75,7 @@ The local suite parses 15 Lua files as Lua 5.1 and runs 220 Lua contracts under 
 6. Open **Mod Content → Configure Mods**, expand **Mod Loader Extensions**, enable **modApiExt**, and enable **ITB Co-op Capability Probe**. Leave memedit and Easy Edit off for this baseline. Close the dialog to save, then restart the game. The probe defaults to disabled: explicitly selecting both entries avoids the fresh-configuration dependency failure encountered during testing.
 7. Use Rift Walkers, standard equipment, Normal difficulty, and advanced content off. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test). Leave the movement lab off for observation. For the current movement lab, enable/calibrate memedit and read the exact supported route and layout in [the movement record](docs/ui-movement.md). To inspect the historical effect-path failure, use the separate [effect procedure](docs/effect-experiment.md#repeat-and-next-investigation), which changes the disposable timeline and requires memedit. The older native-move procedure describes version 0.2.0.
 
-The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Steam showed Cloud **Up to date** before and after the single-instance test; no Cloud settings were changed. Separate-instance save and Cloud isolation remains unverified. The four pre-existing normal-profile files matched their backup hashes after the test.
+The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Steam showed Cloud **Up to date** before and after the single-instance test; no Cloud settings were changed. The later two-guest experiment uses separate virtual disks and disposable saves, with no host shares or guest Steam login; two authenticated Steam sessions remain untested. The four pre-existing normal-profile files matched their backup hashes after the test.
 
 ## Read the results
 

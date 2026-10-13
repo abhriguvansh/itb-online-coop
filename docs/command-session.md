@@ -1,14 +1,14 @@
 # Protected command session — October 13, 2026
 
-Probe 0.9.0 integrates the restricted coordinator into the actual game. A local scripted host/guest sequence passed move → punch → protected End Turn with normal unused-unit confirmation → enemy/environment/spawn/planning → another legal move. This is one real instance with scripted peer intent, not networking or authentication. The user explicitly approved this deployment and disposable-profile test after the earlier source-only approval.
+**Probe 0.10.0: the restricted two-instance network milestone passed.** Two independently running Windows guests executed guest-origin movement → host-origin punch → protected native End Turn with both-peer readiness and normal unused-unit confirmation → enemy/environment/spawn/planning → guest-origin movement on player turn 3. Requests and outcomes crossed real TCP. Intent remains scripted for one checkpoint; this is not general determinism, full-state synchronization or a playable human-selected session. The historical increments below retain their original evidence scopes.
 
 ## Smallest runnable experiment
 
-Today: the opt-in **Protected phase sequence** button runs the four-command checkpoint fixture through mod/scripts/command_session.lua. The old experimental path is a compatibility wrapper around this same implementation. It owns the real movement, attack and End Turn adapters. Earlier diagnostic buttons are hidden while the session owns input. The fixture uses fixed host/guest ownership and the existing native protected guard; no network listener exists.
+The opt-in **Protected phase sequence** button runs the four-command checkpoint fixture through mod/scripts/command_session.lua. With the private guest mailbox configured, its caption becomes **Network phase proof** and the same adapters accept the coordinator's ordered dispatches. Without that configuration, the local fixture remains available. Earlier diagnostic buttons are hidden while the session owns input. Ownership and the tested checkpoint remain fixed; the existing native protected guard is unchanged.
 
-Next end-to-end target: on two real, safely isolated game instances, use actual ordered transport to submit a guest action, interleave a host action, complete the enemy/environment/planning phase, then submit another legal player action. Compare relevant state and subsequent outcomes while deliberately varying hover/preview/cancel histories. Native Undo/Reset may be absent and blocked in this explicitly restricted experiment. Expand to a fully supported mission afterwards. Neither this offline sequence nor the restricted experiment establishes representative balance or enjoyment.
+Next end-to-end target: replace one scripted movement proposal with a human-chosen owned-mech move through the same protected transport and verify both replicas. Independent inspection, broader legal actions and a fully supported mission remain ahead. Native Undo/Reset remain blocked in this restricted experiment. It does not establish representative balance or enjoyment.
 
-## What changed
+## Original shared-session implementation (0.9.0)
 
 - The factory owns both diagnostic objects privately; it exposes submission, update, hook forwarding, stop and an unsupported checkpoint operation. No direct punch request is handed to a listener. The opt-in runtime fixture uses this factory; ordinary diagnostic buttons do not.
 - Requests name bounded session/encounter/phase/action/entity IDs, an observed revision, a caller-provided partial-state witness and explicit origin/target coordinates. The trusted harness supplies peer identity. This is not authentication; future transport must bind identity to its connection rather than trust a message's player field.
@@ -54,7 +54,7 @@ Private evidence: .local/evidence/end-turn-0.9.0/, including each failure, succe
 
 Offline checks: 15 Lua 5.1 syntax parses, 218 Lua contracts under Fengari/Lua 5.3 and 11 log assertions passed. Of these, 13 End Turn contracts cover hook order, busy/allowance/callback admission, timeout, missing observations, unknown dialog, cursor rounding and no retry; 31 coordinator contracts cover the shared lifecycle. Installer fixtures passed. These are engine/native doubles, distinct from the live run above.
 
-## Immediate two-instance blocker and next action
+## Historical isolation blocker after 0.9.0
 
 Runtime integration for the restricted sequence now works. Isolation is the next blocker before transport: a second Windows game instance with independent saves, Cloud behavior and a separate foreground desktop has not been established. Source inspection confirms the current guard deliberately stops on focus loss and each mouse submission requires the game's foreground window; two windows sharing one desktop cannot simply alternate focus inside these protected sessions. Preserve that protection. Next establish a second isolated Windows desktop/PC and verify both games remain independently protected, with disjoint saves, before adding the smallest ordered command/acknowledgement path. A second PC/tester is still unconfirmed.
 
@@ -105,3 +105,39 @@ Private evidence is under .local/evidence/isolation-20261013/: guest-a-layout-fa
 **Actual guest B result:** the same protected sequence also completed at revision 4, with eight early requests rejected and the guard active/sessionState=1/no release failure at completion. Host focus switched to A while B displayed enemy activity; B continued to its next player move. Guest clock lag was measured separately (about 49–55 seconds behind the host), so raw guest timestamps must not be compared directly to host focus timestamps. Both phase/final snapshots and all 26 execution/phase payloads match A and the vanilla reference. Evidence: guest-b-091-background.log/.png, guest-b-091-comparison.json and guest-b-focus-switch.txt. This establishes the bounded independent-desktop execution check, not two-peer gameplay coordination. Both games closed normally; completed saves were preserved in each guest and all three checkpoint save files were restored and hash-verified.
 
 **Connectivity preflight:** both guests sent distinct test markers over real TCP to a temporary listener bound only to host 127.0.0.1 through the existing NAT host-loopback route, and received the expected acknowledgements. No firewall, NAT forwarding, security setting or external service changed. The listener closed after the two replies. Evidence: tcp-preflight-result.json and the private bounded preflight script. No gameplay action crossed this connection. The highest-value next action is a minimal ordered command/acknowledgement integration that stops both replicas on missing or divergent observed outcomes; lobby, general recovery and native transport packaging remain deferred.
+
+## Network-coordinated phase proof — probe 0.10.0, October 13
+
+**Implemented:** tools/phase-coordinator.cjs binds only to host loopback. Each guest connects over its existing NAT through tools/Run-GuestPhaseBridge.ps1, which translates bounded JSON frames into atomically numbered local mailbox files. mod/scripts/phase_wire.lua connects that mailbox to the existing protected command session. A fresh session ID and separate random peer tokens bind each role to its connection; credentials remain private. This is a trusted local experiment, not an Internet service or adversarial-peer security claim. No socket ABI, native DLL, game mechanics or protection policy changed.
+
+Both games must be explicitly armed. The coordinator requires matching complete *observations* at revision 0 and after each action, both-peer readiness at the same context before End Turn, and healthy native protection in every outcome receipt. It accepts only the four fixed proposals from their assigned origin. Invalid identity/context, duplicates, divergence, missing outcomes, disconnect or timeout stop the non-resumable run; no action is retried. Local game legality and phase admission still use the existing adapters and ordered engine evidence, never matching snapshots alone.
+
+### Preserved failures and correction
+
+1. Run 1: the initial loopback listener launched in the default sandbox was unreachable from both guests. Both stopped at revision 0 before tactical dispatch. Launching the same loopback coordinator with approved host access made the next TCP connection work; no firewall/security change was made. The exact isolation mechanism was not independently established.
+2. Run 2: both peers connected, matched the initial observation and received the guest movement proposal. B stopped with `aim-session-invalid` after selecting Artillery. Its native worker reported release submission, but the trace had mouse-down without delivered mouse-up before the next aim. The coordinator stopped the other replica before destination submission. No uncertain action was retried.
+3. The narrow correction in ui_bridge.lua waits for the actual SDL left-button release event after selection before destination aiming. A native timer reporting `pressed=false` is insufficient. The existing deadline still stops a missing release. A focused regression holds delivery back, ignores right-button release, then permits exactly one destination submission after the left release. The tested native DLL remains unchanged.
+
+### Actual game result: run 3
+
+| Ordered step | Origin | Both actual instances |
+|---|---|---|
+| Artillery (0,3) → (1,1) | Guest | Legal movement and normal allowance/undo postconditions |
+| Combat punch at (2,3) | Host | Validated damage/push and action consumption |
+| Protected End Turn | Both ready, host proposal | One native End Turn and one unused-unit confirmation per game |
+| Enemy/environment/spawn/planning | Engine | Ordered phase evidence; eight early requests rejected per game |
+| Cannon (1,5) → (0,3), player turn 3 | Guest | Legal next-phase movement; revision 4 |
+
+All five peer barriers (revisions 0–4) matched. Eight outcome receipts reported active guards and sessionState=1; both completions also reported no release failure. Each movement observed the required SDL release before aiming. Host focus switched from A to B during enemy activity without interrupting A's execution. Both games then deliberately retained protected blocking at completion.
+
+All **26 partial-state candidates and 26 ordered execution/phase payloads** match between A, B and the preserved normal-play reference from 2f527725. This includes five skill start/end pairs, four queued attack start/end pairs and eight phase notifications per game. Neither partial-state equality nor this checkpoint's repeated outcome establishes hidden RNG/state agreement or general determinism. No human selected a tactical destination during this run, and no complete mission or Internet session was tested.
+
+Private evidence: `.local/evidence/network-phase-0.10.0/run1`, `run2`, and `run3`; the successful directory contains `events.jsonl`, both game logs/screenshots/mailbox transcripts, final closed-game logs and `comparison.json`. Failed and successful saves were preserved separately inside each guest. After normal game closure, the three disposable checkpoint files in each guest were restored and hash-verified. The host game/normal saves were not used. The coordinator exited successfully and both VMs were shut down cleanly. Credentials, logs, saves, VM media and binaries remain private.
+
+Offline validation: 16 Lua 5.1 parses, 221 core Lua contracts, six mailbox framing contracts, seven coordinator contracts and 11 log-analysis assertions passed, as did inert installer fixtures. These use engine/native doubles or fake peer messages, independently of the live result above. The locally flagged native executable was neither built nor run. Check exact-revision GitHub results before claiming CI success.
+
+### Bounded setup and next action
+
+The development harness requires the existing isolated guests, verified checkpoint and calibrated display. Start `node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY`; it creates private host/guest connection files. Copy the corresponding configuration as `C:\ITBCoopProbe\Wire\connection.json` in each guest and write UTF-8 without BOM `session.txt` containing the session ID, newline, peer role, newline. Use a fresh mailbox directory for each process/run; preserve old evidence first. Set `ITB_COOP_WIRE_DIR=C:/ITBCoopProbe/Wire` only in the guest game's launch environment, launch the reviewed guest bridge, then manually arm **Network phase proof** in each game. No startup task, public listener, firewall rule or automatic rearm is installed. A stopped run requires normal closure, preserved evidence and a verified checkpoint restore before a distinct experiment.
+
+The highest-value next action is a human-chosen owned-mech move using the same protected lifecycle and two-peer barrier. The current fixed proposal generator, one-move-per-mech/punch restrictions and blocked ordinary inspection prevent playable human co-op. Broader action coverage and a complete supported mission follow; lobby/room codes, relay infrastructure, campaign votes, reconnection and general recovery remain deferred.

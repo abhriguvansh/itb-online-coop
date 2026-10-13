@@ -12,7 +12,7 @@ for (const file of files) {
 console.log(`Lua 5.1 syntax: ${files.length} mod/experiment files passed.`);
 const L = lauxlib.luaL_newstate();
 lualib.luaL_openlibs(L);
-for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.lua', 'tests/input_gate.lua', 'tests/attack.lua', 'tests/ui_bridge.lua', 'tests/end_turn.lua', 'tests/command_session.lua']) {
+for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.lua', 'tests/input_gate.lua', 'tests/attack.lua', 'tests/ui_bridge.lua', 'tests/end_turn.lua', 'tests/command_session.lua', 'tests/phase_wire.lua']) {
   if (lauxlib.luaL_dofile(L, to_luastring(suite)) !== lua.LUA_OK) {
     console.error(lua.lua_tojsstring(L, -1));
     process.exitCode = 1;
@@ -21,6 +21,7 @@ for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.
 }
 if (!process.exitCode) {
   runReportTests();
+  require('./phase-wire.cjs');
   console.log('Contract tests use Fengari (Lua 5.3) and engine doubles. No in-game result is implied.');
 }
 lua.lua_close(L);

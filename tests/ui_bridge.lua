@@ -14,12 +14,14 @@ local function fixture()
         return {x=math.floor((dy+dx)/2),y=math.floor((dy-dx)/2)}
     end
     e.Board={GetSelectedPawn=function()return e.selected end}
+    e.sdl={events={mousebuttonup=1026},eventHook=function(fn)e.releaseHook=fn;return fn end}
+    e.release=function(button)e.releaseHook({type=function()return 1026 end,mousebutton=function()return button or 1 end})end
     e.pawn={GetId=function()return 2 end,GetArmedWeaponId=function()return 0 end}
     n.aims={}
     n.aim=function(x,y)n.x,n.y=x,y;n.aims[#n.aims+1]={x=x,y=y};return true end
     n.info=function()return {abi='itb-win32-click-v3',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
     n.begin=function()n.begins=n.begins+1;return true end
-    n.click=function(x,y)n.calls[#n.calls+1]={x=x,y=y};return true,2 end
+    n.click=function(x,y)n.calls[#n.calls+1]={x=x,y=y};if not e.delayRelease then e.release() end;return true,2 end
     n.finish=function()n.finishes=n.finishes+1 end
     local b=module.new(e,n,function(k,v)e.logs[#e.logs+1]={kind=k,value=v}end)
     local c={pawnId=2,from={x=0,y=3},to={x=0,y=2}}
@@ -33,6 +35,18 @@ test('selection must be observed before exactly one destination submission',func
     e.selected=e.pawn;b:update();e.clock=300;b:update();assert(#n.calls==1)
     e.preview();e.clock=400;b:update();assert(#n.calls==2 and b.phase=='submitted' and #n.aims==4)
     b:update();assert(#n.calls==2);b:stop();assert(b.phase=='off' and n.finishes==1)
+end)
+test('submitted native release must reach SDL before destination aiming',function()
+    local e,n,b,c,v=fixture();e.delayRelease=true;b:start(c,v)
+    e.clock=100;b:update();e.clock=200;b:update();e.selected=e.pawn
+    -- Native pressed=false is insufficient: SDL may still report held input.
+    local aimed=#n.aims
+    e.clock=300;b:update();e.clock=400;b:update()
+    assert(#n.calls==1 and #n.aims==aimed)
+    e.release(3);b:update();assert(#n.aims==aimed)
+    e.release();b:update();assert(#n.aims==aimed+1 and #n.calls==1)
+    e.clock=500;b:update();e.preview();e.clock=600;b:update()
+    assert(#n.calls==2 and b.phase=='submitted')
 end)
 test('already selected actor needs only destination click',function()
     local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);assert(#n.calls==0);e.clock=100;b:update();assert(#n.calls==0);e.preview();e.clock=200;b:update();assert(#n.calls==1)

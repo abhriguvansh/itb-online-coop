@@ -1,15 +1,25 @@
--- Explicitly opted-in local four-command test. Peer intent is scripted, not network input.
+-- Explicitly opted-in four-command fixture. Scripted intent; optional ordered TCP mailbox.
 local M={}
 function M.install(env,mod,native,path)
     local json=require(path..'json')
     local function capture() return require(path..'snapshot').capture(env,env.GetCurrentMission(),json) end
     local function emit(k,p) mod.probe:record(k,p) end
-    local self={status='Protected phase sequence',used=false}
+    local wire=require(path..'phase_wire').open(env,json,emit)
+    local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
+        identity=wire and wire.session or 'local-phase-proof'}
     local function witness() local state=capture();assert(#state.unavailable==0,'incomplete-observation');return json.encode(state) end
     local function request(kind,id,actor,fx,fy,tx,ty)
-        return {session='local-phase-proof',encounter='artillery-checkpoint',phase=self.session.phase,
+        return {session=self.identity,encounter='artillery-checkpoint',phase=self.session.phase,
             revision=self.session.revision,witness=witness(),id=id,kind=kind,actor=actor,
             fromX=fx,fromY=fy,toX=tx,toY=ty,confirmUnused=kind=='end-turn' and true or nil}
+    end
+    local function planned()
+        local n=self.session.revision
+        if n==0 then return request('move','artillery','artillery',0,3,1,1),'guest'
+        elseif n==1 then return request('lab-punch','punch','combat',3,3,2,3),'host'
+        elseif n==2 then return request('end-turn','end-turn'),'host'
+        elseif n==3 then return request('move','cannon-next','cannon',1,5,0,3),'guest'
+        else return request('complete','complete'),'host' end
     end
     local function check(value,reason) assert(value,reason) end
     local function start()
@@ -22,7 +32,7 @@ function M.install(env,mod,native,path)
         end
         mod.movement:lockInput('protected')
         self.used=true;mod.movement.sessionOwned=true
-        self.session=require(path..'command_session').new({env=env,session='local-phase-proof',encounter='artillery-checkpoint',
+        self.session=require(path..'command_session').new({env=env,session=self.identity,encounter='artillery-checkpoint',
             phase='player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
@@ -31,13 +41,27 @@ function M.install(env,mod,native,path)
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
         self.stage=0;self.status='Running protected phase sequence'
-        emit('phase_lab_started',{scriptedPeers=true,networked=false,state=state})
+        if wire then wire:arm(planned());self.status='Waiting for network peer' end
+        emit('phase_lab_started',{scriptedPeers=true,networked=wire~=nil,state=state})
     end
     local function advance()
         local s=self.session
-        if s.stopped then self.status='Stopped: '..tostring(s.reason)..' - Esc exits';return end
+        if s.stopped then
+            self.status='Stopped: '..tostring(s.reason)..' - Esc exits'
+            if wire and not self.stopSent then self.stopSent=true;wire:send({type='stopped',reason=tostring(s.reason)}) end
+            return
+        end
         s:update()
         if s.stopped then return end
+        if wire then
+            self.status='Network phase proof: revision '..s.revision
+            if wire:tick(s,planned,native) then
+                emit('phase_lab_completed',{state=capture(),revision=s.revision,native=native.info(),networked=true})
+                self.status='Network sequence passed - Esc exits';self.done=true
+                native.sessionStop();native.finish()
+            end
+            return
+        end
         if s.revision~=self.stage then return end
         local r,peer
         if self.stage==0 then r=request('move','artillery','artillery',0,3,1,1);peer='guest'
@@ -86,6 +110,7 @@ function M.install(env,mod,native,path)
             self.status='Sequence stopped - Esc exits';self.done=true
             if self.session then self.session:stop('phase-lab:'..tostring(err)) else native.sessionStop();native.finish() end
             emit('phase_lab_failed',{reason=tostring(err)})
+            if wire then pcall(function() wire:send({type='stopped',reason=tostring(err)}) end) end
         end
     end)
     for _,name in ipairs({'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawnAdded','onVekSpawnRemoved',
@@ -94,7 +119,7 @@ function M.install(env,mod,native,path)
         env.modApi.events[event]:subscribe(function(mission)
             if not self.session or self.done then return end
             self.session:phaseEvent(event,mission)
-            if self.ending and not self.session.stopped then
+            if (self.ending or (wire and wire.ending)) and not self.session.stopped then
                 local ok,err=pcall(function()
                     self.phaseProbe=(self.phaseProbe or 0)+1
                     local r=request('move','during-'..event..'-'..self.phaseProbe,'cannon',1,5,0,3)
