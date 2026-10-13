@@ -8,7 +8,10 @@ No third-party game or mod source is vendored in this repository. API references
 | ITB-ModLoader | v2.9.6 | No root license found at inspected tag; distribution includes native/original binaries and separately licensed extensions | Obtained separately, checksum pinned; no bundling |
 | ITB-ModUtils / modApiExt | 1.25 / `21bcb56` | Upstream LICENSE contains GPL v2 text | Existing loader extension API only; not copied |
 | memedit | 1.2.2 / `24fb9af` | Upstream LICENSE contains GPL v3 text | Optional observer getters; enabled/calibrated for movement diagnostics; not copied |
-| IntoTheBreachLua (kartoFlane fork) | `4ecc4a7`; inspected head `dcf22e7` | Upstream LICENSE contains GPL v2 text | Native boundary source audit only; no source/binary vendoring, compilation or installation |
+| IntoTheBreachLua (kartoFlane fork) | `4ecc4a7`; inspected head `dcf22e7` | Upstream LICENSE contains GPL v2 text | Native boundary audit and separately obtained SDL headers for the original bridge; upstream native implementation is not compiled or vendored |
+| Lua headers | 5.1.5 | MIT; official archive SHA-256 in build script | Build input only, obtained separately |
+| SDL headers | 2.0.8 from pinned native source | zlib; upstream SDL header notices | Public ABI declarations only, obtained separately; runtime restricted to tested SDL 2.0.10 |
+| Zig | 0.14.1 | MIT and bundled component licenses; official archive SHA-256 in build script | Portable development compiler, not installed globally or redistributed |
 | Fengari | 0.1.5 | MIT, upstream/package license | Development-only Lua 5.3 VM |
 | luaparse | 0.3.1 | MIT, upstream/package license | Development-only Lua 5.1 syntax check |
 | actions/checkout | [v7.0.1](https://github.com/actions/checkout/releases/tag/v7.0.1) | MIT; exact commit pinned in the workflow | GitHub-hosted CI only |

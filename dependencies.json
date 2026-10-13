@@ -43,7 +43,16 @@
     "loaderBinaryUpdate": "276a70de3e47236602a209ad64d98d2780587984",
     "installedSdlSha256": "7f0765d37a0b3f9946c501be04a55a8e8c63549710675de4311a4579fe8f432a",
     "evidence": "Installed SDL2.dll matches the pinned loader file; upstream update names source PRs 10 and 11. Source head differs from the referenced merge only in README links. Not a reproducible-build proof.",
-    "usage": "Source inspection only; no native build or installation",
+    "usage": "Source inspection and separately obtained SDL headers for original project bridge; no upstream native implementation compilation or vendoring",
+    "redistribute": false
+  },
+  "nativeBuild": {
+    "compiler": "Zig 0.14.1",
+    "target": "x86-windows-gnu",
+    "luaHeaders": "5.1.5",
+    "sdlHeaders": "2.0.8 from pinned native source",
+    "runtimeSdl": "2.0.10 only",
+    "inputs": "tools/Prepare-NativeSdk.ps1 pins archive hashes and header Git revision",
     "redistribute": false
   }
 }

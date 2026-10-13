@@ -1,6 +1,8 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.4.1 executed one validated standard attack with damage, push, normal action consumption, and persisted pawn outcomes after reload. Physical Tab blocking has bounded evidence. Legal movement and complete input authorization remain unresolved; online co-op is not implemented.**
+**Latest increment: probe 0.5.10 passed two bounded programmatic moves, normal undo, a subsequent standard punch, and persisted pawn outcomes after save/reload. Two terrain-health readings differed. This completes the one-scenario single-instance action milestone; general commands, exclusive input ownership and online co-op remain incomplete.**
+
+See [the current movement evidence and build procedure](ui-movement.md). The older increments below are historical, not the current capability boundary.
 
 ## Implemented
 
@@ -44,16 +46,18 @@ Movement setup corrected Artillery's internal type to `ArtiMech` and allowed lea
 
 `settled_candidate` appeared between portions of enemy activity, including before subsequent effects. It is a diagnostic observation, not evidence that all work has drained. memedit now supplies movement-spent reads, with one manual baseline comparison; this does not solve the action authorization boundary or prove full state capture.
 
-Legal programmatic movement, general attack coverage, complete input authorization, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
+General movement and attack coverage, complete input authorization, AI/RNG reproduction, complete state restoration, transport, and two-instance synchronization are unproven. No complete cooperative mission has run. Separate-instance save/Cloud isolation and a second PC/tester have not been established.
 
 Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/abhriguvansh/itb-online-coop), explicitly approved on October 12, 2026. [Live CI results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) are the authority for each pushed revision; local checks alone are not evidence of a successful GitHub run. Source licensing is undecided; no game or upstream code is included.
 
 ## Next playable milestone
 
-Deliver a complete legal movement path alongside the bounded attack path, then exercise serialized actions before adding transport. Inspect the native command boundary; neither failed relocation primitive nor flag repair is a substitute. Keep small experiments inside this larger milestone rather than asking the user to continue after each one.
+Generalize the validated movement route, establish exclusive command ownership, block unsupported undo/reset, and resolve observation/persistence discrepancies before two-instance serialized action replay. The next playable demonstration must use two actual game instances; a mock network test is insufficient. The required 2/1 ownership alternation remains a future session rule.
 
-The [attack record](attack-experiment.md) documents two real submissions, the corrected return-value check, persistence and the remaining tile discrepancy. The [input record](input-gate.md) documents physical Tab, menu coverage and the verified Tab/Escape scan-code helper. No further routine physical-keyboard check is currently requested.
+## Current verification: 0.5.10
 
-## Current source follow-up: 0.4.2
-
-Pending attacks now retain their exclusion of other labs when a rearm or manual disable is attempted. The additional regression checks passed offline. The installed, game-tested probe remains 0.4.1 until the next controlled installation; no new runtime result is claimed for 0.4.2.
+- Two real-game movement submissions passed destination, allowance, active/HP, undo and execution-hook checks; normal Undo restored origin and allowance once.
+- A move followed by the bounded standard punch passed. All observed pawn fields survived Save and Quit/relaunch. Tile health at (0,3) and (2,3) changed from 2 to 4; full snapshot equality failed.
+- Game closed, Steam Cloud up to date, error file empty, and four normal-profile files unchanged by hash.
+- Eleven Lua files parse as 5.1; 136 Lua contracts and 11 log-analysis assertions pass locally. Windows installer fixtures pass. DLL compilation passed with warnings as errors. Native executable checks run in the new GitHub-hosted CI job; consult the exact revision's result.
+- The unsigned local native test executable was not rerun after the reported Norton alert; no security settings or exclusions were changed. See the full [test limitations](ui-movement.md#build-and-tests).

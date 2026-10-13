@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.5.2',
+    version = '0.5.10',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in one-tile movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -23,7 +23,7 @@ function mod:init()
         local open, detail = package.loadlib(path .. '../itb_input.dll', 'luaopen_itb_input')
         assert(open, detail)
         native = open()
-        assert(type(native)=='table' and native.info().abi=='itb-sdl-click-v1','unsupported-native-bridge')
+        assert(type(native)=='table' and native.info().abi=='itb-win32-click-v1','unsupported-native-bridge')
     end)
     self.probe:record('ui_bridge_loaded', {available=loaded, reason=not loaded and tostring(reason) or nil})
     self.movement.bridge = require(path .. 'ui_bridge').new(_G, loaded and native or nil,
@@ -32,6 +32,18 @@ function mod:init()
         function(kind, payload) self.probe:record(kind, payload) end,
         function() return require(path .. 'snapshot').capture(_G, GetCurrentMission(), require(path .. 'json')) end)
     self.inputGate:install()
+    local inputRecords=0
+    self.deliveryTrace=sdl.eventHook(function(event)
+        if self.movement.pending and inputRecords<24 then
+            local t=event:type()
+            if t==sdl.events.mousemotion or t==sdl.events.mousebuttondown or t==sdl.events.mousebuttonup then
+                inputRecords=inputRecords+1
+                self.probe:record('ui_bridge_event_after_loader',{type=t,x=sdl.mouse.x(),y=sdl.mouse.y(),
+                    phase=self.movement.bridge.phase})
+            end
+        end
+        return false
+    end)
     self.attack = require(path .. 'attack').new(_G, self.movement, self.inputGate,
         function(kind, payload) self.probe:record(kind, payload) end,
         function() return require(path .. 'snapshot').capture(_G, GetCurrentMission(), require(path .. 'json')) end,

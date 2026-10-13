@@ -4,25 +4,17 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.4.2, with a game-tested standard attack diagnostic, movement diagnostics, and a temporary input gate. Online co-op is not implemented.**
+**Current version: 0.5.10. A bounded native movement path now passes movement consumption, undo, execution-hook and pawn persistence checks alongside the standard attack lab. Online co-op is not implemented.**
 
-Version 0.4.2 adds an offline-tested fix that keeps other labs excluded while an attack is pending. The real-game attack evidence belongs to 0.4.1.
+Two fresh-process runs moved Artillery through the game's normal UI path. One verified Undo; the other followed movement with a Combat Mech punch, then saved and reloaded with all observed pawn outcomes intact. Two terrain-health readings changed on reload, so full-state equality is still unresolved. [Movement evidence, failures and limits](docs/ui-movement.md).
 
-The read-only trace captured normal movement bookkeeping: undo became available by the execution-start hook, and movement was consumed by execution end. This narrows the missing behavior without claiming a complete action API. [Trace results](docs/move-trace.md).
+This is a working one-route diagnostic on one Windows game instance, not a general movement executor or multiplayer session. The earlier direct relocation methods failed normal bookkeeping; those [native Move](docs/movement-experiment.md) and [effect](docs/effect-experiment.md) failures are retained. The [attack record](docs/attack-experiment.md) documents the original validated punch.
 
-The real-game movement experiment exposed a blocker: `BoardPawn:Move` reached the requested tile but did not consume movement allowance, establish undo state, or emit the normal move execution hooks. The diagnostic detected the failed postcondition and locked itself off. It is a reproducible investigation, not a working legal-movement feature. [Movement test record](docs/movement-experiment.md).
-
-The October 12, 2026 smoke test captured manual moves, Titan Fist attacks, damage, pushes, action consumption, enemy attacks, and spawning. It ran on a disposable profile using Test Mech and the first turn of a normal Archive mission. [Results and limits](docs/feasibility.md#runtime-evidence--october-12-2026) distinguish these observations from general action execution and synchronization, which remain unproven.
-
-The first engineering question is whether the real game exposes reliable action execution, input control, and enough state to keep two instances aligned. This repository records evidence and runnable experiments before choosing a networking design.
-
-The 0.2.2 follow-up submitted a movement effect directly. Its position survived saving/reloading, but movement remained unused and undo unavailable. Both direct movement paths therefore remain unsuitable as legal action executors. [Effect test and next investigation](docs/effect-experiment.md).
-
-The new [native attack experiment](docs/attack-experiment.md) executed a validated Titan Fist attack, consumed the mech action, and preserved damage/push through save and reload. Movement remains the main command-execution blocker.
+The goal remains two actual game instances sharing three mechs. The player controlling two mechs will alternate each battle; ownership will remain fixed through turns, resets and reconnects. That session rule and networking are not implemented yet.
 
 ## What exists
 
-The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. No complete move-command API or new native extension has been established.
+The [native-boundary audit](docs/native-boundary.md) identifies an existing event-consumption path and its ordering/error limitations. The [input-gate test](docs/input-gate.md) blocked a destination click and an End Turn click; the same move succeeded after automatic release. Physical Tab blocking and a blocked menu click now have bounded evidence; broader input coverage remains unproven. The original native input bridge now supplies the narrowly tested movement path described above.
 
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
@@ -34,7 +26,7 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 - A local log summary and field-level comparison tool. Matching digests cover only the observed fields.
 - A targeted probe installer with ownership checks, a verified backup/staging workflow, offline tests, and a GitHub Actions configuration.
 
-There is no action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/reset are merely observed in this diagnostic build. The probe cannot be used as a multiplayer session.
+There is no general action replay, production multiplayer input authorization, transport, deterministic replay claim, or automatic resynchronization. Undo/reset are merely observed in this diagnostic build. The probe cannot be used as a multiplayer session.
 
 ## Baseline
 
@@ -53,7 +45,7 @@ npm test
 npm run check:tracked
 ```
 
-The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 movement, ten trace, 14 input-gate, and 25 attack contract tests under Fengari's Lua 5.3 VM, checks 11 log-analysis assertions, and exercises the installer against inert temporary files, including removal of earlier five-, seven-, eight-, and nine-file probes. It does **not** run the game's Lua 5.1 engine, native extensions, or real game hooks. Passing these checks does not turn the failed in-game movement experiment into a pass. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) show the offline checks for each pushed revision on Windows and Node 22.
+The local suite parses 11 Lua files as Lua 5.1 and runs 136 Lua contracts under Fengari/Lua 5.3, plus 11 log-analysis assertions and inert installer fixtures. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 
@@ -68,15 +60,15 @@ The current offline suite validates Lua 5.1 syntax, executes 19 observer, 49 mov
    Preparation writes only under ignored `.local/`. It backs up saves and affected game files, verifies hashes, and stages the loader. It does not install or launch anything. It refuses to replace an existing staged baseline.
 
 3. Review the private `manifest.json` and [restore instructions](docs/test-plan.md#restore). Installing the loader replaces the game's `lua5.1.dll`, `SDL2.dll`, and `scripts/modloader.lua`; it also adds native libraries and Lua support files. Starting it rewrites `resources/resource.dat`. The originating machine has completed this reviewed installation; repeat the review for another installation. No unfamiliar installer script is needed.
-4. Extract the reviewed upstream ZIP into the game folder as upstream documents, then install only this probe:
+4. Extract the reviewed upstream ZIP into the game folder as upstream documents. Build the original bridge using the [pinned build procedure](docs/ui-movement.md#build-and-tests), then install only this probe:
 
    ```powershell
-   .\tools\Install-Probe.ps1 -GamePath 'YOUR GAME FOLDER' -Mode Install
+   .\tools\Install-Probe.ps1 -GamePath 'YOUR GAME FOLDER' -Mode Install -NativeBridgePath '.local/native-build/itb_input.dll'
    ```
 
 5. Launch one game instance through Steam. Create/select a disposable profile whose displayed name is exactly **`ITB_Coop_Probe`**. Its internal folder key may differ after renaming; the probe checks the displayed name from the loader's profile data.
 6. Open **Mod Content → Configure Mods**, expand **Mod Loader Extensions**, enable **modApiExt**, and enable **ITB Co-op Capability Probe**. Leave memedit and Easy Edit off for this baseline. Close the dialog to save, then restart the game. The probe defaults to disabled: explicitly selecting both entries avoids the fresh-configuration dependency failure encountered during testing.
-7. Use Rift Walkers, standard equipment, Normal difficulty, and advanced content off. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test). Leave the movement lab off for observation. To reproduce the current effect-path failure, use the separate [effect procedure](docs/effect-experiment.md#repeat-and-next-investigation), which changes the disposable timeline and requires memedit. The older native-move procedure describes version 0.2.0.
+7. Use Rift Walkers, standard equipment, Normal difficulty, and advanced content off. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test). Leave the movement lab off for observation. For the current movement lab, enable/calibrate memedit and read the exact supported route and layout in [the movement record](docs/ui-movement.md). To inspect the historical effect-path failure, use the separate [effect procedure](docs/effect-experiment.md#repeat-and-next-investigation), which changes the disposable timeline and requires memedit. The older native-move procedure describes version 0.2.0.
 
 The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Steam showed Cloud **Up to date** before and after the single-instance test; no Cloud settings were changed. Separate-instance save and Cloud isolation remains unverified. The four pre-existing normal-profile files matched their backup hashes after the test.
 
