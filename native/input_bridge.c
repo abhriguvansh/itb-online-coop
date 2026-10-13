@@ -1,4 +1,4 @@
-/* Original bounded Windows mouse input bridge. No game addresses, hooks or state writes.
+/* Original bounded Windows mouse input bridge. No game addresses or state writes.
  * Uses the public SDL2/Lua 5.1 ABI from separately obtained headers.
  * Input submission is NOT action completion or complete input authorization. */
 #include <windows.h>
@@ -72,6 +72,7 @@ static int own_foreground(void) {
     return native_window && foreground()==native_window && window_owner(native_window,&owner)
         && owner==GetCurrentProcessId();
 }
+#include "window_guard.h"
 typedef char event_size_check[sizeof(SDL_Event)==56 ? 1 : -1];
 typedef char button_layout_check[offsetof(SDL_MouseButtonEvent,x)==20 ? 1 : -1];
 static int result(lua_State *L,int ok,const char *message) {
@@ -101,12 +102,16 @@ static int begin(lua_State *L) {
     InterlockedExchange(&release_failed,0);InterlockedExchange(&releases,0);
     p_SDL_GetWindowSize(target,&width,&height);
     if(width<640 || height<480 || width>8192 || height>8192) return result(L,0,"window-size");
+    guard_tick();
+    if(guard_active && (guarded_window!=native_window || guard_tails()))return result(L,0,"guard-window-or-held-input");
+    if(!guard_active && !guard_install(5000,1)) return result(L,0,"window-guard-unavailable");
     window_id=p_SDL_GetWindowID(target); started=p_SDL_GetTicks(); clicks=0; armed=1;
     return result(L,1,"armed-for-two-clicks");
 }
 static int aim(lua_State *L) {
     double x,y; POINT point; INPUT input;
-    if(!armed || !own_foreground() || p_SDL_GetKeyboardFocus()!=target || p_SDL_GetTicks()-started>5000 || held())
+    guard_tick();
+    if(!armed || !guard_active || guard_expired || !own_foreground() || p_SDL_GetKeyboardFocus()!=target || p_SDL_GetTicks()-started>5000 || held())
         return result(L,0,"aim-session-invalid");
     if(p_lua_gettop(L)!=2 || p_lua_type(L,1)!=LUA_TNUMBER || p_lua_type(L,2)!=LUA_TNUMBER)
         return result(L,0,"aim-coordinates-invalid");
@@ -129,8 +134,9 @@ static int aim(lua_State *L) {
 }
 static int click(lua_State *L) {
     INPUT input; int x,y,w,h; double dx,dy;
+    guard_tick();
     if(!armed || clicks>=2) return result(L,0,"click-budget-exhausted");
-    if(!own_foreground() || pressed || release_failed || p_SDL_GetKeyboardFocus()!=target || p_SDL_GetTicks()-started>5000 || held()) {
+    if(!guard_active || guard_expired || !own_foreground() || pressed || release_failed || p_SDL_GetKeyboardFocus()!=target || p_SDL_GetTicks()-started>5000 || held()) {
         armed=0; return result(L,0,"focus-timeout-or-held-input");
     }
     p_SDL_GetWindowSize(target,&w,&h);
@@ -159,9 +165,27 @@ static int click(lua_State *L) {
     }
     return result(L,1,"mouse-down-submitted-release-scheduled");
 }
-static int finish(lua_State *L) { cleanup_press();armed=0;target=NULL;return result(L,1,"stopped"); }
+static int finish(lua_State *L) {
+    cleanup_press();armed=0;target=NULL;
+    if(guard_owned)guard_active=0;
+    return result(L,1,"stopped");
+}
+static int guard_begin(lua_State *L) {
+    SDL_SysWMinfo wm;
+    if(armed || guard_active || held())return result(L,0,"guard-busy-or-held");
+    SDL_Window *window=p_SDL_GetKeyboardFocus();
+    if(!window)return result(L,0,"guard-no-focus");
+    memset(&wm,0,sizeof(wm));SDL_VERSION(&wm.version);
+    if(!p_SDL_GetWindowWMInfo(window,&wm) || wm.subsystem!=SDL_SYSWM_WINDOWS)
+        return result(L,0,"guard-window-backend");
+    native_window=wm.info.win.window;
+    if(!guard_install(20000,0))return result(L,0,"guard-install-failed");
+    return result(L,1,"guarded-for-20-seconds");
+}
+static int guard_end(lua_State *L) { guard_active=0;guard_expired=1;return result(L,1,"guard-stopped"); }
 static int info(lua_State *L) {
     int mx=0,my=0;POINT cursor={0,0};
+    guard_tick();
     p_SDL_GetMouseState(&mx,&my);
     p_lua_createtable(L,0,4);
     p_lua_pushnumber(L,mx);p_lua_setfield(L,-2,"mouseX");
@@ -170,7 +194,14 @@ static int info(lua_State *L) {
         p_lua_pushnumber(L,cursor.x);p_lua_setfield(L,-2,"cursorX");
         p_lua_pushnumber(L,cursor.y);p_lua_setfield(L,-2,"cursorY");
     }
-    p_lua_pushstring(L,"itb-win32-click-v1");p_lua_setfield(L,-2,"abi");
+    p_lua_pushstring(L,"itb-win32-click-v2");p_lua_setfield(L,-2,"abi");
+    p_lua_pushboolean(L,guard_active);p_lua_setfield(L,-2,"guardActive");
+    p_lua_pushnumber(L,guard_active?guard_duration-(p_SDL_GetTicks()-guard_started):0);p_lua_setfield(L,-2,"guardRemainingMs");
+    p_lua_pushnumber(L,blocked_mouse);p_lua_setfield(L,-2,"blockedMouse");
+    p_lua_pushnumber(L,blocked_keys);p_lua_setfield(L,-2,"blockedKeys");
+    p_lua_pushnumber(L,blocked_raw);p_lua_setfield(L,-2,"blockedRaw");
+    p_lua_pushnumber(L,passed_tagged);p_lua_setfield(L,-2,"passedTagged");
+    p_lua_pushnumber(L,guard_tails());p_lua_setfield(L,-2,"guardHeld");
     p_lua_pushnumber(L,sizeof(void*)*8);p_lua_setfield(L,-2,"bits");
     p_lua_pushnumber(L,clicks);p_lua_setfield(L,-2,"clicks");
     p_lua_pushboolean(L,pressed);p_lua_setfield(L,-2,"pressed");
@@ -196,5 +227,7 @@ __declspec(dllexport) int __cdecl luaopen_itb_input(lua_State *L) {
     p_lua_pushcclosure(L,aim,0);p_lua_setfield(L,-2,"aim");
     p_lua_pushcclosure(L,click,0);p_lua_setfield(L,-2,"click");
     p_lua_pushcclosure(L,finish,0);p_lua_setfield(L,-2,"finish");
-    p_lua_pushcclosure(L,info,0);p_lua_setfield(L,-2,"info");return 1;
+    p_lua_pushcclosure(L,info,0);p_lua_setfield(L,-2,"info");
+    p_lua_pushcclosure(L,guard_begin,0);p_lua_setfield(L,-2,"guardBegin");
+    p_lua_pushcclosure(L,guard_end,0);p_lua_setfield(L,-2,"guardEnd");return 1;
 }

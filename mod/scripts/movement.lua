@@ -125,6 +125,7 @@ function movement.new(env, emit, path)
     end
     function self:reset(reason)
         if self.bridge then self.bridge:stop() end
+        if self.bridge and self.bridge.unlock then self.bridge:unlock() end
         if self.pending then
             self.fault = true
             emit('move_failed', { reason = 'context-changed:' .. reason })

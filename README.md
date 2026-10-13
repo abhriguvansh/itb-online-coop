@@ -4,7 +4,9 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current version: 0.6.0. Cannon and Artillery completed different multi-tile moves in one game session, with native preview validation, consumed movement, undo bookkeeping and pawn persistence. Online co-op is not implemented.**
+**Current source: 0.7.0, an experimental game-window input guard awaiting live verification. Latest completed game milestone: 0.6.0 multi-mech movement and pawn persistence. Online co-op is not implemented.**
+
+The [new guard experiment](docs/window-guard.md) separates the bridge's tagged mouse input from ordinary game-window input before the loader UI. Its bounded timeout is a diagnostic, not a multiplayer failure policy.
 
 Cannon moved three tiles and Artillery moved two through the game's normal UI path. Both retained their ability to attack, and all observed pawn fields survived save/reload. Four terrain-health readings changed, so full-state equality remains unresolved. Earlier tests verified normal Undo and a subsequent Combat Mech punch. [Movement evidence, failures and limits](docs/ui-movement.md).
 

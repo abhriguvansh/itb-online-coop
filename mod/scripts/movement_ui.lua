@@ -17,9 +17,22 @@ function ui.install(env, lab, gate, attack)
     env.modApi.events.onWindowHidden:subscribe(function(id) windows[id] = nil; lab.blocked = next(windows) ~= nil end)
     env.modApi.events.onFrameDrawStart:subscribe(function()
         gate:update()
+        if lab.bridge then lab.bridge:pollGuard() end
         local root = env.sdlext.getUiRoot()
         if not root then return end
         if not controls.toggle then
+            controls.guarded = button(root, 654, 'Guarded move + lock 20s', function()
+                if not lab.armed or lab.pending or lab.fault or not lab.bridge then return end
+                for id=0,2 do
+                    local request=lab:preview(id)
+                    if request then
+                        local ok,reason=pcall(function() lab.bridge:lock() end)
+                        if ok then lab:request(request) else lab.status=tostring(reason) end
+                        return
+                    end
+                end
+                lab.status='No unused supported mech for guarded move'
+            end)
             controls.attack = button(root, 556, 'Enable attack lab', function()
                 if attack.armed then attack:disarm() else attack:arm() end
             end)
@@ -44,6 +57,9 @@ function ui.install(env, lab, gate, attack)
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID == 'Mission_Artillery'
         end)
         visible = ok and visible == true
+        controls.guarded.visible=visible and lab.armed and not gate.active and not attack.armed
+        controls.guarded:caption(lab.bridge.guardStatus or 'Guarded move + lock 20s')
+        controls.guarded:settooltip('One validated move, then block window mouse/keyboard until the 20-second diagnostic expires.')
         controls.attack.visible = visible and not gate.active and not lab.armed
         controls.attack:caption(attack.armed and 'Disable attack lab' or 'Enable attack lab')
         controls.attack:settooltip(attack.status)

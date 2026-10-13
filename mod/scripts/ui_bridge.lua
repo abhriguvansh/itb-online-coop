@@ -26,9 +26,31 @@ function bridge.new(env, native, emit)
         self.aimPoint,self.waitLogged=approach,false
     end
     function self:stop()
-        if native then native.finish() end
+        if native then
+            if self.phase~='off' then emit('ui_bridge_guard_result',native.info()) end
+            native.finish()
+        end
         self.phase='off'
         self.preview=nil
+    end
+    function self:lock()
+        assert(self.phase=='off' and native and native.info().abi=='itb-win32-click-v2','guard-unavailable')
+        local ok,reason=native.guardBegin();assert(ok,reason)
+        self.guardWatching=true
+        emit('ui_guard_start',native.info())
+    end
+    function self:unlock()
+        if native and native.guardEnd then native.guardEnd() end
+        self:pollGuard()
+    end
+    function self:pollGuard()
+        if not self.guardWatching then return end
+        local state=native.info()
+        self.guardStatus='Native input blocked: '..math.ceil(state.guardRemainingMs/1000)..'s'
+        if not state.guardActive then
+            self.guardWatching=false;self.guardStatus=nil
+            emit('ui_guard_end',state)
+        end
     end
     function self:observePreview(pawn,weapon,from,to)
         if self.phase=='off' or self.phase=='submitted' or not self.command then return end
@@ -38,7 +60,7 @@ function bridge.new(env, native, emit)
     end
     function self:start(command, validate)
         assert(self.phase=='off','bridge-already-active')
-        assert(native and native.info().abi=='itb-win32-click-v1','native-bridge-unavailable')
+        assert(native and native.info().abi=='itb-win32-click-v2','native-bridge-unavailable')
         local valid,reason=validate();assert(valid,reason)
         local selected=env.Board:GetSelectedPawn()
         -- Pinned loader modapi/pawn.lua maps weapon index 0 to the Move skill.

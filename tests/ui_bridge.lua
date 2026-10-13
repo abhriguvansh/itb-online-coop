@@ -17,7 +17,7 @@ local function fixture()
     e.pawn={GetId=function()return 2 end,GetArmedWeaponId=function()return 0 end}
     n.aims={}
     n.aim=function(x,y)n.x,n.y=x,y;n.aims[#n.aims+1]={x=x,y=y};return true end
-    n.info=function()return {abi='itb-win32-click-v1',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
+    n.info=function()return {abi='itb-win32-click-v2',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
     n.begin=function()n.begins=n.begins+1;return true end
     n.click=function(x,y)n.calls[#n.calls+1]={x=x,y=y};return true,2 end
     n.finish=function()n.finishes=n.finishes+1 end
@@ -125,4 +125,23 @@ test('a different actor and longer route require the same native preview guard',
     e.preview();b:update();assert(#n.calls==1 and b.phase=='submitted')
 end)
 
+test('diagnostic guard records expiry and cannot silently stay watched',function()
+    local e,n,b=fixture();local active=false
+    n.info=function()return {abi='itb-win32-click-v2',guardActive=active,guardRemainingMs=active and 20000 or 0}end
+    n.guardBegin=function()active=true;return true end
+    n.guardEnd=function()active=false end
+    b:lock();assert(b.guardWatching and e.logs[1].kind=='ui_guard_start')
+    b:pollGuard();assert(b.guardStatus=='Native input blocked: 20s')
+    b:stop();assert(active) -- Finishing a move does not end the diagnostic lease.
+    b:unlock();assert(not b.guardWatching and not b.guardStatus and e.logs[2].kind=='ui_guard_end')
+end)
+test('failed native guard arming never starts a command',function()
+    local e,n,b=fixture();n.guardBegin=function()return false,'held-input'end
+    assert(not pcall(function()b:lock()end));assert(not b.guardWatching and #n.calls==0 and n.begins==0)
+end)
+test('guard cannot overlap an already active command',function()
+    local e,n,b,c,v=fixture();b:start(c,v)
+    n.guardBegin=function()error('must not reach native lock')end
+    assert(not pcall(function()b:lock()end) and not b.guardWatching and #n.calls==0)
+end)
 print('UI bridge contracts: '..passed..' passed.')
