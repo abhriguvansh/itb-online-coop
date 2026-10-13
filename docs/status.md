@@ -1,6 +1,8 @@
 # Status — October 12, 2026
 
-**Latest increment: probe 0.6.0 passed sequential three-tile Cannon and two-tile Artillery moves in one process. Fresh native previews matched each request; both consumed movement, retained attack availability, and established undo. All observed pawn fields survived reload; four terrain-health readings differed. Exclusive input ownership and online co-op remain incomplete.**
+**Latest increment: probe 0.7.1 completed a native move under the game-window guard, blocked a competing Undo click, and allowed Undo after expiry. Post-move and guard-end partial states matched exactly. Broader exclusive input ownership and online co-op remain incomplete.**
+
+See [the guard evidence, preserved failure and limits](window-guard.md). The earlier 0.6.0 sequential Cannon/Artillery moves and pawn persistence remain valid; four terrain-health readings differed on reload and remain unresolved.
 
 See [the current movement evidence and build procedure](ui-movement.md). The older increments below are historical, not the current capability boundary.
 

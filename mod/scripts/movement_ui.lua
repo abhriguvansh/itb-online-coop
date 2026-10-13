@@ -57,7 +57,7 @@ function ui.install(env, lab, gate, attack)
                 and not env.sdlext.isConsoleOpen() and mission and mission.ID == 'Mission_Artillery'
         end)
         visible = ok and visible == true
-        controls.guarded.visible=visible and lab.armed and not gate.active and not attack.armed
+        controls.guarded.visible=visible and (lab.armed or lab.bridge.guardWatching) and not gate.active and not attack.armed
         controls.guarded:caption(lab.bridge.guardStatus or 'Guarded move + lock 20s')
         controls.guarded:settooltip('One validated move, then block window mouse/keyboard until the 20-second diagnostic expires.')
         controls.attack.visible = visible and not gate.active and not lab.armed

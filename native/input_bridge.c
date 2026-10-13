@@ -127,7 +127,7 @@ static int aim(lua_State *L) {
     memset(&input,0,sizeof(input));input.type=INPUT_MOUSE;
     input.mi.dx=(LONG)(((double)(point.x-left)+0.5)*65536.0/desktop_w);
     input.mi.dy=(LONG)(((double)(point.y-top)+0.5)*65536.0/desktop_h);
-    input.mi.dwFlags=MOUSEEVENTF_MOVE|MOUSEEVENTF_ABSOLUTE|MOUSEEVENTF_VIRTUALDESK;
+    input.mi.dwFlags=MOUSEEVENTF_MOVE|MOUSEEVENTF_MOVE_NOCOALESCE|MOUSEEVENTF_ABSOLUTE|MOUSEEVENTF_VIRTUALDESK;
     input.mi.dwExtraInfo=0x49544243;
     if(!own_foreground() || send_input(1,&input,sizeof(input))!=1) return result(L,0,"motion-rejected");
     return result(L,1,"aimed-await-frame");
@@ -202,6 +202,7 @@ static int info(lua_State *L) {
     p_lua_pushnumber(L,blocked_raw);p_lua_setfield(L,-2,"blockedRaw");
     p_lua_pushnumber(L,passed_tagged);p_lua_setfield(L,-2,"passedTagged");
     p_lua_pushnumber(L,guard_tails());p_lua_setfield(L,-2,"guardHeld");
+    p_lua_pushstring(L,guard_trace);p_lua_setfield(L,-2,"guardTrace");
     p_lua_pushnumber(L,sizeof(void*)*8);p_lua_setfield(L,-2,"bits");
     p_lua_pushnumber(L,clicks);p_lua_setfield(L,-2,"clicks");
     p_lua_pushboolean(L,pressed);p_lua_setfield(L,-2,"pressed");

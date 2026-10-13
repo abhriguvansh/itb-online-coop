@@ -57,7 +57,7 @@ static UINT WINAPI send_fake(UINT count,LPINPUT input,int size){
     assert(input->mi.dwExtraInfo==0x49544243);
     if(!send_ok)return 0;
     if(input->mi.dwFlags==MOUSEEVENTF_LEFTDOWN)downs++;
-    else if(input->mi.dwFlags==(MOUSEEVENTF_MOVE|MOUSEEVENTF_ABSOLUTE|MOUSEEVENTF_VIRTUALDESK)) {
+    else if(input->mi.dwFlags==(MOUSEEVENTF_MOVE|MOUSEEVENTF_MOVE_NOCOALESCE|MOUSEEVENTF_ABSOLUTE|MOUSEEVENTF_VIRTUALDESK)) {
         assert(input->mi.dx==17083 && input->mi.dy==30371);warps++;
     }
     else {assert(input->mi.dwFlags==MOUSEEVENTF_LEFTUP);ups++;}

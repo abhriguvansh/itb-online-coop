@@ -2,6 +2,7 @@
  * Runs on the window thread, before SDL's window procedure. The marker separates
  * cooperative input sources; it is not authentication against a malicious process. */
 #include <commctrl.h>
+#include <stdio.h>
 #define INPUT_MARKER ((ULONG_PTR)0x49544243)
 static BOOL (WINAPI *set_subclass)(HWND,SUBCLASSPROC,UINT_PTR,DWORD_PTR)=OS_DEFAULT(SetWindowSubclass);
 static BOOL (WINAPI *remove_subclass)(HWND,SUBCLASSPROC,UINT_PTR)=OS_DEFAULT(RemoveWindowSubclass);
@@ -14,6 +15,8 @@ static int guard_active, guard_owned, guard_expired;
 static Uint32 guard_started,guard_duration;
 static unsigned blocked_mouse,blocked_keys,passed_tagged,blocked_raw;
 static unsigned char blocked_held[256];
+static char guard_trace[2048];
+static unsigned guard_trace_count;
 static int guard_tails(void) {
     int n=0;for(int i=0;i<256;i++)n+=blocked_held[i]!=0;return n;
 }
@@ -50,6 +53,12 @@ static LRESULT CALLBACK guard_proc(HWND hwnd,UINT msg,WPARAM wp,LPARAM lp,UINT_P
     }
     /* Allow only the bridge's mouse message family, never tagged keyboard input.
      * Releases may still be queued when finish() disarms the command. */
+    if(guard_active && mouse_message && guard_trace_count<16) {
+        size_t used=strlen(guard_trace);
+        snprintf(guard_trace+used,sizeof(guard_trace)-used,"%u:%d,%d:%lx;",msg,
+            (int)(short)LOWORD(lp),(int)(short)HIWORD(lp),(unsigned long)message_extra());
+        guard_trace_count++;
+    }
     if((ULONG_PTR)message_extra()==INPUT_MARKER &&
         (msg==WM_MOUSEMOVE || msg==WM_LBUTTONDOWN || msg==WM_LBUTTONUP)) {
         if(guard_active)passed_tagged++;
@@ -85,5 +94,6 @@ static int guard_install(Uint32 duration,int owned) {
     guard_active=1;guard_owned=owned;guard_expired=0;
     guard_started=p_SDL_GetTicks();guard_duration=duration;
     blocked_mouse=blocked_keys=passed_tagged=blocked_raw=0;
+    guard_trace[0]=0;guard_trace_count=0;
     return 1;
 }

@@ -1,8 +1,24 @@
-# Game-window input guard — 0.7.0 experiment
+# Game-window input guard — 0.7.1 experiment
 
 ## Evidence status
 
-Source implemented and local DLL compilation passed. The Lua suite passes 154 contracts plus 11 log-analysis assertions; installer fixtures pass. Native executable contracts run only on GitHub's Windows runner. Real-game results are pending. The established game evidence remains [0.6.0 movement](ui-movement.md); this experiment is not multiplayer authorization.
+Game-verified on the disposable profile: one tagged Artillery move completed during the 20-second guard; a competing Undo click left the observed state unchanged; after expiry, Undo restored origin and movement allowance. This does not establish complete multiplayer authorization. Local DLL compilation and 154 Lua contracts plus 11 log-analysis assertions pass. Native executable contracts run only on GitHub's Windows runner; consult the exact revision's Actions result.
+
+## Live evidence — October 12, 2026
+
+The initial 0.7.0 run failed safely: tagged approach motion reached SDL, but final motion did not, leaving the Windows and SDL cursors different. No destination click or movement execution occurred. The lab timed out without changing the pawn, and the 20-second guard released. Windows motion coalescing was the working hypothesis, not a proven root cause.
+
+Version 0.7.1 adds `MOUSEEVENTF_MOVE_NOCOALESCE` to bridge motion and a bounded trace of the first 16 mouse messages. It retains the strict marker check. The retry trace showed both tagged approach/final motions reaching the window, interleaved with untagged same-position motions which were blocked. No coordinate-based exception was added.
+
+- Sequence 21 verified the fresh native preview for Artillery 2, (0,2) to (1,1). Sequences 24/27 recorded Move execution start/end. Sequence 31 confirmed movement consumed, HP 2 unchanged, active true and undo origin (0,2).
+- Sequence 32 recorded two submitted clicks, two releases and eight tagged messages passed, with about 19 seconds left on the guard. Seven untagged mouse messages had already been blocked; these are not all competing user actions.
+- A normal automated click on Undo during the remaining countdown did not undo the move. At expiry, sequence 33 recorded 13 blocked mouse messages and zero held tails. Its entire partial state equals the post-move settled candidate at sequence 30 (zero field differences).
+- The next Undo click completed after guard expiry: sequence 34 is the undo hook, and sequence 35 shows only Artillery position (1,1) to (0,2) and movementSpent true to false changing in the partial snapshot. This supplies the positive control; it was not a second confirmed blocked attempt.
+- The game was saved and closed normally. Steam showed Cloud up to date. The error file was empty and all four normal-profile files matched the pre-run hashes. The moved position was undone before saving; this run is not a new movement-persistence test.
+
+Private evidence: `.local/evidence/window-guard-0.7.0-failed/modloader.log`, SHA-256 `aa2ead4a6dbf672d57196c1f471b6a9e0051581c16e820a92eb405827329b7dc`; successful retry `.local/evidence/window-guard-0.7.1/modloader.log`, SHA-256 `9941fc683f3c8c971ca0d14e69387000712f91f44701891577b3eca46d7d8dd1`. Tested DLL SHA-256 `2b52c5df0c8e07abb78e6f53429d0eaf8768445ab645694c304e20a7cc290aa3`. Raw logs and binaries remain untracked.
+
+The new guard still needs live keyboard/menu, available Reset, held-across-expiry and focus-loss checks. Earlier SDL-gate evidence does not transfer automatically. The diagnostic trace records mouse message identifiers, coordinates and extra-info markers only; it does not record keyboard text.
 
 ## Boundary
 
@@ -14,7 +30,7 @@ Each movement command requires the window guard; missing installation, wrong thr
 
 Suppressed presses remain tracked after expiry until their releases arrive; fresh presses then pass. Focus loss aborts the command and ends active filtering while preserving tracked release tails. Expiry is checked by window callbacks and regular status polls; a frozen game cannot run either, but the guard does not affect other applications. Callback code does not call Lua. The DLL is pinned for the process lifetime to prevent a dangling callback during Lua teardown; destruction removes the subclass. Counters describe blocked message classes and tagged passes without recording key text.
 
-This is an opt-in, bounded diagnostic that releases on failure/timeout. A future multiplayer session needs a distinct stopped-session policy, ownership validation, controller policy, and confirmed blocking for every supported mutation route. Undo/reset are not yet claimed covered by this new guard. Never promote its mocked contracts into real-game evidence.
+This is an opt-in, bounded diagnostic that releases on failure/timeout. A future multiplayer session needs a distinct stopped-session policy, ownership validation, controller policy, and confirmed blocking for every supported mutation route. One Undo route now has paired evidence; Reset remains untested. Never promote its mocked contracts into real-game evidence.
 
 ## Planned live check
 
