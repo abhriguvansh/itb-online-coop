@@ -10,8 +10,9 @@ function expected(session,revision,state){
   return {...r,kind:values[0],actor:values[1],fromX:values[2],fromY:values[3],toX:values[4],toY:values[5]};
 }
 class PhaseCoordinator{
-  constructor(session,send,record,interactive=false){this.interactive=interactive;this.limit=interactive?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
+  constructor(session,send,record,interactive=false,now=()=>performance.now()){this.now=now;this.interactive=interactive;this.limit=interactive?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
   require(ok,reason){if(!ok)throw Error(reason);}
+  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');}
   context(m,revision){
     this.require(m.revision===revision && m.phase===(this.interactive||revision<3?'player2':'player3'),'wrong-phase-or-revision');
     this.require(typeof m.witness==='string' && m.witness.length>0 && Buffer.byteLength(m.witness)<=65536,'invalid-witness');
@@ -32,10 +33,11 @@ class PhaseCoordinator{
     this.mode='proposal';this.send(owners[this.stage],this.frame('PROPOSE',owners[this.stage],ids[this.stage]));
   }
   receive(peer,m){
+    this.tick();
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.11.0' && m.interactive===this.interactive,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.11.1' && m.interactive===this.interactive,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -61,9 +63,21 @@ class PhaseCoordinator{
         this.require(pawn && pawn.position.x===r.fromX && pawn.position.y===r.fromY && !pawn.movementSpent,'stale-actor');
         this.used.add(peer+'/'+r.id);
       }else this.require(canonical(m.request)===canonical(expected(this.session,this.stage,this.states.host)),'proposal-conflict');
-      this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request:m.request});
-      this.pendingId=m.request.id;
-      this.both({...this.frame('EXEC',peer,m.request.id),...(this.interactive?{move:m.request}:{})});return;
+      if(this.interactive){
+        this.mode='preparing';this.prepared={};this.prepareDeadline=this.now()+3000;
+        this.proposal={peer,request:m.request};
+        this.record({type:'prepare',origin:peer,request:m.request});
+        this.both({...this.frame('PREPARE',peer,m.request.id),move:m.request});return;
+      }
+      this.dispatch(peer,m.request);return;
+    }
+    if(m.type==='prepared'){
+      this.require(this.interactive && this.mode==='preparing' && !this.prepared[peer],'unexpected-prepared');
+      this.require(m.origin===this.proposal.peer && canonical(m.request)===canonical(this.proposal.request),'prepared-request-conflict');
+      this.require(m.native?.guardActive===true && m.native?.sessionState===1 && m.native?.releaseFailed===false && m.native?.armed===false && m.native?.pressed===false,'prepared-protection-lost');
+      this.prepared[peer]=true;
+      if(this.prepared.host && this.prepared.guest)this.dispatch(this.proposal.peer,this.proposal.request);
+      return;
     }
     if(m.type==='observed'){
       this.require(this.mode==='executing' && !this.receipts[peer] && m.id===this.pendingId,'unexpected-outcome');
@@ -83,6 +97,11 @@ class PhaseCoordinator{
       return;
     }
     throw Error('unknown-message');
+  }
+  dispatch(peer,request){
+    this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request});
+    this.pendingId=request.id;
+    this.both({...this.frame('EXEC',peer,request.id),...(this.interactive?{move:request}:{})});
   }
 }
 function main(root,interactive=false){
@@ -121,6 +140,7 @@ function main(root,interactive=false){
     });
   });
   const timer=setInterval(()=>{
+    try{core.tick();}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
     if(started && Date.now()-started>(interactive?600000:180000)){stop('experiment-deadline');return;}
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});

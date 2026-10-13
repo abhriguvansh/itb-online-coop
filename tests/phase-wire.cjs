@@ -6,7 +6,7 @@ const guard={guardActive:true,sessionState:1,releaseFailed:false};
 function fixture(){
   const sent=[],events=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e));
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.0',interactive:false,...context(0)});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.1',interactive:false,...context(0)});
   return {c,sent,events,send};
 }
 let count=0;
@@ -55,16 +55,18 @@ console.log(count+' coordinator contracts passed; fake peer messages only.');
 function interactiveFixture(){
   const state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:0,position:{x:3,y:3},movementSpent:false},{localId:2,position:{x:0,y:3},movementSpent:false}]};
   const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},sent=[];
-  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true);
+  let time=0;const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>time);
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.0',interactive:true,...ctx});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.1',interactive:true,...ctx});
   const r={session,encounter:'artillery-checkpoint',...ctx,id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
-  return {c,send,sent,r,ctx};
+  const prepare=()=>{for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request:r,native:{...guard,armed:false,pressed:false}});};
+  return {c,send,sent,r,ctx,prepare,elapse:ms=>{time+=ms;}};
 }
 test('interactive barrier waits for explicit proposal and transmits chosen destination',()=>{
-  const {c,send,sent,r,ctx}=interactiveFixture();assert.equal(sent.filter(x=>x.frame.kind==='INPUT').length,2);
+  const {c,send,sent,r,ctx,prepare}=interactiveFixture();assert.equal(sent.filter(x=>x.frame.kind==='INPUT').length,2);
   assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,0);send('guest',{type:'proposal',request:r});
-  assert.equal(sent.at(-1).frame.move.toY,2);assert.equal(c.mode,'executing');
+  assert.equal(sent.at(-1).frame.move.toY,2);assert.equal(c.mode,'preparing');
+  assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,0);prepare();assert.equal(c.mode,'executing');
   for(const peer of ['host','guest'])send(peer,{type:'observed',id:r.id,...ctx,revision:1,native:guard});
   assert.equal(c.stage,1);assert.equal(c.mode,'proposal');
 });
@@ -73,8 +75,39 @@ test('interactive peer cannot command teammate or stale witness',()=>{
   f=interactiveFixture();assert.throws(()=>f.send('guest',{type:'proposal',request:{...f.r,witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[]})}}),/invalid-move-envelope/);
 });
 test('interactive duplicate during execution cannot submit a second move',()=>{
-  const {send,r,sent}=interactiveFixture();send('guest',{type:'proposal',request:r});
+  const {send,r,sent,prepare}=interactiveFixture();send('guest',{type:'proposal',request:r});prepare();
   assert.throws(()=>send('guest',{type:'proposal',request:r}),/unexpected-proposal/);
   assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,2);
 });
 console.log('Interactive transport checks complete; fake messages only.');
+test('missing runtime preparation times out without dispatch despite bridge traffic',()=>{
+  const f=interactiveFixture();f.send('guest',{type:'proposal',request:f.r});
+  f.send('guest',{type:'prepared',origin:'guest',request:f.r,native:{...guard,armed:false,pressed:false}});
+  f.elapse(3000);assert.throws(()=>f.c.tick(),/game-prepare-timeout/);
+  assert.throws(()=>f.send('host',{type:'prepared',origin:'guest',request:f.r,native:{...guard,armed:false,pressed:false}}),/game-prepare-timeout/);
+  assert.equal(f.sent.filter(x=>x.frame.kind==='EXEC').length,0);
+});
+test('changed, duplicate or unprotected preparation never dispatches',()=>{
+  for(const failure of ['changed','duplicate','guard']){
+    const f=interactiveFixture();f.send('guest',{type:'proposal',request:f.r});
+    const ack={type:'prepared',origin:'guest',request:f.r,native:{...guard,armed:false,pressed:false}};
+    if(failure==='changed')ack.request={...f.r,toY:7};
+    if(failure==='guard')ack.native.sessionState=2;
+    if(failure==='duplicate')f.send('host',ack);
+    assert.throws(()=>f.send('host',ack));assert.equal(f.sent.filter(x=>x.frame.kind==='EXEC').length,0);
+  }
+});
+test('both owned moves need fresh preparation and both outcomes before completion',()=>{
+  const f=interactiveFixture();let ctx=f.ctx;
+  for(const [index,origin,actor,id,x,y,tx,ty] of [[0,'guest','artillery',2,0,3,0,2],[1,'host','combat',0,3,3,3,2]]){
+    const r={...f.r,...ctx,id:`move-${origin}-1`,actor,fromX:x,fromY:y,toX:tx,toY:ty};
+    f.send(origin,{type:'proposal',request:r});assert.equal(f.c.mode,'preparing');
+    for(const peer of ['guest','host'])f.send(peer,{type:'prepared',origin,request:r,native:{...guard,armed:false,pressed:false}});
+    const state=JSON.parse(ctx.witness);const pawn=state.pawns.find(p=>p.localId===id);pawn.position={x:tx,y:ty};pawn.movementSpent=true;
+    ctx={revision:index+1,phase:'player2',witness:JSON.stringify(state)};
+    for(const peer of ['host','guest'])f.send(peer,{type:'observed',id:r.id,...ctx,native:guard});
+  }
+  assert.equal(f.c.mode,'finishing');assert.equal(f.sent.filter(x=>x.frame.kind==='EXEC').length,4);
+  for(const peer of ['host','guest'])f.send(peer,{type:'complete',revision:2,witness:ctx.witness,native:guard});
+  assert.equal(f.c.mode,'complete');
+});

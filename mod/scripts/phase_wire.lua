@@ -9,12 +9,12 @@ function M.decode(text,session)
     if base then text=base..'\n'..body end
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
-    assert(kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT','wire-kind')
+    assert(kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=4 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
     assert(#witness<=65536 and not witness:find('[\r\n]'),'wire-witness')
-    if base then assert(kind=='EXEC' and (actor=='combat' or actor=='cannon' or actor=='artillery'),'wire-move') end
+    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery'),'wire-move') end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
         id=id,kind='move',actor=actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
@@ -43,7 +43,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.11.0',interactive=self.interactive})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.11.1',interactive=self.interactive})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -76,8 +76,23 @@ function M.open(env,json,emit)
                 elseif m.kind=='CONSENT' then
                     assert(s.revision==2 and m.id=='end-turn','wire-consent-context')
                     assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true),'wire-consent-rejected')
+                elseif m.kind=='PREPARE' then
+                    assert(self.interactive and m.move and not self.pending and not self.prepared,'wire-prepare-context')
+                    self.inputReady=false
+                    local ok,reason=s:previewMove(m.peer,m.move)
+                    assert(ok,'wire-prepare-rejected:'..tostring(reason))
+                    local n=native.info()
+                    assert(n.guardActive and n.sessionState==1 and not n.releaseFailed and not n.armed and not n.pressed,'wire-prepare-protection')
+                    self.prepared={peer=m.peer,request=json.encode(m.move),at=now()}
+                    self:send({type='prepared',origin=m.peer,request=m.move,native=n})
+                    emit('network_command_prepared',{peer=m.peer,id=m.id,revision=s.revision})
                 elseif m.kind=='EXEC' then
-                    if self.interactive then assert(m.move,'wire-move-missing');r=m.move;self.inputReady=false end
+                    if self.interactive then
+                        assert(m.move,'wire-move-missing');r=m.move;self.inputReady=false
+                        local p=self.prepared
+                        assert(p and p.peer==m.peer and p.request==json.encode(r) and now()-p.at<5000,'wire-exec-not-prepared')
+                        self.prepared=nil
+                    end
                     assert(not self.pending and m.id==r.id,'wire-unexpected-command')
                     local result=s:submit(m.peer,r)
                     assert(result.status=='pending','wire-command-rejected:'..tostring(result.reason))
