@@ -23,3 +23,12 @@ s.revision=1;ui:update(s,false);assert(not ui.draft and not ui.actor)
 current.intentSerial=2;current.intentX=20;current.intentY=470;ui:update(s,false)
 assert(not ui.actor and #sent==1) -- dropped/multiple clicks never become intent
 print('8 interactive intent contracts passed; blocked-input and game behavior require live verification.')
+wire.phaseRun=true;wire.peer='host';s.revision=1;wire.inputReady=true
+s.previewAction=function(_,peer,r)return peer=='host' and r.kind=='lab-punch' end
+ui:update(s,false);ui:click(20,390,s);ui:click(800,600,s)
+assert(ui.draft.kind=='lab-punch' and #sent==1);ui:click(20,610,s);assert(#sent==2 and sent[2].kind=='lab-punch')
+local readyCount=0;wire.ready=function()readyCount=readyCount+1;wire.readyInput=false end
+s.revision=2;wire.inputReady=false;wire.readyInput=true;ui:update(s,false);assert(readyCount==0)
+ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==1)
+ui:click(20,610,s);assert(readyCount==1)
+print('2 selected punch/readiness UI contracts passed; fake clicks only.')

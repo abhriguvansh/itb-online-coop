@@ -177,6 +177,40 @@ function M.new(o)
         move.armed=false
         return ok,ok and 'supported-move' or tostring(reason)
     end
+    function self:previewAction(peer,r)
+        if type(r)=='table' and r.kind=='move' then return self:previewMove(peer,r) end
+        if not players[peer] or not envelope(r) then return false,'invalid-action-draft' end
+        if not health() then return false,self.reason end
+        if pending then return false,'command-pending-renew-intent' end
+        if r.session~=o.session or r.encounter~=o.encounter or r.phase~=self.phase
+            or r.revision~=self.revision or r.witness~=witness()
+            or o.env.Game:GetTeamTurn()~=o.env.TEAM_PLAYER or o.env.Game:GetTurnCount()~=self.turn then
+            return false,'stale-draft-renew-intent'
+        end
+        local lab
+        if r.kind=='end-turn' then
+            if not ending then return false,'end-turn-unavailable' end
+            for player in pairs(players) do
+                local consent=ready[player]
+                if not consent or consent.phase~=r.phase or consent.revision~=r.revision or consent.witness~=r.witness then
+                    return false,'both-players-must-be-ready'
+                end
+            end
+            lab=ending
+        else
+            local entity=registry[r.actor]
+            if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
+            if entity.pawnId~=0 or r.fromX~=3 or r.fromY~=3 or r.toX~=2 or r.toY~=3 then return false,'unsupported-punch-scenario' end
+            lab=attack
+        end
+        local ok,armed=pcall(function()return lab:arm()end)
+        local reason=lab.status
+        if lab==attack then attack:disarm() else lab.armed=false end
+        if not ok then self:stop('validation-exception');return false,self.reason end
+        if not armed then return false,reason end
+        if not health() or r.witness~=witness() then return false,self.reason or 'stale-draft-renew-intent' end
+        return true,'supported-action'
+    end
     function self:update()
         if not health() then return end
         local ok = pcall(function() move:update(); attack:update();if ending then ending:update() end end)

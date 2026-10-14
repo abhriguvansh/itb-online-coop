@@ -6,7 +6,7 @@ const guard={guardActive:true,sessionState:1,releaseFailed:false};
 function fixture(){
   const sent=[],events=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e));
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.2',interactive:false,...context(0)});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:false,...context(0)});
   return {c,sent,events,send};
 }
 let count=0;
@@ -57,7 +57,7 @@ function interactiveFixture(){
   const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},sent=[];
   let time=0;const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>time);
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.11.2',interactive:true,...ctx});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:true,...ctx});
   const r={session,encounter:'artillery-checkpoint',...ctx,id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
   const prepare=()=>{for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request:r,native:{...guard,armed:false,pressed:false}});};
   return {c,send,sent,r,ctx,prepare,elapse:ms=>{time+=ms;}};
@@ -110,4 +110,34 @@ test('both owned moves need fresh preparation and both outcomes before completio
   assert.equal(f.c.mode,'finishing');assert.equal(f.sent.filter(x=>x.frame.kind==='EXEC').length,4);
   for(const peer of ['host','guest'])f.send(peer,{type:'complete',revision:2,witness:ctx.witness,native:guard});
   assert.equal(f.c.mode,'complete');
+});
+
+test('selected phase requires two explicit ready messages and fresh preparation for all four actions',()=>{
+ const sent=[],state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:0,position:{x:3,y:3},active:true},{localId:1,position:{x:1,y:5},movementSpent:false},{localId:2,position:{x:0,y:3},movementSpent:false}]};
+ const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true);
+ const send=(peer,m)=>c.receive(peer,{session,peer,...m});let ctx={revision:0,phase:'player2',witness:JSON.stringify(state)};
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:true,phaseRun:true,...ctx});
+ for(let n=0;n<4;n++){
+  const origin=['guest','host','host','guest'][n],r=expected(session,n,ctx);
+  if(n!==2)r.id=(n===1?'attack-':'move-')+origin+'-'+(n+1);
+  if(n===2){
+   assert.equal(c.mode,'readiness');assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,4);
+   send('host',{type:'ready',confirmUnused:true,...ctx});assert.equal(c.mode,'readiness');
+   assert.throws(()=>send('host',{type:'ready',confirmUnused:true,...ctx}),/unexpected-readiness/);
+   assert.throws(()=>send('guest',{type:'ready',confirmUnused:true,...ctx,witness:context(2).witness}),/stale-readiness/);
+   assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,4);
+   send('guest',{type:'ready',confirmUnused:true,...ctx});
+  }else send(origin,{type:'proposal',request:r});
+  assert.equal(c.mode,'preparing');
+  send('host',{type:'prepared',origin,request:r,native:{...guard,armed:false,pressed:false}});assert.equal(c.mode,'preparing');
+  send('guest',{type:'prepared',origin,request:r,native:{...guard,armed:false,pressed:false}});assert.equal(c.mode,'executing');
+  assert.throws(()=>send('guest',{type:'proposal',request:r}),/unexpected-proposal/);
+  ctx={revision:n+1,phase:n<2?'player2':'player3',witness:JSON.stringify(state)};
+  send('host',{type:'observed',id:r.id,...ctx,native:guard});assert.equal(c.mode,'executing');
+  send('guest',{type:'observed',id:r.id,...ctx,native:guard});
+ }
+ assert.equal(c.mode,'finishing');assert.equal(sent.filter(x=>x.frame.kind==='PREPARE').length,8);
+ assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,8);
+ for(const peer of ['host','guest'])send(peer,{type:'complete',revision:4,witness:ctx.witness,native:guard});
+ assert.equal(c.mode,'complete');
 });

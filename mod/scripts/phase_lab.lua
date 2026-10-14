@@ -24,7 +24,7 @@ function M.install(env,mod,native,path)
     local function check(value,reason) assert(value,reason) end
     if wire and wire.interactive then
         self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit})
-        self.status='Interactive co-op moves'
+        self.status=wire.phaseRun and 'Interactive co-op phase' or 'Interactive co-op moves'
     end
     local function start()
         check(not self.used and not mod.movement.armed and not mod.movement.pending
@@ -52,6 +52,7 @@ function M.install(env,mod,native,path)
         local s=self.session
         if s.stopped then
             self.status='Stopped: '..tostring(s.reason)..' - Esc exits'
+            if self.intent then self.intent:update(s,false) end
             if wire and not self.stopSent then self.stopSent=true;wire:send({type='stopped',reason=tostring(s.reason)}) end
             return
         end

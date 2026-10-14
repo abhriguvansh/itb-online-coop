@@ -14,10 +14,10 @@ function M.decode(text,session)
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=4 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
     assert(#witness<=65536 and not witness:find('[\r\n]'),'wire-witness')
-    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery'),'wire-move') end
+    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch'),'wire-move') end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
-        id=id,kind='move',actor=actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
+        id=id,kind=actor=='punch' and 'lab-punch' or 'move',actor=actor=='punch' and 'combat' or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
 end
 function M.open(env,json,emit)
     local root=env.os.getenv('ITB_COOP_WIRE_DIR')
@@ -25,12 +25,14 @@ function M.open(env,json,emit)
     assert(root=='C:/ITBCoopProbe/Wire','unsupported-wire-directory')
     local f=assert(env.io.open(root..'/session.txt','rb'),'wire-config-missing')
     local config=f:read(256);f:close()
+    local phaseRun=config:sub(-18)=='interactive-phase\n'
+    if phaseRun then config=config:sub(1,-19)..'interactive\n' end
     local interactive=config:sub(-12)=='interactive\n'
     if interactive then config=config:sub(1,-13) end
     local session,peer=config:match('^([%w-]+)\n(host)\n$')
     if not session then session,peer=config:match('^([%w-]+)\n(guest)\n$') end
     assert(ident(session) and peer,'wire-config-invalid')
-    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,limit=interactive and 2 or 4}
+    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,limit=interactive and not phaseRun and 2 or 4}
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
         assert(self.tx<=32,'wire-output-limit')
@@ -43,13 +45,19 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.11.2',interactive=self.interactive})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.12.0',interactive=self.interactive,phaseRun=self.phaseRun})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
         assert(r.revision==self.inputRevision and r.witness==self.inputWitness,'wire-stale-draft')
         self.inputReady=false
         self:send({type='proposal',request=r})
+    end
+    function self:ready(s,r)
+        assert(self.phaseRun and self.readyInput and not self.readySent,'wire-not-accepting-readiness')
+        assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true),'wire-local-readiness-rejected')
+        self.readySent=true;self.readyInput=false
+        self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=true})
     end
     function self:tick(s,request,native)
         assert(now()-self.since<(self.interactive and 600000 or 180000),'wire-experiment-timeout')
@@ -72,23 +80,26 @@ function M.open(env,json,emit)
                     self:send({type='proposal',request=r})
                 elseif m.kind=='READY' then
                     assert(s.revision==2 and m.id=='end-turn','wire-readiness-context')
-                    self:send({type='ready',revision=s.revision,phase=s.phase,witness=r.witness,confirmUnused=true})
+                    if self.phaseRun then self.inputReady=false;self.readyInput=true
+                    else self:send({type='ready',revision=s.revision,phase=s.phase,witness=r.witness,confirmUnused=true}) end
                 elseif m.kind=='CONSENT' then
                     assert(s.revision==2 and m.id=='end-turn','wire-consent-context')
                     assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true),'wire-consent-rejected')
                 elseif m.kind=='PREPARE' then
-                    assert(self.interactive and m.move and not self.pending and not self.prepared,'wire-prepare-context')
+                    assert(self.interactive and (m.move or (self.phaseRun and r.kind=='end-turn')) and not self.pending and not self.prepared,'wire-prepare-context')
+                    local preparedRequest=m.move or r
                     self.inputReady=false
-                    local ok,reason=s:previewMove(m.peer,m.move)
+                    local ok,reason
+                    if self.phaseRun then ok,reason=s:previewAction(m.peer,preparedRequest) else ok,reason=s:previewMove(m.peer,preparedRequest) end
                     assert(ok,'wire-prepare-rejected:'..tostring(reason))
                     local n=native.info()
                     assert(n.guardActive and n.sessionState==1 and not n.releaseFailed and not n.armed and not n.pressed,'wire-prepare-protection')
-                    self.prepared={peer=m.peer,request=json.encode(m.move),at=now()}
-                    self:send({type='prepared',origin=m.peer,request=m.move,native=n})
+                    self.prepared={peer=m.peer,request=json.encode(preparedRequest),at=now()}
+                    self:send({type='prepared',origin=m.peer,request=preparedRequest,native=n})
                     emit('network_command_prepared',{peer=m.peer,id=m.id,revision=s.revision})
                 elseif m.kind=='EXEC' then
                     if self.interactive then
-                        assert(m.move,'wire-move-missing');r=m.move;self.inputReady=false
+                        assert(m.move or (self.phaseRun and r.kind=='end-turn'),'wire-command-missing');r=m.move or r;self.inputReady=false
                         local p=self.prepared
                         assert(p and p.peer==m.peer and p.request==json.encode(r) and now()-p.at<5000,'wire-exec-not-prepared')
                         self.prepared=nil

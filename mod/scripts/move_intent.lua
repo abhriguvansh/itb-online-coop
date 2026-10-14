@@ -8,7 +8,20 @@ function M.new(o)
         self.draft=nil;self.status=tostring(reason)
         o.emit('move_intent_rejected',{reason=self.status,peer=o.wire.peer})
     end
+    local function preview(s,r)
+        if o.wire.phaseRun then return s:previewAction(o.wire.peer,r) end
+        return s:previewMove(o.wire.peer,r)
+    end
     function self:click(x,y,s)
+        if o.wire.phaseRun and o.wire.readyInput and not s.stopped then
+            if x>=8 and x<298 and y>=600 and y<636 then
+                local r=o.request('end-turn','end-turn')
+                o.wire:ready(s,r)
+                o.emit('end_turn_intent_ready',{peer=o.wire.peer,revision=r.revision,witness=r.witness,confirmUnused=true})
+                self.status='Ready; waiting for teammate'
+            end
+            return
+        end
         if not o.wire.inputReady or s.stopped then return end
         if x>=8 and x<298 then
             local actor=y>=380 and y<416 and 'combat' or y>=420 and y<456 and 'cannon'
@@ -16,13 +29,16 @@ function M.new(o)
             if actor then
                 self.actor=nil;self.draft=nil
                 if actors[actor].owner~=o.wire.peer then reject('That mech belongs to your teammate');return end
-                self.actor=actor;self.status='Click a supported destination on the board'
+                if o.wire.phaseRun and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
+                    reject('Unsupported actor for this phase test');return
+                end
+                self.actor=actor;self.status=o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
                 o.emit('move_intent_selected',{actor=actor,peer=o.wire.peer});return
             end
             if y>=640 and y<676 then self.actor=nil;self.draft=nil;self.status='Move canceled; choose a mech';return end
             if y>=600 and y<636 then
                 if not self.draft then reject('Choose a mech and destination first');return end
-                local ok,reason=s:previewMove(o.wire.peer,self.draft)
+                local ok,reason=preview(s,self.draft)
                 if not ok then reject(reason);return end
                 o.wire:propose(self.draft)
                 o.emit('move_intent_submitted',{request=self.draft,peer=o.wire.peer})
@@ -37,10 +53,11 @@ function M.new(o)
         if not pawn then reject('Mech unavailable');return end
         local from=pawn:GetSpace();self.counter=self.counter+1
         assert(self.counter<=999,'intent-limit')
-        local r=o.request('move','move-'..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
-        local ok,reason=s:previewMove(o.wire.peer,r)
+        local attacking=o.wire.phaseRun and s.revision==1
+        local r=o.request(attacking and 'lab-punch' or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
+        local ok,reason=preview(s,r)
         if not ok then reject(reason);return end
-        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm move'
+        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm '..(attacking and 'punch' or 'move')
         o.emit('move_intent_draft',{request=r,peer=o.wire.peer})
     end
     function self:update(s,done)
@@ -56,7 +73,8 @@ function M.new(o)
             elseif not contiguous then reject('Multiple clicks; choose again') end
         end
         if done or s.stopped then self.status='Experiment ended - Escape exits'
-        elseif not o.wire.inputReady then self.status='Waiting for the other game / move completion' end
+        elseif o.wire.readyInput then self.status='End Turn includes unused units; both must agree'
+        elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion' end
         return self.status
     end
     function self:draw(root,visible)
@@ -66,7 +84,7 @@ function M.new(o)
                     :decorate({o.env.DecoButton(),o.env.DecoAlign(0,2),o.env.DecoCaption()}):addTo(root)
                 self.controls[key].onclicked=function() return true end
             end
-            label('title',340,'Co-op movement: '..o.wire.peer)
+            label('title',340,'Co-op actions: '..o.wire.peer)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
@@ -74,6 +92,8 @@ function M.new(o)
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
+        self.controls.confirm:caption(o.wire.readyInput and 'Ready End Turn (unused units OK)'
+            or o.wire.phaseRun and self.revision==1 and 'Confirm punch' or 'Confirm move')
     end
     return self
 end

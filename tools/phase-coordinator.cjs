@@ -10,11 +10,11 @@ function expected(session,revision,state){
   return {...r,kind:values[0],actor:values[1],fromX:values[2],fromY:values[3],toX:values[4],toY:values[5]};
 }
 class PhaseCoordinator{
-  constructor(session,send,record,interactive=false,now=()=>performance.now()){this.now=now;this.interactive=interactive;this.limit=interactive?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
+  constructor(session,send,record,interactive=false,now=()=>performance.now(),phaseRun=false){this.phaseRun=phaseRun;this.now=now;this.interactive=interactive;this.limit=interactive&&!phaseRun?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
   require(ok,reason){if(!ok)throw Error(reason);}
   tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');}
   context(m,revision){
-    this.require(m.revision===revision && m.phase===(this.interactive||revision<3?'player2':'player3'),'wrong-phase-or-revision');
+    this.require(m.revision===revision && m.phase===((this.interactive&&!this.phaseRun)||revision<3?'player2':'player3'),'wrong-phase-or-revision');
     this.require(typeof m.witness==='string' && m.witness.length>0 && Buffer.byteLength(m.witness)<=65536,'invalid-witness');
     const state=JSON.parse(m.witness);
     this.require(state.schema==='itb-observation-v1' && Array.isArray(state.unavailable) && state.unavailable.length===0,'incomplete-state');
@@ -28,7 +28,7 @@ class PhaseCoordinator{
     this.require(this.states.host.witness===this.states.guest.witness,'observed-state-divergence');
     this.record({type:'barrier',revision:this.stage,witness:this.states.host.witness,fullStateProof:false});
     if(this.stage===this.limit){this.mode='finishing';this.both(this.frame('DONE'));return;}
-    if(this.interactive){this.mode='proposal';this.both(this.frame('INPUT'));return;}
+    if(this.interactive){this.mode=this.phaseRun&&this.stage===2?'readiness':'proposal';this.both(this.frame(this.mode==='readiness'?'READY':'INPUT','-',this.mode==='readiness'?'end-turn':'-'));return;}
     if(this.stage===2){this.mode='readiness';this.both(this.frame('READY','-','end-turn'));return;}
     this.mode='proposal';this.send(owners[this.stage],this.frame('PROPOSE',owners[this.stage],ids[this.stage]));
   }
@@ -37,7 +37,7 @@ class PhaseCoordinator{
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.11.2' && m.interactive===this.interactive,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.12.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -46,7 +46,8 @@ class PhaseCoordinator{
       this.context(m,2);this.require(m.witness===this.states[peer].witness,'stale-readiness');this.consents[peer]=true;
       if(this.consents.host && this.consents.guest){
         for(const origin of ['host','guest'])this.both(this.frame('CONSENT',origin,'end-turn'));
-        this.mode='proposal';this.send('host',this.frame('PROPOSE','host','end-turn'));
+        if(this.phaseRun){this.prepare('host',expected(this.session,2,this.states.host));}
+        else {this.mode='proposal';this.send('host',this.frame('PROPOSE','host','end-turn'));}
       }return;
     }
     if(m.type==='proposal'){
@@ -55,19 +56,17 @@ class PhaseCoordinator{
         const r=m.request,entities={combat:{peer:'host',id:0},cannon:{peer:'guest',id:1},artillery:{peer:'guest',id:2}};
         this.require(r && Object.hasOwn(entities,r.actor) && entities[r.actor].peer===peer,'actor-not-owned');
         this.context(r,this.stage);
-        const state=this.states.host,shape={session:this.session,encounter:'artillery-checkpoint',phase:state.phase,revision:this.stage,witness:state.witness,id:r.id,kind:'move',actor:r.actor,fromX:r.fromX,fromY:r.fromY,toX:r.toX,toY:r.toY};
-        this.require(typeof r.id==='string' && /^move-(host|guest)-[1-9][0-9]{0,2}$/.test(r.id) && canonical(r)===canonical(shape),'invalid-move-envelope');
+        if(this.phaseRun)this.require((this.stage===0&&r.kind==='move'&&r.actor==='artillery')||(this.stage===1&&r.kind==='lab-punch'&&r.actor==='combat'&&r.fromX===3&&r.fromY===3&&r.toX===2&&r.toY===3)||(this.stage===3&&r.kind==='move'&&r.actor==='cannon'),'unsupported-phase-action');
+        const state=this.states.host,shape={session:this.session,encounter:'artillery-checkpoint',phase:state.phase,revision:this.stage,witness:state.witness,id:r.id,kind:this.phaseRun&&this.stage===1?'lab-punch':'move',actor:r.actor,fromX:r.fromX,fromY:r.fromY,toX:r.toX,toY:r.toY};
+        this.require(typeof r.id==='string' && /^(move|attack)-(host|guest)-[1-9][0-9]{0,2}$/.test(r.id) && canonical(r)===canonical(shape),'invalid-move-envelope');
         this.require(!this.used.has(peer+'/'+r.id),'duplicate-request');
         this.require(['fromX','fromY','toX','toY'].every(k=>Number.isInteger(r[k])&&r[k]>=0&&r[k]<=7),'invalid-coordinate');
         const pawn=JSON.parse(state.witness).pawns.find(p=>p.localId===entities[r.actor].id);
-        this.require(pawn && pawn.position.x===r.fromX && pawn.position.y===r.fromY && !pawn.movementSpent,'stale-actor');
+        this.require(pawn && pawn.position.x===r.fromX && pawn.position.y===r.fromY && (r.kind==='move'?!pawn.movementSpent:pawn.active===true),'stale-actor');
         this.used.add(peer+'/'+r.id);
       }else this.require(canonical(m.request)===canonical(expected(this.session,this.stage,this.states.host)),'proposal-conflict');
       if(this.interactive){
-        this.mode='preparing';this.prepared={};this.prepareDeadline=this.now()+3000;
-        this.proposal={peer,request:m.request};
-        this.record({type:'prepare',origin:peer,request:m.request});
-        this.both({...this.frame('PREPARE',peer,m.request.id),move:m.request});return;
+        this.prepare(peer,m.request);return;
       }
       this.dispatch(peer,m.request);return;
     }
@@ -98,20 +97,25 @@ class PhaseCoordinator{
     }
     throw Error('unknown-message');
   }
+  prepare(peer,request){
+    this.mode='preparing';this.prepared={};this.prepareDeadline=this.now()+3000;this.proposal={peer,request};
+    this.record({type:'prepare',origin:peer,request});
+    this.both({...this.frame('PREPARE',peer,request.id),...(request.kind==='end-turn'?{}:{move:request})});
+  }
   dispatch(peer,request){
     this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request});
     this.pendingId=request.id;
-    this.both({...this.frame('EXEC',peer,request.id),...(this.interactive?{move:request}:{})});
+    this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&request.kind!=='end-turn'?{move:request}:{})});
   }
 }
-function main(root,interactive=false){
+function main(root,interactive=false,phaseRun=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
   const peers={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
   const record=value=>fs.appendFileSync(path.join(root,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...value})+'\n');
   const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(JSON.stringify(value)+'\n');};
-  const core=new PhaseCoordinator(session,send,record,interactive);
+  const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun);
   function stop(reason,success=false){
     if(stopped)return;stopped=true;clearInterval(timer);record({type:success?'passed':'stopped',reason});
     if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(JSON.stringify({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''})+'\n');
@@ -147,10 +151,10 @@ function main(root,interactive=false){
   },1000);
   server.on('error',e=>stop(e.message));
   server.listen(0,'127.0.0.1',()=>{
-    for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive},null,2));
+    for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun},null,2));
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
 module.exports={PhaseCoordinator,expected};
-if(require.main===module){try{main(process.argv[2],process.argv[3]==='--interactive');}catch(e){console.error(e.message);process.exitCode=1;}}
+if(require.main===module){try{main(process.argv[2],['--interactive','--interactive-phase'].includes(process.argv[3]),process.argv[3]==='--interactive-phase');}catch(e){console.error(e.message);process.exitCode=1;}}

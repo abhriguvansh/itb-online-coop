@@ -14,8 +14,8 @@ assert(not pcall(wire.decode,dynamic:gsub('|0|3|0|2','|0|3|8|2'),'test-session')
 assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
 local json=dofile('mod/scripts/json.lua')
-local function runtime()
-    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\ninteractive\n'}
+local function runtime(phaseRun)
+    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun and 'interactive-phase\n' or 'interactive\n')}
     local clock,previews,submits=0,0,0
     local env={os={getenv=function()return root end,rename=function(a,b)files[b]=files[a];files[a]=nil;return true end},
         modApi={elapsedTime=function()return clock end},io={open=function(p,mode)
@@ -42,3 +42,18 @@ f=runtime();f.native.info=function()return {guardActive=true,sessionState=1,rele
 f=runtime();f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();f.add(dynamic:gsub('EXEC','PREPARE'));assert(not pcall(f.tick));_,n=f.counts();assert(n==0)
 f=runtime();f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();f.s.revision=1;f.add(dynamic);assert(not pcall(f.tick));_,n=f.counts();assert(n==0)
 print('8 runtime prepare/execute contracts passed; in-memory mailbox and game doubles only.')
+
+local punch=wire.decode('PREPARE|test-session|host|1|player2|attack-host-1|punch|3|3|2|3\n{}','test-session').move
+assert(punch.kind=='lab-punch' and punch.actor=='combat')
+f=runtime(true);assert(f.w.phaseRun and f.w.interactive and f.w.limit==4)
+f.s.revision=2;f.r.revision=2;f.r.id='end-turn';f.r.kind='end-turn';f.r.confirmUnused=true
+local consents={};f.s.setReady=function(_,peer)consents[peer]=true;return true end
+f.s.previewAction=function()return consents.host and consents.guest end
+f.add('READY|test-session|-|2|player2|end-turn\n{}');f.tick()
+assert(f.w.readyInput and not f.files[f.root..'/out-0002.json'])
+f.w:ready(f.s,f.r);assert(not f.w.readyInput and f.files[f.root..'/out-0002.json']:find('ready'))
+assert(not pcall(function()f.w:ready(f.s,f.r)end))
+f.add('CONSENT|test-session|host|2|player2|end-turn\n{}');f.tick()
+f.add('PREPARE|test-session|host|2|player2|end-turn\n{}');f.tick();assert(f.w.prepared)
+f.add('EXEC|test-session|host|2|player2|end-turn\n{}');f.tick();local _,n=f.counts();assert(n==1 and f.w.ending)
+print('3 selected-phase framing/readiness contracts passed; fake mailbox only.')
