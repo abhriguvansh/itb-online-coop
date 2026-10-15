@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.15.0',
+    version = '0.16.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',

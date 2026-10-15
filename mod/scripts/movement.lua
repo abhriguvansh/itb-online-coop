@@ -39,7 +39,7 @@ function movement.new(env, emit, path)
     end
     local function pawnState(pawn)
         local state = { position = xy(pawn:GetSpace()), health = pawn:GetHealth(), active = pawn:IsActive(),
-            movementSpent = pawn:IsMovementSpent(), undoPossible = pawn:IsUndoPossible() }
+            movementSpent = pawn:IsMovementSpent(), undoPossible = pawn:IsUndoPossible(), fire=pawn:IsFire() }
         if path ~= 'native' then state.undoPosition = xy(pawn:GetUndoLoc()) end
         return state
     end
@@ -58,7 +58,7 @@ function movement.new(env, emit, path)
         idle()
         if sessionMode then self.bridge:startSession(sessionMode=='timeout') else self.bridge:lock() end
     end
-    local function safeTile(p, origin)
+    local function safeTile(p, origin, transit)
         local b = env.Board
         local terrain = b:GetTerrain(p)
         -- UI submission also supports entering a clear forest through normal engine handling.
@@ -66,7 +66,11 @@ function movement.new(env, emit, path)
             and b:GetItem(p) == '', 'unsupported-tile')
         for _, method in ipairs({ 'IsFire', 'IsAcid', 'IsSmoke', 'IsFrozen', 'IsSpawning',
                 'IsPod', 'IsCracked', 'IsEnvironmentDanger', 'IsDangerous', 'IsDangerousItem' }) do
-            need(b[method](b, p) == false, 'unsafe-tile:' .. method)
+            local value=b[method](b,p)
+            -- Normal-control proof: crossing a burning intermediate tile does not ignite
+            -- these ground mechs. Origin/destination and every other hazard stay restricted.
+            local fireTransit=path=='ui' and transit and method=='IsFire' and value==true
+            need(value==false or fireTransit,'unsafe-tile:'..method)
         end
     end
     local function validate(request, allowPending)
@@ -116,7 +120,7 @@ function movement.new(env, emit, path)
                 need(integer(point.x) and integer(point.y) and env.Board:IsValid(point)==true,'invalid-path-point')
                 local key=point.x..':'..point.y
                 need(not visited[key],'path-cycle');visited[key]=true
-                safeTile(point,i==1)
+                safeTile(point,i==1,i>1 and i<count)
                 if i>1 then
                     local previous=route:index(i-1)
                     need(math.abs(point.x-previous.x)+math.abs(point.y-previous.y)==1,'nonadjacent-path-step')
@@ -270,7 +274,7 @@ function movement.new(env, emit, path)
             return pawnState(env.Board:GetPawn(p.command.pawnId))
         end)
         local matches = ok and same(after.position, p.command.to) and after.movementSpent == true
-            and after.active == p.before.active and after.health == p.before.health
+            and after.active == p.before.active and after.health == p.before.health and after.fire==p.before.fire
         if path ~= 'native' then
             matches = matches and after.undoPossible == true and same(after.undoPosition, p.command.from)
         end

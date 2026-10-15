@@ -2,7 +2,7 @@
 local M = {}
 local order={'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawningEnd',
     'onPreEnvPlanned','onPostEnvPlanned','onNextTurn'}
-function M.new(env,native,emit,capture)
+function M.new(env,native,emit,capture,phaseSettled)
     local self={armed=false,used=false,fault=false,status='End Turn off',frame=0,updates=0}
     local function context()
         assert(env.Profile and env.Profile.visible_name=='ITB_Coop_Probe'
@@ -73,6 +73,7 @@ function M.new(env,native,emit,capture)
             local n=native.info()
             if p.step==7 then
                 assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and env.Game:GetTurnCount()==p.turn+1,'player-phase-lost')
+                if phaseSettled and not phaseSettled(p.turn) then return end
                 if self.updates<=p.playerUpdate or self.frame<=p.playerFrame then return end
                 local state,idle=capture()
                 assert(state.unavailable and #state.unavailable==0,'incomplete-phase-observation')

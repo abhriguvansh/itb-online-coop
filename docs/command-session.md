@@ -1,6 +1,6 @@
 # Protected command session — October 13, 2026
 
-**Current: probe 0.13.0 verifies same-mech movement on successive turns and a second End Turn in both games. Grid defeat stopped the corrected run safely; a complete playable battle remains open. See the final evidence section.**
+**Current: probe 0.16.0 coordinates native spawning and selected actions through two surviving enemy phases and combat victory from the disposable player-2 checkpoint. The protocol stops protected at the mission-end hook; post-retreat outcome acknowledgment remains unimplemented. [Latest evidence](#coordinated-spawning-and-combat-to-victory--probe-0160-october-15).**
 
 **Historical probe 0.10.0: the restricted two-instance network milestone passed.** Two independently running Windows guests executed guest-origin movement → host-origin punch → protected native End Turn with both-peer readiness and normal unused-unit confirmation → enemy/environment/spawn/planning → guest-origin movement on player turn 3. Requests and outcomes crossed real TCP. Intent remains scripted for one checkpoint; this is not general determinism, full-state synchronization or a playable human-selected session. The historical increments below retain their original evidence scopes.
 
@@ -312,3 +312,43 @@ The first recorded enemy-selection random result already differs. The exact earl
 Both VMs were subsequently verified shut down. Final source review moved the mission-context stop ahead of optional mission-end logging, so a diagnostic failure cannot prevent that stop. This final ordering change is offline-checked only and is not installed in the shut-down guests; mission-end remains unverified.
 
 **Next action (recommended model: GPT-6.1 Sol, High reasoning):** prove a narrow coordinated spawn choice using the host's real native selection, including enemy type and native-selected location, with both-peer preconditions and normal spawner bookkeeping. Preserve stop-on-uncertainty and do not patch observations to manufacture agreement. Confirm the boundary before extending it to multiple spawns. Mission completion, all-squad coverage, lobby/room codes, campaign voting and recovery remain deferred.
+# Coordinated spawning and combat to victory — probe 0.16.0 (October 15)
+
+**Game-verified:** two real, independently running Windows game instances used selected actions over TCP from the disposable player-2 checkpoint through two surviving enemy phases, the final player turn, and visible **Region Secured** screens. This finishes combat from an existing checkpoint; it does not test deployment or player turn 1. The protocol deliberately stopped at `onMissionEnd`, before retreat/result processing completed. A clean multiplayer mission-completion acknowledgment is still unimplemented.
+
+The restricted spawn adapter intercepts normal `Mission_Artillery` spawn batches only during an authorized protected End Turn. Both peers compare the captured board and observed spawner bookkeeping before selection. The host invokes normal `NextPawn` once, records its bounded `random_int` transcript, and uses native placement. The guest consumes its ordinary selection draws once while using the agreed results, checks type/ID/bookkeeping, then uses the normal loader path at the host-selected tile. Both post-spawn observations must match before release. No allowance setters, seed repair, post-state overwrites, executable network payloads or uncertain-action retries are used. Native placement can consume different RNG internally; this does not synchronize all RNG or AI.
+
+The live experiment exposed an additional phase race. The player-turn hook and renewed allowances can occur while a deferred spawn exchange remains incomplete. End Turn now also requires the observed batch's exact count to finish and release, including a normal zero-spawn batch. A bounded 0.2-second native effect-queue wait keeps the engine from advancing team/allowance state during the exchange. Each spawn exchange has a 20-second deadline, each batch a 25-second deadline, and the existing heartbeat and overall phase deadlines remain. Logging errors, changed preconditions and timeout stop protected.
+
+## Final paired run
+
+Run 9 used the final installed source and unchanged native DLL. It demonstrated:
+
+- 17 dispatched commands, each with fresh preparation from both actual runtimes; 16 completed commands produced matching observation barriers 1–16, following matching initial barrier 0.
+- Five legal movements, nine base-weapon attacks and two complete End Turn postconditions. Both games reached player turns 3 and 4 with restored allowances. Each observed all 16 recorded phase-event payloads and rejected 19 phase-time command probes.
+- One coordinated native `Scorpion1`, local ID 123, queued at (5,3). Pre-spawn and post-spawn board/spawner observations matched. The second phase's native batch contained zero new spawns; the first coordinated enemy surfaced normally and planned the same observed attack in both games.
+- A legal friendly-fire/collision tactic consumed Cannon's attack, left Combat alive at one health and removed the threatening Scorpion in both games. The final-turn Artillery push and Combat fire-transit movement/punch also matched.
+- The seventeenth command was the final End Turn. Both games reached the mission-end hook with equal captured partial state, grid 1, all three mechs and the support unit alive, and protected stopped guards (`sessionState=2`, `guardActive=true`, no release failure). The coordinator stopped at the first mission-end report rather than declaring completion. Both displays subsequently showed Region Secured, the support objective, identical pilot XP, reputation 1 and 538 civilians protected. Flavor dialogue differed.
+
+The final End Turn has no successful protocol outcome barrier. The mission-end hook is **observation only**, and equal hook snapshots or visible rewards do not prove complete mission-state synchronization. There is no post-retreat acknowledgment, deployment proof, whole-campaign synchronization, all-squad compatibility or two-human usability claim.
+
+## Preserved failures and controls
+
+| Attempt | Observed result and resulting change |
+|---|---|
+| Runs 1–2 | No tactical dispatch. Runtime heartbeat expired during setup in run 1; run 2 consumed the bridge's startup deadline. Replaced the hanging management launch wrapper with VirtualBox's direct guest-process start, and start bridges after display/game setup. |
+| Run 3 | **Invalid phase experiment.** Successful native pawn selection hit an eager diagnostic string conversion unsupported by the pawn object, suppressing the actual spawn. Changed the error path to stringify only on failure; regression uses a pawn that rejects string conversion. |
+| Run 4 | Coordinated spawn at (7,2), complete phase, then Artillery movement/attack passed through barrier 6. Combat's legal route was rejected before dispatch because of a burning intermediate tile. |
+| Normal-control reference | Restored only A's preserved disposable turn-3 save, with network mode unset. Normal Combat movement (2,3) → (1,4), through burning (1,3), produced normal Move hooks, health 3, no ignition, spent movement and undo origin (2,3). Closed normally and restored the original checkpoint by hash. |
+| Run 5 | Coordinated spawn at (6,3) and barriers 0–10 passed, including fire transit. A punch collision damaged the support unit; stopped the tactical attempt before End Turn and changed the attack direction. |
+| Run 6 | A deferred spawn was still pending when renewed player allowances completed the adapter. Coordinator rejected `spawn-unfinished-at-phase-boundary`. Added the explicit batch-completion condition. |
+| Run 7 | Admission stayed closed correctly; peers reached the spawn boundary 7.8 seconds apart and the original eight-second exchange deadline expired. Extended the bounded deadline to 20 seconds. |
+| Run 8 | Host selected a spawn, but guest turn/allowance state changed before application. Rejected `spawn-precondition-changed`; did not retry. Added the engine effect-queue wait, then validated it in fresh run 9. |
+
+Fire is now permitted only on intermediate tiles of an otherwise validated native UI route for the restricted starting ground mechs. Fire at origin/destination and other hazards remain rejected. Successful movement additionally requires unchanged health and fire status, normal movement consumption, undo bookkeeping and execution hooks. This is a bounded normal-control comparison, not universal hazard compatibility.
+
+All raw logs, saves, credentials and VM files stay private. Every run was closed normally and its three original disposable checkpoint files restored and hash-verified. Both VMs were shut down normally. Host normal saves and security/Cloud/firewall settings were not changed; the locally flagged native-test executable was neither run nor rebuilt.
+
+Offline Lua/Node doubles cover framing, ownership, stale/duplicate/timeout/conflicting spawns, bookkeeping, native-call count, delayed batch completion, engine waits and fire-transit restrictions. Installer fixtures passed. These tests are not additional game evidence.
+
+**Next substantial step:** establish a protected terminal boundary after the loader's mission-end effect tail and normal retreat/results, then exchange and compare the supported mission outcome without admitting another tactical command. Use **GPT-6.1 Sol, High reasoning**, normal coding mode; no broad design review is needed. Multiple new spawns per phase, broader AI/RNG coordination, independent inspection, other squads, campaign transitions, room codes and recovery remain deferred.

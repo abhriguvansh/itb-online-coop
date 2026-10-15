@@ -30,8 +30,8 @@ function M.install(env,mod,native,path)
     local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
         identity=wire and wire.session or 'local-phase-proof'}
     if wire and wire.repeatedTurns then
-        M.traceSpawns(env,function() return self.session and not self.session.stopped end,emit,json.array,
-            function(why) self.session:stop('spawn-trace:'..why) end)
+        self.spawns=require(path..'spawn_sync').install({env=env,wire=wire,json=json,native=native,
+            session=function() return self.session end,capture=capture,emit=emit})
     end
     local function witness() local state=capture();assert(#state.unavailable==0,'incomplete-observation');return json.encode(state) end
     local function request(kind,id,actor,fx,fy,tx,ty)
@@ -69,6 +69,7 @@ function M.install(env,mod,native,path)
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,
+            phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
         self.stage=0;self.status='Running protected phase sequence'

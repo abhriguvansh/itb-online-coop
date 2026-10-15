@@ -86,7 +86,7 @@ function M.new(o)
     move.bridge = o.bridge
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
     attack.bridge=o.bridge
-    if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture) end
+    if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture,o.phaseSettled) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
     local function result(record)
         return {status=record.status,reason=record.reason,revision=record.revision or self.revision}

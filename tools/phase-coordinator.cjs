@@ -12,7 +12,43 @@ function expected(session,revision,state){
 class PhaseCoordinator{
   constructor(session,send,record,interactive=false,now=()=>performance.now(),phaseRun=false,repeatedTurns=false){this.repeatedTurns=repeatedTurns;this.turn=2;this.phaseRun=phaseRun;this.now=now;this.interactive=interactive;this.limit=interactive&&!phaseRun?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
   require(ok,reason){if(!ok)throw Error(reason);}
-  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');}
+  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');}
+  spawnReceive(peer,m){
+    this.require(this.repeatedTurns&&this.mode==='executing'&&this.pendingKind==='end-turn','spawn-outside-end-turn');
+    this.require(m.revision===this.stage&&m.phase===this.states.host.phase&&Number.isInteger(m.index)&&m.index===(this.spawnIndex||0)+1&&m.index<=32,'spawn-stale-context');
+    this.require(m.native?.guardActive===true&&m.native?.sessionState===1&&m.native?.releaseFailed===false,'spawn-protection-lost');
+    this.require(typeof m.witness==='string'&&Buffer.byteLength(m.witness)<=65536&&!/[\r\n]/.test(m.witness),'spawn-invalid-witness');
+    const state=JSON.parse(m.witness);
+    this.require(state.board?.schema==='itb-observation-v1'&&state.board.unavailable?.length===0&&typeof state.spawner==='string','spawn-incomplete-state');
+    const frame=(kind,witness)=>({...this.frame(kind,'host','spawn-'+m.index),witness});
+    if(m.type==='spawn_prepare'){
+      if(!this.spawn)this.spawn={mode:'prepare',before:{},deadline:this.now()+20000};
+      const p=this.spawn;this.require(p.mode==='prepare'&&!p.before[peer],'spawn-duplicate-prepare');p.before[peer]=m.witness;
+      if(p.before.host&&p.before.guest){
+        this.require(p.before.host===p.before.guest,'spawn-precondition-divergence');p.mode='select';
+        this.record({type:'spawn_prepared',index:m.index,revision:this.stage,witness:m.witness});
+        this.send('host',frame('SPAWNSELECT',m.witness));
+      }return;
+    }
+    const p=this.spawn;this.require(p,'spawn-not-prepared');
+    if(m.type==='spawn_selected'){
+      this.require(peer==='host'&&p.mode==='select','spawn-unauthorized-selection');
+      this.require(typeof m.pawnType==='string'&&/^[A-Za-z0-9_]{1,128}$/.test(m.pawnType)&&Number.isInteger(m.pawnId)&&m.pawnId>=0&&m.pawnId<=2147483647,'spawn-invalid-pawn');
+      this.require([m.x,m.y].every(n=>Number.isInteger(n)&&n>=0&&n<=7),'spawn-invalid-location');
+      this.require(Array.isArray(m.calls)&&m.calls.length<=128&&m.calls.every(c=>Number.isInteger(c.limit)&&c.limit>0&&c.limit<=2147483647&&Number.isInteger(c.value)&&c.value>=0&&c.value<c.limit),'spawn-invalid-random');
+      this.require(typeof m.afterSpawner==='string'&&!/[\r\n]/.test(m.afterSpawner)&&m.afterSpawner===state.spawner,'spawn-invalid-bookkeeping');
+      p.after=m.witness;p.mode='apply';
+      const transcript=m.calls.map(c=>c.limit+','+c.value+';').join('');
+      const body=[`${m.pawnType}|${m.pawnId}|${m.x}|${m.y}|${transcript}`,m.afterSpawner,p.before.guest].join('\n');
+      this.require(Buffer.byteLength(body)<=65536,'spawn-frame-size');
+      this.record({type:'spawn_selected',index:m.index,revision:this.stage,pawnType:m.pawnType,pawnId:m.pawnId,x:m.x,y:m.y,calls:m.calls});
+      this.send('guest',frame('SPAWNAPPLY',body));return;
+    }
+    this.require(m.type==='spawn_applied'&&peer==='guest'&&p.mode==='apply','spawn-unexpected-outcome');
+    this.require(m.witness===p.after,'spawn-outcome-divergence');
+    this.record({type:'spawn_barrier',index:m.index,revision:this.stage,witness:m.witness,fullStateProof:false});
+    this.both(frame('SPAWNRELEASE',m.witness));this.spawnIndex=m.index;this.spawn=null;
+  }
   context(m,revision){
     this.require(m.revision===revision && m.phase===(this.repeatedTurns?'player'+(this.turn+(revision===this.stage+1&&this.pendingKind==='end-turn'?1:0)):((this.interactive&&!this.phaseRun)||revision<3?'player2':'player3')),'wrong-phase-or-revision');
     this.require(typeof m.witness==='string' && m.witness.length>0 && Buffer.byteLength(m.witness)<=65536,'invalid-witness');
@@ -38,8 +74,9 @@ class PhaseCoordinator{
     this.tick();
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
+    if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.15.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.16.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -83,6 +120,7 @@ class PhaseCoordinator{
       return;
     }
     if(m.type==='observed'){
+      this.require(!this.spawn,'spawn-unfinished-at-phase-boundary');
       this.require(this.mode==='executing' && !this.receipts[peer] && m.id===this.pendingId,'unexpected-outcome');
       this.context(m,this.stage+1);
       this.require(m.native?.guardActive===true && m.native?.sessionState===1 && m.native?.releaseFailed===false,'protection-lost');

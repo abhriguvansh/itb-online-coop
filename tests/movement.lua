@@ -160,6 +160,16 @@ test('UI bridge failure faults without a fallback relocation',function()
     l.bridge={start=function()error('uncertain queue')end,stop=function()stops=stops+1 end}
     l:arm();assert(not l:request(r));assert(l.fault and stops==1 and e.calls==0 and e.effectCalls==0)
 end)
+test('changed fire status cannot satisfy successful UI movement postconditions',function()
+    local e,l,r=fixture('ui')
+    l.bridge={start=function()end,update=function()end,stop=function()end}
+    assert(l:arm() and l:request(r));e.pawn.position=r.to;e.pawn.spent=true
+    e.pawn.IsFire=function()return true end
+    l:skillEvent('onSkillStart',e.pawn,'Move');l:skillEvent('onSkillEnd',e.pawn,'Move')
+    for i=1,6 do e.clock=i*100;l:update()end
+    assert(l.pending and l.pending.samples==0)
+    e.clock=11000;l:update();assert(l.fault and not l.pending and e.calls==0)
+end)
 local function longRoute()
     local e,l,r=fixture('ui');r.to=e.Point(1,0)
     local points={r.from,e.Point(1,2),e.Point(1,1),r.to}
@@ -169,6 +179,14 @@ local function longRoute()
 end
 test('UI path accepts a reachable three-step clear ground path',function()
     local e,l,r=longRoute();assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0)
+end)
+test('UI path permits fire only on an engine-reachable intermediate tile',function()
+    local e,l,r,points=longRoute();e.Board.IsFire=function(_,p)return p.x==points[2].x and p.y==points[2].y end
+    assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0)
+    e.Board.IsFire=function(_,p)return p.x==r.to.x and p.y==r.to.y end
+    assert(not l:validate(r))
+    e.Board.IsFire=function(_,p)return p.x==r.from.x and p.y==r.from.y end
+    assert(not l:validate(r))
 end)
 local function friendlyRoute()
     local e,l,r,points=longRoute()
@@ -191,7 +209,7 @@ for _,problem in ipairs({'enemy','dead','wrong-position','same-actor','missing',
         elseif problem=='missing' then e.Board.GetPawn=function(_,id)if type(id)~='table' then return e.pawn end end
         elseif problem=='destination' then e.Board.IsPawnSpace=function()return true end
         elseif problem=='unreachable' then e.Board.GetReachable=function()return list({})end
-        else e.Board.IsFire=function(_,p)return p.y==2 end end
+        else e.Board.IsAcid=function(_,p)return p.y==2 end end
         assert(not l:request(r) and e.calls==0 and e.effectCalls==0 and not l.usedPawns[2])
     end)
 end
@@ -203,7 +221,7 @@ end)
 for _,problem in ipairs({'hazard','occupancy','terrain','jump','cycle','end','length'}) do
     test('UI path rejects unsafe or malformed intermediate path: '..problem,function()
         local e,l,r,points=longRoute()
-        if problem=='hazard' then e.Board.IsFire=function(_,p)return p.y==2 end
+        if problem=='hazard' then e.Board.IsAcid=function(_,p)return p.y==2 end
         elseif problem=='occupancy' then e.Board.IsPawnSpace=function(_,p)return p.y==2 end
         elseif problem=='terrain' then e.Board.GetTerrain=function(_,p)return p.y==2 and 3 or 0 end
         elseif problem=='jump' then points[2]=e.Point(2,2)

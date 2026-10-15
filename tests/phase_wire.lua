@@ -5,6 +5,9 @@ assert(not pcall(wire.decode,valid,'other-session'))
 assert(not pcall(wire.decode,valid:gsub('EXEC','EVAL'),'test-session'))
 assert(not pcall(wire.decode,valid:gsub('|0|','|0.5|'),'test-session'))
 assert(not pcall(wire.decode,valid..'\nsecond-frame','test-session'))
+local spawnFrame='SPAWNAPPLY|test-session|host|3|player2|spawn-1\nScorpion1|123|5|3|4,2;\n{}\n{}'
+assert(wire.decode(spawnFrame,'test-session').witness=='Scorpion1|123|5|3|4,2;\n{}\n{}')
+assert(not pcall(wire.decode,spawnFrame:gsub('SPAWNAPPLY','EXEC'),'test-session'))
 assert(not pcall(wire.decode,string.rep('x',70001),'test-session'))
 local dynamic='EXEC|test-session|guest|0|player2|move-guest-1|artillery|0|3|0|2\n{}'
 local move=wire.decode(dynamic,'test-session').move

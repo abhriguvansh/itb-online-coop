@@ -15,7 +15,8 @@ local function fixture()
         local pawns={};for _,id in ipairs({0,1,2,100})do pawns[#pawns+1]={localId=id,team=1,active=e.ready,movementSpent=false,dead=false,frozen=false} end
         return {pawns=pawns,unavailable=e.missing and {'field'} or {}}, e.busy==0
     end
-    local lab=M.new(e,native,function(k,p)e.records[#e.records+1]={kind=k,payload=p}end,capture)
+    local lab=M.new(e,native,function(k,p)e.records[#e.records+1]={kind=k,payload=p}end,capture,
+        function(turn)e.settledTurn=turn;return not e.spawnPending end)
     local function tick() e.clock=e.clock+16;lab:draw();lab:missionUpdate();lab:update() end
     local function clickEnd()
         assert(lab:arm());lab:request();for i=1,8 do tick() end;assert(e.clicks==1)
@@ -62,6 +63,12 @@ test('confirmed transition with no hooks still times out protected without retry
     for i=1,10 do t() end
     e.clock=61000;t();t()
     assert(l.fault and n.sessionState==2 and e.clicks==2)
+end)
+test('restored allowances cannot complete while the coordinated spawn batch is pending',function()
+    local e,l,t,start,phases=fixture();start();e.ready=true;e.spawnPending=true;phases()
+    for i=1,5 do t()end
+    assert(l.pending and not l.fault and e.clicks==1)
+    e.spawnPending=false;t();assert(not l.pending and not l.fault and e.clicks==1)
 end)
 test('unknown modal is never clicked and timeout latches protection',function()
     local e,l,t,start,_,n=fixture();start();e.sdlext.CurrentWindowRect={x=765,y=385,w=390,h=219}

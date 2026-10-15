@@ -9,11 +9,12 @@ function M.decode(text,session)
     if base then text=base..'\n'..body end
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
-    assert(kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
+    assert(spawn or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
-    assert(#witness<=65536 and not witness:find('[\r\n]'),'wire-witness')
+    assert(#witness<=65536 and not witness:find('\r') and (spawn or not witness:find('\n')),'wire-witness')
     if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move') end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
@@ -47,7 +48,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.15.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.16.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -71,7 +72,9 @@ function M.open(env,json,emit)
             local data=f:read(70001);f:close();self.rx=self.rx+1
             local m=M.decode(data,self.session);self.last=now()
             assert(m.kind~='STOP','wire-peer-or-coordinator-stopped')
-            if m.kind~='PING' then
+            if m.kind:sub(1,5)=='SPAWN' then
+                assert(self.repeatedTurns and self.spawn,'wire-spawn-unavailable');self.spawn:receive(m)
+            elseif m.kind~='PING' then
                 local r=request()
                 assert(m.revision==s.revision and m.phase==s.phase and m.witness==r.witness,'wire-stale-context')
                 if m.kind=='INPUT' then
@@ -110,6 +113,7 @@ function M.open(env,json,emit)
                     local result=s:submit(m.peer,r)
                     assert(result.status=='pending','wire-command-rejected:'..tostring(result.reason))
                     self.pending=r.id
+                    self.pendingKind=r.kind
                     if r.kind=='end-turn' then self.ending=true end
                     emit('network_command_received',{peer=m.peer,request=r,fixture=true})
                 elseif m.kind=='DONE' then
@@ -119,10 +123,12 @@ function M.open(env,json,emit)
                 end
             end
         end
+        if self.spawn then self.spawn:tick() end
         if self.pending and s.revision==self.observed+1 then
             local r=request();self.observed=s.revision
             self:send({type='observed',id=self.pending,revision=s.revision,phase=s.phase,witness=r.witness,native=native.info()})
             self.pending=nil
+            self.pendingKind=nil
         end
         return false
     end
