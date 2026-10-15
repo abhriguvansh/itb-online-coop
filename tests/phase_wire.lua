@@ -66,3 +66,9 @@ f.add('READY|test-session|-|5|player3|end-turn-5\n{}');f.tick();assert(not f.w.r
 assert(not pcall(function()f.w:ready(f.s,f.r)end))
 f.add('CONSENT|test-session|host|5|player3|end-turn-5\n{}');f.tick();assert(readiness==2)
 print('Repeated-turn mailbox config and fresh readiness passed (in-memory doubles).')
+
+for _,actor in ipairs({'combat','cannon','artillery'}) do
+ local r=dofile('mod/scripts/phase_wire.lua').decode('PREPARE|s1|guest|0|player2|attack-guest-1|attack'..actor..'|1|5|1|3\n{}','s1')
+ assert(r.move.kind=='basic-attack' and r.move.actor==actor and r.move.toY==3)
+end
+print('Three basic-weapon wire aliases passed (decoder only).')

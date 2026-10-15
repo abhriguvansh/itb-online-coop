@@ -47,12 +47,12 @@ function trace.new(env, emit, json)
     function self:observe(stage, pawn, weapon, from, to)
         -- Never allow diagnostic failures to interrupt a native skill callback.
         local ok, reason = pcall(function()
-            if not allowed() or self.limited or weapon ~= 'Move' or not pawn then return end
+            if not allowed() or self.limited or (weapon ~= 'Move' and weapon ~= 'Prime_Punchmech' and weapon ~= 'Brute_Tankmech' and weapon ~= 'Ranged_Artillerymech') or not pawn then return end
             local id = pawn:GetId()
             if id ~= 0 and id ~= 1 and id ~= 2 then return end
             local observed = state(pawn)
             local fingerprint = json.encode(observed)
-            local target = {from=from and point(from), to=to and point(to)}
+            local target = {weapon=weapon,from=from and point(from), to=to and point(to)}
             if stage == 'build' then
                 local old = self.previews[id]
                 -- Keep the latest scalar preview even if its state did not change.

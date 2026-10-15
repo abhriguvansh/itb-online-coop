@@ -29,7 +29,7 @@ FN(SDL_bool,SDL_GetWindowWMInfo,(SDL_Window*,SDL_SysWMinfo*));
 FN(SDL_bool,SDL_GetEventFilter,(SDL_EventFilter*,void**));
 static SDL_Window *target;
 static Uint32 started, window_id;
-static int armed, clicks, width, height;
+static int armed, clicks, click_limit, width, height;
 static HWND native_window;
 static HANDLE release_timer;
 static volatile LONG pressed, release_failed, releases;
@@ -86,7 +86,7 @@ static int held(void) {
     for(i=0;i<count;i++) if(keys[i]) return 1;
     return 0;
 }
-static int begin(lua_State *L) {
+static int begin_bounded(lua_State *L, int limit) {
     SDL_EventFilter filter=NULL; void *data=NULL; SDL_SysWMinfo wm;
     guard_tick();
     intent_down=0;
@@ -108,8 +108,14 @@ static int begin(lua_State *L) {
     guard_tick();
     if(guard_active && (guarded_window!=native_window || guard_tails()))return result(L,0,"guard-window-or-held-input");
     if(!guard_active && !guard_install(5000,1)) return result(L,0,"window-guard-unavailable");
-    window_id=p_SDL_GetWindowID(target); started=p_SDL_GetTicks(); clicks=0; armed=1;
-    return result(L,1,"armed-for-two-clicks");
+    window_id=p_SDL_GetWindowID(target); started=p_SDL_GetTicks(); clicks=0; click_limit=limit; armed=1;
+    return result(L,1,limit==3?"armed-for-three-attack-clicks":"armed-for-two-clicks");
+}
+static int begin(lua_State *L) { return begin_bounded(L,2); }
+static int begin_attack(lua_State *L) {
+    guard_tick();
+    if(session_state!=1)return result(L,0,"attack-needs-protected-session");
+    return begin_bounded(L,3);
 }
 static int aim(lua_State *L) {
     double x,y; POINT point; INPUT input;
@@ -138,7 +144,7 @@ static int aim(lua_State *L) {
 static int click(lua_State *L) {
     INPUT input; int x,y,w,h; double dx,dy;
     guard_tick();
-    if(!armed || clicks>=2) return result(L,0,"click-budget-exhausted");
+    if(!armed || clicks>=click_limit) return result(L,0,"click-budget-exhausted");
     if(!guard_active || guard_expired || !own_foreground() || pressed || release_failed || p_SDL_GetKeyboardFocus()!=target || p_SDL_GetTicks()-started>5000 || held()) {
         armed=0; return result(L,0,"focus-timeout-or-held-input");
     }
@@ -239,6 +245,7 @@ static int info(lua_State *L) {
     p_lua_pushstring(L,guard_trace);p_lua_setfield(L,-2,"guardTrace");
     p_lua_pushnumber(L,sizeof(void*)*8);p_lua_setfield(L,-2,"bits");
     p_lua_pushnumber(L,clicks);p_lua_setfield(L,-2,"clicks");
+    p_lua_pushnumber(L,click_limit);p_lua_setfield(L,-2,"clickLimit");
     p_lua_pushboolean(L,pressed);p_lua_setfield(L,-2,"pressed");
     p_lua_pushboolean(L,release_failed);p_lua_setfield(L,-2,"releaseFailed");
     p_lua_pushnumber(L,releases);p_lua_setfield(L,-2,"releases");
@@ -259,6 +266,7 @@ __declspec(dllexport) int __cdecl luaopen_itb_input(lua_State *L) {
     if(version.major!=2 || version.minor!=0 || version.patch!=10) return result(L,0,"unsupported-SDL-version");
     p_lua_createtable(L,0,4);
     p_lua_pushcclosure(L,begin,0);p_lua_setfield(L,-2,"begin");
+    p_lua_pushcclosure(L,begin_attack,0);p_lua_setfield(L,-2,"beginAttack");
     p_lua_pushcclosure(L,aim,0);p_lua_setfield(L,-2,"aim");
     p_lua_pushcclosure(L,click,0);p_lua_setfield(L,-2,"click");
     p_lua_pushcclosure(L,finish,0);p_lua_setfield(L,-2,"finish");

@@ -11,9 +11,9 @@ function Write-Frame($frame){
     if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
     $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
     if($null-ne$frame.move){
-        if($frame.kind-notin@('EXEC','PREPARE') -or $frame.move.actor-notin@('combat','cannon','artillery') -or $frame.move.kind-notin@('move','lab-punch') -or ($frame.move.kind-eq'lab-punch'-and$frame.move.actor-ne'combat')){throw 'Invalid move payload'}
+        if($frame.kind-notin@('EXEC','PREPARE') -or $frame.move.actor-notin@('combat','cannon','artillery') -or $frame.move.kind-notin@('move','lab-punch','basic-attack') -or ($frame.move.kind-eq'lab-punch'-and$frame.move.actor-ne'combat')){throw 'Invalid move payload'}
         foreach($key in @('fromX','fromY','toX','toY')){if($frame.move.$key-notmatch'^[0-7]$'){throw 'Invalid move coordinate'}}
-        $wireActor=if($frame.move.kind-eq'lab-punch'){'punch'}else{$frame.move.actor}
+        $wireActor=if($frame.move.kind-eq'lab-punch'){'punch'}elseif($frame.move.kind-eq'basic-attack'){'attack'+$frame.move.actor}else{$frame.move.actor}
         $header+=@($wireActor,$frame.move.fromX,$frame.move.fromY,$frame.move.toX,$frame.move.toY)
     }
     $text=($header -join '|')+"`n"+$frame.witness

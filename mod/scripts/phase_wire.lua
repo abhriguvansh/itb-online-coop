@@ -14,10 +14,10 @@ function M.decode(text,session)
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
     assert(#witness<=65536 and not witness:find('[\r\n]'),'wire-witness')
-    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch'),'wire-move') end
+    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move') end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
-        id=id,kind=actor=='punch' and 'lab-punch' or 'move',actor=actor=='punch' and 'combat' or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
+        id=id,kind=actor=='punch' and 'lab-punch' or actor:sub(1,6)=='attack' and 'basic-attack' or 'move',actor=actor=='punch' and 'combat' or actor:sub(1,6)=='attack' and actor:sub(7) or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
 end
 function M.open(env,json,emit)
     local root=env.os.getenv('ITB_COOP_WIRE_DIR')
@@ -47,7 +47,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.13.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.14.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')

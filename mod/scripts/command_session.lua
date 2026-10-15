@@ -16,7 +16,7 @@ local function envelope(r)
     if r.kind=='end-turn' then
         return r.confirmUnused==true and r.actor==nil and r.fromX==nil and r.fromY==nil and r.toX==nil and r.toY==nil
     end
-    if (r.kind ~= 'move' and r.kind ~= 'lab-punch') or not id(r.actor) or r.confirmUnused~=nil then return false end
+    if (r.kind ~= 'move' and r.kind ~= 'lab-punch' and r.kind ~= 'basic-attack') or not id(r.actor) or r.confirmUnused~=nil then return false end
     for _,k in ipairs({'fromX','fromY','toX','toY'}) do if not integer(r[k]) or r[k] > 7 then return false end end
     return true
 end
@@ -85,6 +85,7 @@ function M.new(o)
     move = o.movement.new(o.env,labEvent,'ui')
     move.bridge = o.bridge
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
+    attack.bridge=o.bridge
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
     local function result(record)
@@ -137,13 +138,14 @@ function M.new(o)
                 end
             end
         end
+        if r.kind=='basic-attack' and not o.repeatedTurns then return reject('basic-attack-unavailable') end
         -- Retain the exact fixed punch, including actor/target. This is not an arbitrary attack API.
         if r.kind == 'lab-punch' and (entity.pawnId ~= 0 or r.fromX ~= 3 or r.fromY ~= 3 or r.toX ~= 2 or r.toY ~= 3) then
             return reject('unsupported-punch-scenario')
         end
         local lab = r.kind == 'move' and move or r.kind=='end-turn' and ending or attack
         local command=entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},mission='Mission_Artillery',turn=self.turn}
-        local ok,armed = pcall(function() return lab:arm() end)
+        local ok,armed = pcall(function() return lab:arm(command) end)
         if not ok then self:stop('validation-exception'); return reject(self.reason) end
         if not armed then return reject('diagnostic-validation:'..tostring(lab.status)) end
         if r.kind == 'move' then
@@ -201,10 +203,14 @@ function M.new(o)
         else
             local entity=registry[r.actor]
             if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
-            if entity.pawnId~=0 or r.fromX~=3 or r.fromY~=3 or r.toX~=2 or r.toY~=3 then return false,'unsupported-punch-scenario' end
+            if r.kind=='basic-attack' then
+                if not o.repeatedTurns then return false,'basic-attack-unavailable' end
+            elseif entity.pawnId~=0 or r.fromX~=3 or r.fromY~=3 or r.toX~=2 or r.toY~=3 then return false,'unsupported-punch-scenario' end
             lab=attack
         end
-        local ok,armed=pcall(function()return lab:arm()end)
+        local entity=registry[r.actor]
+        local command=entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn}
+        local ok,armed=pcall(function()return lab:arm(command)end)
         local reason=lab.status
         if lab==attack then attack:disarm() else lab.armed=false end
         if not ok then self:stop('validation-exception');return false,self.reason end
@@ -238,8 +244,8 @@ function M.new(o)
         local ok=pcall(function() ending:phaseEvent(name,mission) end)
         if not ok then self:stop('phase-hook-exception') end
     end
-    function self:draw() if ending then ending:draw() end end
-    function self:missionUpdate() if ending then ending:missionUpdate() end end
+    function self:draw() if attack.draw then attack:draw() end;if ending then ending:draw() end end
+    function self:missionUpdate() if attack.missionUpdate then attack:missionUpdate() end;if ending then ending:missionUpdate() end end
     function self:setBlocked(value) move.blocked=value;if ending then ending.blocked=value end end
     function self:skillEvent(kind,pawn,weapon)
         if self.stopped then return end

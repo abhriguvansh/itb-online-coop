@@ -85,7 +85,7 @@ function bridge.new(env, native, emit)
     end
     function self:observePreview(pawn,weapon,from,to)
         if self.phase=='off' or self.phase=='submitted' or not self.command then return end
-        if self.finalPhase~='aim-destination' or not pawn or weapon~='Move' then return end
+        if self.finalPhase~='aim-destination' or not pawn or weapon~=(self.command.weapon or 'Move') then return end
         -- Copies only. This is a fresh native preview, not a claim of execution.
         self.preview={pawnId=pawn:GetId(),from={x=from.x,y=from.y},to={x=to.x,y=to.y}}
     end
@@ -104,11 +104,15 @@ function bridge.new(env, native, emit)
         assert(env.screen:w()==1920 and env.screen:h()==1081 and env.GetBoardScale()==3,
             'uncalibrated-layout')
         self.width,self.height=env.screen:w(),env.screen:h()
-        local ok,detail=native.begin();assert(ok,detail)
+        local begin=native.begin
+        if command.weapon then begin=native.beginAttack end
+        assert(begin,'native-attack-bridge-unavailable')
+        local ok,detail=begin();assert(ok,detail)
         emit('ui_bridge_started',{command=command,fromPixel=self.from,toPixel=self.to,
             native=native.info(),proofOfInputAuthorization=false})
         if not selected or selected:GetId()~=command.pawnId then
             aim(self.from,'aim-selection')
+        elseif command.weapon then aim({x=330,y=920},'aim-weapon')
         else aim(self.to,'aim-destination') end
     end
     function self:update()
@@ -128,8 +132,16 @@ function bridge.new(env, native, emit)
         local pawn=env.Board:GetSelectedPawn()
         if self.phase=='selecting' then
             if pawn and pawn:GetId()==self.command.pawnId then
-                assert(pawn:GetArmedWeaponId()==0,'movement-not-armed-after-selection')
+                local armed=pawn:GetArmedWeaponId()
+                assert(armed==0 or (self.command.weapon and armed==-1),'movement-not-armed-after-selection')
                 emit('ui_bridge_actor_selected',{pawnId=pawn:GetId(),armedWeaponId=pawn:GetArmedWeaponId()})
+                if self.command.weapon then aim({x=330,y=920},'aim-weapon') else aim(self.to,'aim-destination') end
+            end
+            return
+        end
+        if self.phase=='arming-weapon' then
+            if pawn and pawn:GetId()==self.command.pawnId and pawn:GetArmedWeaponId()==1 then
+                emit('ui_bridge_weapon_selected',{pawnId=pawn:GetId(),weapon=self.command.weapon,undoPossible=pawn:IsUndoPossible()})
                 aim(self.to,'aim-destination')
             end
             return
@@ -152,6 +164,12 @@ function bridge.new(env, native, emit)
             self.aimPoint,self.waitLogged=self.finalPoint,false
             return
         end
+        if self.phase=='aim-weapon' then
+            assert(pawn and pawn:GetId()==self.command.pawnId and (pawn:GetArmedWeaponId()==0 or pawn:GetArmedWeaponId()==-1),'attack-selection-changed')
+            self.phase='arming-weapon';self.releaseExpected=self.releasesSeen+1
+            local sent,count=native.click(self.aimPoint.x,self.aimPoint.y)
+            emit('ui_bridge_weapon_queued',{accepted=sent,events=count,pawnId=pawn:GetId()});assert(sent,'weapon-queue-failed');return
+        end
         assert(same(env.screenPointToTile({x=input.mouseX,y=input.mouseY},false),aimedTile),
             'delivered-cursor-wrong-tile')
         if self.phase=='aim-selection' then
@@ -162,7 +180,7 @@ function bridge.new(env, native, emit)
             assert(sent,'selection-queue-failed')
         elseif self.phase=='aim-destination' then
             assert(pawn and pawn:GetId()==self.command.pawnId,'selection-changed')
-            assert(pawn:GetArmedWeaponId()==0,'movement-not-armed-after-selection')
+            assert(pawn:GetArmedWeaponId()==(self.command.weapon and 1 or 0),'wrong-armed-weapon')
             local preview=self.preview
             if not preview then return end -- Bounded outer timeout; no destination press.
             assert(preview.pawnId==self.command.pawnId and same(preview.from,self.command.from)

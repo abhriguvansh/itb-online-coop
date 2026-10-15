@@ -35,10 +35,10 @@ function M.new(o)
                 if o.wire.phaseRun and not o.wire.repeatedTurns and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
                     reject('Unsupported actor for this phase test');return
                 end
-                self.actor=actor;self.status=o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
+                self.actor=actor;self.status=not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
                 o.emit('move_intent_selected',{actor=actor,peer=o.wire.peer});return
             end
-            if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.draft=nil;self.status=self.attacking and 'Supported punch selected' or 'Movement selected';return end
+            if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.draft=nil;self.status=self.attacking and 'Basic weapon selected' or 'Movement selected';return end
             if y>=640 and y<676 then self.actor=nil;self.draft=nil;self.status='Move canceled; choose a mech';return end
             if y>=600 and y<636 then
                 if not self.draft then reject('Choose a mech and destination first');return end
@@ -58,10 +58,10 @@ function M.new(o)
         local from=pawn:GetSpace();self.counter=self.counter+1
         assert(self.counter<=999,'intent-limit')
         local attacking=o.wire.repeatedTurns and self.attacking or (not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1)
-        local r=o.request(attacking and 'lab-punch' or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
+        local r=o.request(attacking and (o.wire.repeatedTurns and 'basic-attack' or 'lab-punch') or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
         local ok,reason=preview(s,r)
         if not ok then reject(reason);return end
-        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm '..(attacking and 'punch' or 'move')
+        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm '..(attacking and 'attack' or 'move')
         o.emit('move_intent_draft',{request=r,peer=o.wire.peer})
     end
     function self:update(s,done)
@@ -92,13 +92,13 @@ function M.new(o)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
-            if o.wire.repeatedTurns then label('attack',680,'Toggle move / supported punch');label('endTurn',720,'Ready End Turn (unused units OK)') end
+            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)') end
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
         self.controls.confirm:caption(o.wire.readyInput and 'Ready End Turn (unused units OK)'
-            or (o.wire.repeatedTurns and self.attacking or not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm punch' or 'Confirm move')
+            or (o.wire.repeatedTurns and self.attacking or not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
     end
     return self
 end

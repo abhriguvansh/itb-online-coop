@@ -90,6 +90,9 @@ static void setup(void){
     client_to_screen=convert_point;screen_to_client=convert_point;cursor_position=get_cursor;system_metric=metric;
 }
 int main(void){
+    setup();begin_attack(NULL);assert(!ok_value && !armed);
+    setup();session_begin(NULL);assert(ok_value);begin_attack(NULL);assert(ok_value && click_limit==3);
+    click(NULL);assert(ok_value);elapsed();click(NULL);assert(ok_value);elapsed();click(NULL);assert(ok_value);elapsed();click(NULL);assert(!ok_value && downs==3);
     setup();begin(NULL);assert(ok_value);aim(NULL);assert(ok_value);click(NULL);
     assert(ok_value && downs==1 && ups==0 && pressed && warps==1);
     elapsed();assert(!pressed && ups==1 && releases==1);

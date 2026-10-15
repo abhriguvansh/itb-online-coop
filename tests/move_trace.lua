@@ -52,7 +52,7 @@ test('normal profiles and missing identity emit nothing',function()
     e.Profile=nil; t:observe('onSkillStart',p,'Move'); assert(#e.logs==0)
 end)
 test('other missions versions weapons and pawns are ignored',function()
-    local e,p,t=fixture(); t:observe('build',p,'Prime_Punchmech')
+    local e,p,t=fixture(); t:observe('build',p,'UnsupportedWeapon')
     p.GetId=function() return 100 end; t:observe('build',p,'Move')
     p.GetId=function() return 2 end; e.GetCurrentMission=function() return {ID='Mission_Test'} end
     t:observe('build',p,'Move'); e.GetCurrentMission=function() return {ID='Mission_Artillery'} end

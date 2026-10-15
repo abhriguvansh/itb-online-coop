@@ -21,6 +21,7 @@ local function fixture()
     n.aim=function(x,y)n.x,n.y=x,y;n.aims[#n.aims+1]={x=x,y=y};return true end
     n.info=function()return {abi='itb-win32-click-v3',mouseX=n.x,mouseY=n.y,cursorX=n.x,cursorY=n.y}end
     n.begin=function()n.begins=n.begins+1;return true end
+    n.beginAttack=function()n.attackBegins=(n.attackBegins or 0)+1;return true end
     n.click=function(x,y)n.calls[#n.calls+1]={x=x,y=y};if not e.delayRelease then e.release() end;return true,2 end
     n.finish=function()n.finishes=n.finishes+1 end
     local b=module.new(e,n,function(k,v)e.logs[#e.logs+1]={kind=k,value=v}end)
@@ -183,5 +184,17 @@ test('session cannot overlap a watched diagnostic guard',function()
     local e,n,b=fixture();b.guardWatching=true
     n.sessionBegin=function()error('overlap reached native')end
     assert(not pcall(function()b:startSession(false)end))
+end)
+test('basic weapon requires selection then armed slot and fresh weapon preview',function()
+ local e,n,b,c,v=fixture();c.weapon='Ranged_Artillerymech';e.pawn.GetArmedWeaponId=function()return -1 end;e.pawn.IsUndoPossible=function()return false end
+ b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();assert(#n.calls==1)
+ e.selected=e.pawn;b:update();e.clock=300;b:update();e.clock=400;b:update();assert(#n.calls==2)
+ e.pawn.GetArmedWeaponId=function()return 1 end;b:update();e.clock=500;b:update();e.clock=600;b:update();assert(#n.calls==2)
+ b:observePreview(e.pawn,c.weapon,c.from,c.to);b:update();assert(#n.calls==3 and b.phase=='submitted')
+ b:update();assert(#n.calls==3)
+end)
+test('older native bridge cannot silently use movement allowance for an attack',function()
+ local e,n,b,c,v=fixture();c.weapon='Prime_Punchmech';n.beginAttack=nil
+ assert(not pcall(function()b:start(c,v)end) and n.begins==0 and #n.calls==0)
 end)
 print('UI bridge contracts: '..passed..' passed.')
