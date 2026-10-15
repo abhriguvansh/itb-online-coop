@@ -106,9 +106,9 @@ function M.new(env,native,emit,capture)
                 if p.lastRect~=fingerprint then
                     p.lastRect=fingerprint;emit('end_turn_dialog_observation',rect)
                 end
-                -- Observed native Active Units subpanel for three or four unused units.
-                -- The confirmation buttons retain the same position in both layouts.
-                if r and r.y==683 and r.h==60 and ((r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
+                -- Observed native Active Units subpanel for one, three or four unused units.
+                -- The confirmation buttons retain the same position in these layouts.
+                if r and r.y==683 and r.h==60 and ((r.x==850 and r.w==221) or (r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
                     p.dialog=rect;emit('end_turn_confirmation_observed',rect)
                     aim(p,894,565,'approach-confirm')
                 end

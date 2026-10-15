@@ -42,6 +42,12 @@ test('four-unused-unit confirmation uses the separately observed native layout',
     for i=1,10 do t()end
     assert(e.clicks==2 and e.lastClick.x==890 and e.lastClick.y==565 and l.pending.stage=='wait-transition' and not l.fault)
 end)
+
+test('one-unused-unit confirmation uses the paired-game observed layout',function()
+    local e,l,t,start=fixture();start();e.sdlext.CurrentWindowRect={x=850,y=683,w=221,h=60}
+    for i=1,10 do t()end
+    assert(e.clicks==2 and e.lastClick.x==890 and e.lastClick.y==565 and l.pending.stage=='wait-transition' and not l.fault)
+end)
 test('confirmed transition waits beyond UI deadline without retry or early completion',function()
     local e,l,t,start,phases,n=fixture();start()
     e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60}

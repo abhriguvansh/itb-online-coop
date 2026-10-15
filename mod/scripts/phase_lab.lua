@@ -1,5 +1,27 @@
 -- Explicitly opted-in four-command fixture. Scripted intent; optional ordered TCP mailbox.
 local M={}
+local unpack=unpack or table.unpack
+-- Bounded observation only: preserve the native RNG results and call count.
+function M.traceSpawns(env,active,emit,array,onError)
+    local original=env.Mission.NextPawn
+    env.Mission.NextPawn=function(mission,...)
+        if not active() then return original(mission,...) end
+        local random=env.random_int;local calls=array();local count=0
+        env.random_int=function(limit)
+            local value=random(limit);count=count+1
+            if count<=128 then calls[#calls+1]={limit=limit,value=value} end
+            return value
+        end
+        local function pack(...) return {n=select('#',...),...} end
+        local result=pack(pcall(original,mission,...))
+        env.random_int=random
+        local recorded,why=pcall(emit,'spawn_random_observed',{calls=calls,count=count,complete=count<=128,success=result[1]})
+        -- Logging must never suppress the native pawn return/spawn. Latch protection.
+        if not recorded then onError(tostring(why)) end
+        if not result[1] then error(result[2]) end
+        return unpack(result,2,result.n)
+    end
+end
 function M.install(env,mod,native,path)
     local json=require(path..'json')
     local function capture() return require(path..'snapshot').capture(env,env.GetCurrentMission(),json) end
@@ -7,6 +29,10 @@ function M.install(env,mod,native,path)
     local wire=require(path..'phase_wire').open(env,json,emit)
     local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
         identity=wire and wire.session or 'local-phase-proof'}
+    if wire and wire.repeatedTurns then
+        M.traceSpawns(env,function() return self.session and not self.session.stopped end,emit,json.array,
+            function(why) self.session:stop('spawn-trace:'..why) end)
+    end
     local function witness() local state=capture();assert(#state.unavailable==0,'incomplete-observation');return json.encode(state) end
     local function request(kind,id,actor,fx,fy,tx,ty)
         return {session=self.identity,encounter='artillery-checkpoint',phase=self.session.phase,
@@ -124,8 +150,12 @@ function M.install(env,mod,native,path)
     for _,name in ipairs({'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawnAdded','onVekSpawnRemoved',
             'onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned'}) do
         local event=name
-        env.modApi.events[event]:subscribe(function(mission)
+        env.modApi.events[event]:subscribe(function(mission,spawn)
             if not self.session or self.done then return end
+            if event=='onVekSpawnAdded' and spawn then
+                emit('spawn_choice_observed',{type=spawn.type,id=spawn.id,turns=spawn.turns,
+                    location=spawn.location and {x=spawn.location.x,y=spawn.location.y}})
+            end
             self.session:phaseEvent(event,mission)
             if (self.ending or (wire and wire.ending)) and not self.session.stopped then
                 local ok,err=pcall(function()
@@ -145,7 +175,19 @@ function M.install(env,mod,native,path)
     end
     for _,name in ipairs({'onMissionChanged','onMissionEnd','onGameExited','onProfileChanged'}) do
         local event=name
-        env.modApi.events[event]:subscribe(function() if self.session then self.session:stop('context:'..event) end end)
+        env.modApi.events[event]:subscribe(function(mission)
+            if self.session then
+                self.session:stop('context:'..event)
+                if event=='onMissionEnd' then
+                    -- Evidence only: this hook precedes retreat effects and also fires on load.
+                    -- An armed session distinguishes this run from initial checkpoint loading.
+                    local ok,state=pcall(capture)
+                    emit('phase_lab_mission_end_observed',{mission=mission and mission.ID,
+                        revision=self.session.revision,state=ok and state or nil,observationSucceeded=ok,
+                        native=native.info(),proofOfFinalCompletion=false})
+                end
+            end
+        end)
     end
     env.modApi.events.onWindowShown:subscribe(function() if self.session then self.session:setBlocked(true);self.session:stop('unexpected-window') end end)
     return self

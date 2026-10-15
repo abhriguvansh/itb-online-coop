@@ -122,6 +122,36 @@ test('missing pawn or failed busy query cannot be idle', function()
     env=environment(); env.pawn.IsBusy=function() return 0 end
     _, idle=snapshot.capture(env, {}, json); eq(idle, false)
 end)
+
+test('queued spawn type participates in the observation and inconsistent markers are unavailable',function()
+    local env=environment();env.Board.IsSpawning=function() return true end
+    local mission={ID='fixture',QueuedSpawns={{id=123,type='Firefly1',turns=1,location=env.Point(0,0)}}}
+    local a=snapshot.capture(env,mission,json)
+    eq(a.queuedSpawns[1].type,'Firefly1');eq(#a.unavailable,2)
+    mission.QueuedSpawns[1].type='Scorpion1'
+    local b=snapshot.capture(env,mission,json);assert(json.encode(a)~=json.encode(b))
+    mission.QueuedSpawns={}
+    local c=snapshot.capture(env,mission,json);eq(c.queuedSpawns,nil);eq(#c.unavailable,3)
+    env.Board.IsSpawning=function() return false end
+    mission.QueuedSpawns={{id=123,type='Firefly1',turns=1,location=env.Point(0,0)}}
+    c=snapshot.capture(env,mission,json);eq(c.queuedSpawns,nil)
+end)
+
+test('spawn RNG trace preserves native calls returns and restoration after failure',function()
+    local lab=dofile('mod/scripts/phase_lab.lua');local calls=0;local records={};local enabled=true
+    local env={Mission={}};local rng=function(limit) calls=calls+1;return limit-1 end;env.random_int=rng
+    env.Mission.NextPawn=function(_,limit) return env.random_int(limit),nil,'tail' end
+    lab.traceSpawns(env,function() return enabled end,function(_,p) json.encode(p);records[#records+1]=p end,json.array,error)
+    local a,b,c=env.Mission:NextPawn(4);eq(a,3);eq(b,nil);eq(c,'tail');eq(calls,1)
+    eq(env.random_int,rng);eq(records[1].calls[1].value,3)
+    enabled=false;env.Mission:NextPawn(8);eq(calls,2);eq(#records,1)
+    local broken={Mission={NextPawn=function() error('native failure') end},random_int=rng}
+    lab.traceSpawns(broken,function() return true end,function() end,json.array,error)
+    fails(function() broken.Mission:NextPawn() end);eq(broken.random_int,rng)
+    local stopped=false;local logFailure={Mission={NextPawn=function() return 'native-pawn' end},random_int=rng}
+    lab.traceSpawns(logFailure,function() return true end,function()error('log failed')end,json.array,function()stopped=true end)
+    eq(logFailure.Mission:NextPawn(),'native-pawn');eq(stopped,true);eq(logFailure.random_int,rng)
+end)
 test('snapshot ordering survives pawn enumeration order', function()
     local env=environment()
     local ids={9,7}

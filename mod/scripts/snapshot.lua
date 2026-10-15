@@ -24,7 +24,7 @@ function snapshot.capture(env, mission, json)
         tiles = json.array(),
         pawns = json.array(),
         excluded = json.array({ 'rng-state', 'pending-engine-effects', 'pending-callbacks',
-            'mission-script-state', 'spawn-plan', 'weapon-power-and-charges',
+            'mission-script-state-beyond-queued-spawns', 'future-spawn-selection', 'weapon-power-and-charges',
             'pilot-abilities', 'off-board-pawns', 'campaign-state' }),
     }
     result.mission = attempt('mission.ID', function() return mission.ID end)
@@ -103,6 +103,32 @@ function snapshot.capture(env, mission, json)
             idle = false
         end
     end
+    -- Loader QueuedSpawns is ordered (surface order); do not sort away differences.
+    result.queuedSpawns=attempt('mission.queuedSpawns',function()
+        local queue=mission.QueuedSpawns or {};assert(type(queue)=='table','invalid-spawn-queue')
+        local entries=json.array();local seen={};local count=0
+        for key in pairs(queue) do
+            assert(type(key)=='number' and key%1==0 and key>=1 and key<=#queue,'sparse-spawn-queue')
+            count=count+1
+        end
+        assert(count==#queue and count<=width*height,'invalid-spawn-count')
+        for _,spawn in ipairs(queue) do
+            local p=point(spawn.location)
+            assert(type(p.x)=='number' and p.x%1==0 and p.x>=0 and p.x<width
+                and type(p.y)=='number' and p.y%1==0 and p.y>=0 and p.y<height,'invalid-spawn-point')
+            assert(type(spawn.type)=='string' and #spawn.type>0 and #spawn.type<=128,'invalid-spawn-type')
+            assert(type(spawn.id)=='number' and spawn.id%1==0 and spawn.id>=0,'invalid-spawn-id')
+            assert(type(spawn.turns)=='number' and spawn.turns%1==0 and spawn.turns>=0,'invalid-spawn-age')
+            local index=p.y*width+p.x+1
+            assert(not seen[index] and result.tiles[index].spawning==true,'spawn-marker-mismatch')
+            seen[index]=true
+            entries[#entries+1]={localId=spawn.id,type=spawn.type,turns=spawn.turns,position=p}
+        end
+        for i,tile in ipairs(result.tiles) do
+            assert(tile.spawning~=true or seen[i],'unrecorded-spawn-marker')
+        end
+        return entries
+    end)
     table.sort(missing)
     return result, idle
 end

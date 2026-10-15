@@ -66,6 +66,9 @@ f.add('READY|test-session|-|5|player3|end-turn-5\n{}');f.tick();assert(not f.w.r
 assert(not pcall(function()f.w:ready(f.s,f.r)end))
 f.add('CONSENT|test-session|host|5|player3|end-turn-5\n{}');f.tick();assert(readiness==2)
 print('Repeated-turn mailbox config and fresh readiness passed (in-memory doubles).')
+f=runtime('repeat');f.s.revision=4;f.s.phase='player4';f.r.revision=4;f.r.phase='player4'
+f.add('DONE|test-session|-|4|player4|-\n{}')
+assert(not pcall(f.tick),'repeated run must not claim mission completion at player4')
 
 for _,actor in ipairs({'combat','cannon','artillery'}) do
  local r=dofile('mod/scripts/phase_wire.lua').decode('PREPARE|s1|guest|0|player2|attack-guest-1|attack'..actor..'|1|5|1|3\n{}','s1')

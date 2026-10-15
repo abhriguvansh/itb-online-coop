@@ -6,8 +6,10 @@ if((Get-Item -LiteralPath $Root).Attributes -band [IO.FileAttributes]::ReparsePo
 $config=Get-Content -LiteralPath (Join-Path $Root 'connection.json') -Raw | ConvertFrom-Json
 if($config.host-ne'10.0.2.2' -or $config.peer-notin@('host','guest') -or $config.session-notmatch'^[a-f0-9-]{36}$' -or $config.token-notmatch'^[a-f0-9]{48}$' -or $config.port-lt1 -or $config.port-gt65535){throw 'Invalid private connection configuration'}
 $utf8=[Text.UTF8Encoding]::new($false,$true);$incoming=1;$outgoing=1;$complete=$false
+$frameLimit=if($config.repeatedTurns){2048}else{1024}
+$durationLimit=if($config.repeatedTurns){1510}else{610}
 function Write-Frame($frame){
-    if($script:incoming-gt1024){throw 'Incoming frame limit'}
+    if($script:incoming-gt$frameLimit){throw 'Incoming frame limit'}
     if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
     $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
     if($null-ne$frame.move){
@@ -41,7 +43,7 @@ try{
     Send-Message @{type='hello';session=$config.session;peer=$config.peer;token=$config.token}
     $buffer='';$bytes=[byte[]]::new(8192);$chars=[char[]]::new(8192);$decoder=$utf8.GetDecoder()
     $last=[Diagnostics.Stopwatch]::StartNew();$total=[Diagnostics.Stopwatch]::StartNew()
-    while($total.Elapsed.TotalSeconds-lt610){
+    while($total.Elapsed.TotalSeconds-lt$durationLimit){
         if($client.Client.Poll(0,[Net.Sockets.SelectMode]::SelectRead)-and$client.Available-eq0){
             if($complete){Write-Output 'Guest phase bridge completed';exit 0};throw 'Coordinator disconnected'
         }

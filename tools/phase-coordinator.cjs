@@ -27,8 +27,7 @@ class PhaseCoordinator{
   advance(){
     this.require(this.states.host.witness===this.states.guest.witness,'observed-state-divergence');
     this.record({type:'barrier',revision:this.stage,witness:this.states.host.witness,fullStateProof:false});
-    if(this.repeatedTurns && this.turn===4 && this.pendingKind==='move')this.limit=this.stage;
-    if((this.repeatedTurns&&this.turn===4&&this.pendingKind==='move')||(!this.repeatedTurns&&this.stage===this.limit)){this.mode='finishing';this.both(this.frame('DONE'));return;}
+    if(!this.repeatedTurns&&this.stage===this.limit){this.mode='finishing';this.both(this.frame('DONE'));return;}
     this.require(this.stage<32,'experiment-command-limit');
     this.consents={};
     if(this.interactive){this.mode=!this.repeatedTurns&&this.phaseRun&&this.stage===2?'readiness':'proposal';this.both(this.frame(this.mode==='readiness'?'READY':'INPUT','-',this.mode==='readiness'?'end-turn':'-'));return;}
@@ -40,7 +39,7 @@ class PhaseCoordinator{
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.14.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.15.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -136,7 +135,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false){
       try{
         buffer+=chunk;if(Buffer.byteLength(buffer)>140000)throw Error('oversized-frame');
         let cut;while((cut=buffer.indexOf('\n'))>=0){
-          if(++count>1024)throw Error('message-limit');
+          if(++count>(repeatedTurns?2048:1024))throw Error('message-limit');
           const m=JSON.parse(buffer.slice(0,cut));buffer=buffer.slice(cut+1);
           if(!peer){
             if(m.type!=='hello'||m.session!==session||!Object.hasOwn(tokens,m.peer)||m.token!==tokens[m.peer]||peers[m.peer])throw Error('authentication-failed');
@@ -152,7 +151,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false){
   const timer=setInterval(()=>{
     try{core.tick();}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
-    if(started && Date.now()-started>(interactive?600000:180000)){stop('experiment-deadline');return;}
+    if(started && Date.now()-started>(repeatedTurns?1500000:interactive?600000:180000)){stop('experiment-deadline');return;}
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});
   },1000);
   server.on('error',e=>stop(e.message));

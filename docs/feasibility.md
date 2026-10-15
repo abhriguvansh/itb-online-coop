@@ -1,3 +1,5 @@
+**October 15 update (probe 0.15.0):** Three base weapons, one-unused-unit native confirmation and the complete protected enemy phase passed in two instances. Enemy spawn type/location then diverged; the corrected live trace confirms differing native random results during Lua enemy selection. The session stopped before another command. Queued-spawn contents are now compared, but RNG state, native placement and general determinism remain unproven. See [current evidence](command-session.md#spawn-divergence--probe-0150-october-15).
+
 **October 14 update (probe 0.13.0):** Same-mech movement on successive turns and fresh readiness for a second End Turn are now game-verified in both VMs. The observed four-active-unit dialog correction passed; the second enemy phase reached grid defeat and both sessions stopped protected. Full battle and second surviving player-phase admission remain unproven. Starting-squad weapon coverage is the next concrete blocker. See the current [command-session evidence](command-session.md#repeated-turns--probe-0130-october-14).
 
 # Capability evidence
