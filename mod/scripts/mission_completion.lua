@@ -50,6 +50,9 @@ function M.runtime(o)
     end
     if env.sdl then self.inputHook=env.sdl.eventHook(function(event)
         local p=self.pending
+        if p and event:type()==env.sdl.events.mousebuttonup and event:mousebutton()==1 then
+            p.releasesSeen=(p.releasesSeen or 0)+1
+        end
         if p and p.stage~='retreat' and (p.inputRecords or 0)<24 then
             local t=event:type()
             if t==env.sdl.events.mousemotion or t==env.sdl.events.mousebuttondown or t==env.sdl.events.mousebuttonup then
@@ -119,6 +122,9 @@ function M.runtime(o)
     function self:update()
         self.frame=self.frame+1;local p=self.pending;if not p or p.stage=='complete' then return end
         local n=healthy();assert(now()-p.at<120000,'result-timeout-no-retry')
+        -- Worker submission precedes SDL delivery. Do not aim at the next
+        -- control while the game's button state still belongs to the last click.
+        if p.releaseExpected and (p.releasesSeen or 0)<p.releaseExpected then return end
         if p.stage=='retreat' or p.stage=='prepared' or p.stage=='observed' then return end
         if p.stage=='tail' then
             assert(env.GetCurrentMission()==p.mission and env.Board,'result-tail-context-lost')
@@ -176,6 +182,7 @@ function M.runtime(o)
             local r=env.sdlext.CurrentWindowRect;assert(r and r.x==1005 and r.y==290 and r.w==275 and r.h==500,'result-menu-changed')
         end
         local action=p.stage;p.stage=nextStage
+        if env.sdl then p.releaseExpected=(p.releasesSeen or 0)+1 end
         local accepted,detail=native.click(p.x,p.y)
         o.emit('mission_result_native_click',{action=action,accepted=accepted,detail=detail})
         assert(accepted,'result-click-uncertain-no-retry')

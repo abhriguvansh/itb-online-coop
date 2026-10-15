@@ -8,7 +8,10 @@ function ui.install(env, lab, gate, attack)
         local b = env.Ui():pospx(8, y):widthpx(270):heightpx(36):caption(caption)
             :decorate({ env.DecoButton(), env.DecoAlign(0, 2), env.DecoCaption() }):addTo(root)
         b.onclicked = function(_, mouseButton)
-            if mouseButton == 1 then callback() end
+            -- Visibility can change after the loader caches a hovered control.
+            -- A stale/tagged click must not rearm or reset a separate diagnostic
+            -- while the protected command session owns the game input.
+            if mouseButton == 1 and b.visible and not lab.sessionOwned then callback() end
             return true -- The diagnostic click must never reach the native board.
         end
         return b

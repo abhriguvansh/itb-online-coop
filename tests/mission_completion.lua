@@ -7,10 +7,13 @@ local function fixture()
     e.GetCurrentMission=function()return e.mission end
     e.Board={GetBusyState=function()return e.busy or 0 end};e.screen={w=function()return 1920 end,h=function()return 1081 end}
     e.sdlext={CurrentWindowRect={}}
+    local releaseHook
+    e.sdl={events={mousebuttonup=1,mousebuttondown=2,mousemotion=3},mouse={x=function()return 0 end,y=function()return 0 end},eventHook=function(fn)releaseHook=fn;return fn end}
+    e.release=function()releaseHook({type=function()return 1 end,mousebutton=function()return 1 end})end
     local n={guardActive=true,sessionState=1,releaseFailed=false,pressed=false,intentSerial=0,armed=false}
     local native={info=function()return n end,begin=function()return true end,finish=function()end}
-    local clicks={};native.aim=function(x,y)n.mouseX=x;n.mouseY=y;n.cursorX=x;n.cursorY=y;return true end
-    native.click=function(x,y)clicks[#clicks+1]={x=x,y=y};return true end
+    local clicks={};e.aims=0;native.aim=function(x,y)e.aims=e.aims+1;n.mouseX=x;n.mouseY=y;n.cursorX=x;n.cursorY=y;return true end
+    native.click=function(x,y)clicks[#clicks+1]={x=x,y=y};if not e.deferRelease then e.release() end;return true end
     local sent={};local wire={repeatedTurns=true,send=function(_,m)sent[#sent+1]=m end}
     local s={terminal={id='end-turn-16',revision=16,phase='player4'},revision=16}
     s.stop=function(_,reason)s.stopped=true;s.reason=reason end
@@ -64,3 +67,13 @@ do
     assert(not pcall(tick),'guard loss cannot complete result')
 end
 print('Mission result contracts: tail, dismissal, native menu commit, exact peer messages and no retries (engine doubles only).')
+do
+    local e,r,_,n,sent,clicks,fx,frame,tick,m=fixture();r:start(m,fx)
+    e.ITBCoopProtectedMissionTail();tick(2);n.intentSerial=1;n.intentX=100;n.intentY=840;tick()
+    r:receive(frame('RESULTCONTINUE',sent[1].witness));tick(6)
+    e.Board=nil;e.mission=nil;e.state='Island';r:context('onMissionChanged',nil,m);r:dismissed(m)
+    e.clock=e.clock+2500;e.deferRelease=true;tick(6);assert(#clicks==2)
+    e.sdlext.CurrentWindowRect={x=1005,y=290,w=275,h=500}
+    local aims=e.aims;tick(8);assert(e.aims==aims and #clicks==2,'worker release is not SDL release')
+    e.deferRelease=false;e.release();tick(6);assert(#clicks==3,'SDL release admits the next one-shot menu click')
+end

@@ -107,7 +107,7 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.17.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.17.1' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -188,7 +188,7 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&request.kind!=='end-turn'?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
@@ -196,6 +196,8 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   const record=value=>fs.appendFileSync(path.join(root,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...value})+'\n');
   const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(JSON.stringify(value)+'\n');};
   const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns,terminalCheckpoint);
+  if(fixedCombatFixture&&(!interactive||!phaseRun||!repeatedTurns||terminalCheckpoint))throw Error('fixture-requires-original-repeated-turn-checkpoint');
+  const fixture=fixedCombatFixture?require('./fixed-combat-fixture.cjs').createFixedCombatFixture():null;
   function stop(reason,success=false){
     if(stopped)return;stopped=true;clearInterval(timer);record({type:success?'passed':'stopped',reason});
     if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(JSON.stringify({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''})+'\n');
@@ -224,7 +226,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
     });
   });
   const timer=setInterval(()=>{
-    try{core.tick();}catch(e){stop(e.message);return;}
+    try{core.tick();if(fixture)fixture(core,record);}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
     if(started && Date.now()-started>(repeatedTurns?1500000:interactive?600000:180000)){stop('experiment-deadline');return;}
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});
@@ -233,8 +235,9 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   server.listen(0,'127.0.0.1',()=>{
     for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint},null,2));
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
+    if(fixture){record({type:'scripted_combat_fixture',humanSelectionProof:false,humanReadinessProof:false});console.log('Fixed combat fixture: both roles have scripted intent and End Turn consent. Result review remains manual.');}
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
 module.exports={PhaseCoordinator,expected};
-if(require.main===module){try{main(process.argv[2],['--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),['--interactive-phase','--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),['--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),process.argv[3]==='--terminal-checkpoint');}catch(e){console.error(e.message);process.exitCode=1;}}
+if(require.main===module){try{const mode=process.argv[3];main(process.argv[2],['--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),['--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),['--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture');}catch(e){console.error(e.message);process.exitCode=1;}}
