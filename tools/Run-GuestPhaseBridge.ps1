@@ -8,7 +8,7 @@ if($config.host-ne'10.0.2.2' -or $config.peer-notin@('host','guest') -or $config
 $utf8=[Text.UTF8Encoding]::new($false,$true);$incoming=1;$outgoing=1;$complete=$false
 function Write-Frame($frame){
     if($script:incoming-gt1024){throw 'Incoming frame limit'}
-    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt4 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
+    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'[\r\n]'){throw 'Invalid coordinator frame'}
     $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
     if($null-ne$frame.move){
         if($frame.kind-notin@('EXEC','PREPARE') -or $frame.move.actor-notin@('combat','cannon','artillery') -or $frame.move.kind-notin@('move','lab-punch') -or ($frame.move.kind-eq'lab-punch'-and$frame.move.actor-ne'combat')){throw 'Invalid move payload'}
@@ -57,7 +57,7 @@ try{
             }
         }
         if($last.Elapsed.TotalSeconds-gt10){throw 'Coordinator heartbeat expired'}
-        if($outgoing-gt32){throw 'Outgoing message limit'}
+        if($outgoing-gt192){throw 'Outgoing message limit'}
         $file=Join-Path $Root ('out-{0:d4}.json'-f$outgoing)
         if(Test-Path -LiteralPath $file){
             if((Get-Item -LiteralPath $file).Length-gt140000){throw 'Game output size'}

@@ -37,6 +37,11 @@ end)
 test('one-pixel native cursor rounding still permits the single click',function()
     local e,l,t,start=fixture();e.offset=1;start();assert(e.clicks==1 and not l.fault)
 end)
+test('four-unused-unit confirmation uses the separately observed native layout',function()
+    local e,l,t,start=fixture();start();e.sdlext.CurrentWindowRect={x=779,y=683,w=362,h=60}
+    for i=1,10 do t()end
+    assert(e.clicks==2 and e.lastClick.x==890 and e.lastClick.y==565 and l.pending.stage=='wait-transition' and not l.fault)
+end)
 test('confirmed transition waits beyond UI deadline without retry or early completion',function()
     local e,l,t,start,phases,n=fixture();start()
     e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60}
@@ -94,5 +99,21 @@ test('missing observation field cannot admit next phase',function()
 end)
 test('guard loss before End Turn refuses dispatch',function()
     local e,l,_,_,_,n=fixture();n.sessionState=2;assert(not l:arm() and e.clicks==0)
+end)
+test('repeat mode renews only after the complete observed phase boundary',function()
+    local e,l,t,start,phases=fixture();l.repeatedTurns=true;start()
+    assert(not l:arm());e.ready=true;phases();t();assert(not l.pending and l.completedTurn==3)
+    assert(l:arm());l:request();assert(l.pending.turn==3 and l.completedTurn==nil)
+    assert(not l:arm());for i=1,8 do t()end
+    local events={'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned','onNextTurn'}
+    for i,name in ipairs(events)do
+        if i==3 then e.phase=6 end;if i==7 then e.phase=1;e.turn=4 end
+        l:phaseEvent(name,e.mission)
+    end
+    t();assert(not l.fault and not l.pending and l.completedTurn==4 and e.clicks==2)
+end)
+test('repeat mode cannot jump turns or recover uncertain execution',function()
+    local e,l,t,start,phases=fixture();l.repeatedTurns=true;start();e.ready=true;phases();t()
+    e.turn=4;assert(not l:arm());e.turn=3;l.fault=true;assert(not l:arm())
 end)
 print('Protected End Turn contracts: '..passed..' passed (mocked engine/native input).')

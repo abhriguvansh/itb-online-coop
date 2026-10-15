@@ -218,4 +218,17 @@ test('End Turn preview requires both consents and preserves dispatch',function()
  local e,_,s,r,ready=endFixture();assert(not s:previewAction('host',r));ready()
  assert(s:previewAction('host',r) and e.endCalls==0);assert(s:submit('host',r).status=='pending' and e.endCalls==1)
 end)
+test('repeat mode renews movement reservation only on admitted completed End Turn',function()
+ local e,o,_,ending,_,make=endFixture();o.repeatedTurns=true;local s=session.new(o)
+ local first=make();assert(s:submit('guest',first).status=='pending');completeMove(e,s)
+ e.pawn.position={x=1,y=3};e.pawn.spent=false
+ local nextMove=make('move','again');nextMove.revision=1
+ assert(not s:previewMove('guest',nextMove)) -- even forged restored allowances cannot remove the same-turn lock
+ ending.revision=1;assert(s:setReady('host',s.phase,1,e.witness,true));assert(s:setReady('guest',s.phase,1,e.witness,true))
+ assert(s:submit('host',ending).status=='pending');assert(not s:previewMove('guest',nextMove))
+ e.phaseComplete=true;e.turn=3;s:update();e.phaseComplete=false
+ nextMove.phase='player3';nextMove.revision=2
+ assert(s:previewMove('guest',nextMove));assert(s:submit('guest',nextMove).status=='pending' and e.moveCalls==2)
+ assert(s:submit('guest',first).status=='duplicate' and e.moveCalls==2)
+end)
 print('Shared command session contracts: '..passed..' passed (real Lua diagnostics, mocked game/guard).')

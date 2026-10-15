@@ -22,8 +22,8 @@ function M.new(env,native,emit,capture)
     end
     function self:arm()
         local ok,reason=pcall(function()
-            context();assert(not self.used and not self.pending and not self.fault,'one-call-lockout')
-            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and env.Game:GetTurnCount()==2,'unsupported-start-phase')
+            context();assert((not self.used or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())) and not self.pending and not self.fault,'one-call-lockout')
+            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and (env.Game:GetTurnCount()==2 or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())),'unsupported-start-phase')
             local _,idle=capture();assert(idle,'not-idle')
             local selected=env.Board:GetSelectedPawn()
             assert(not selected or selected:GetArmedWeaponId()<=0,'weapon-armed')
@@ -35,9 +35,9 @@ function M.new(env,native,emit,capture)
         p.x,p.y,p.stage,p.aimedFrame=x,y,stage,self.frame
     end
     function self:request()
-        assert(self.armed and not self.used,'not-armed')
+        assert(self.armed and (not self.used or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())) and not self.pending and not self.fault,'not-armed')
         context()
-        self.used=true
+        self.used=true;self.completedTurn=nil
         local p={turn=env.Game:GetTurnCount(),mission=env.GetCurrentMission(),since=env.modApi:elapsedTime(),step=0,stage='starting'}
         self.pending=p
         emit('end_turn_requested',{turn=p.turn,confirmation='normal-native-dialog',native=native.info()})
@@ -89,7 +89,7 @@ function M.new(env,native,emit,capture)
                 if env.modApi.runLaterQueue and next(env.modApi.runLaterQueue) then return end
                 emit('end_turn_postconditions_observed',{turn=p.turn+1,team=env.TEAM_PLAYER,phaseHooks=p.step,
                     busy=env.Board:GetBusyState(),state=state,proofOfGeneralQuiescence=false,proofOfPeerAgreement=false})
-                self.pending=nil;self.armed=false;self.status='Next player phase admitted';return
+                self.completedTurn=p.turn+1;self.pending=nil;self.armed=false;self.status='Next player phase admitted';return
             end
             -- After Yes is submitted, only ordered phase evidence can complete the action.
             -- Slow rendering can delay the first hook past the UI deadline; retain the
@@ -106,8 +106,9 @@ function M.new(env,native,emit,capture)
                 if p.lastRect~=fingerprint then
                     p.lastRect=fingerprint;emit('end_turn_dialog_observation',rect)
                 end
-                -- Native unused-unit Active Units subpanel, observed at this fixed checkpoint/layout.
-                if r and r.x==803 and r.y==683 and r.w==315 and r.h==60 then
+                -- Observed native Active Units subpanel for three or four unused units.
+                -- The confirmation buttons retain the same position in both layouts.
+                if r and r.y==683 and r.h==60 and ((r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
                     p.dialog=rect;emit('end_turn_confirmation_observed',rect)
                     aim(p,894,565,'approach-confirm')
                 end

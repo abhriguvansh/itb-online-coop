@@ -1,12 +1,41 @@
 const assert=require('node:assert/strict');
 const {PhaseCoordinator,expected}=require('../tools/phase-coordinator.cjs');
 const session='fixture-session';
+testRepeatedTurns();
+function testRepeatedTurns(){
+ const sent=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true,true);
+ const send=(peer,m)=>c.receive(peer,{session,peer,...m});
+ const ctx=(revision,turn)=>({revision,phase:'player'+turn,witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],pawns:[{localId:2,position:{x:0,y:3},movementSpent:false,active:true}],turn})});
+ const n={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.13.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
+ let rev=0,turn=2;
+ for(const kind of ['move','end-turn','move','end-turn','move']){
+  let r,origin;
+  if(kind==='end-turn'){
+   const ready={type:'ready',confirmUnused:true,...ctx(rev,turn)};
+   send('guest',ready);assert.equal(c.mode,'readiness');
+   assert.throws(()=>send('guest',ready),/unexpected-readiness/);
+   assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,rev*2);
+   send('host',ready);r=c.proposal.request;origin='host';assert.equal(r.id,'end-turn-'+rev);
+  }else{
+   r={session,encounter:'artillery-checkpoint',...ctx(rev,turn),id:'move-guest-'+(rev+1),kind,actor:'artillery',fromX:0,fromY:3,toX:1,toY:3};origin='guest';
+   send(origin,{type:'proposal',request:r});
+  }
+  for(const peer of ['host','guest'])send(peer,{type:'prepared',origin,request:r,native:n});
+  if(kind==='end-turn')turn++;
+  for(const peer of ['host','guest'])send(peer,{type:'observed',id:r.id,...ctx(rev+1,turn),native:n});
+  rev++;
+ }
+ assert.equal(c.mode,'finishing');assert.equal(c.stage,5);assert.equal(c.turn,4);
+ for(const peer of ['host','guest'])send(peer,{type:'complete',revision:5,witness:ctx(5,4).witness,native:n});
+ assert.equal(c.mode,'complete');console.log('Repeated-turn coordinator sequence passed (fake messages).');
+}
 const context=n=>({revision:n,phase:n<3?'player2':'player3',witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],testRevision:n})});
 const guard={guardActive:true,sessionState:1,releaseFailed:false};
 function fixture(){
   const sent=[],events=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e));
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:false,...context(0)});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.13.0',interactive:false,...context(0)});
   return {c,sent,events,send};
 }
 let count=0;
@@ -15,6 +44,7 @@ test('four-command fixture waits for both observed outcomes and both End Turn co
   const {c,send,sent}=fixture();
   for(let n=0;n<4;n++){
     if(n===2){
+      assert(sent.filter(x=>x.frame.kind==='READY').every(x=>x.frame.id==='end-turn'));
       send('host',{type:'ready',confirmUnused:true,...context(2)});assert.equal(c.mode,'readiness');
       send('guest',{type:'ready',confirmUnused:true,...context(2)});assert.equal(c.mode,'proposal');
       assert.equal(sent.filter(x=>x.frame.kind==='CONSENT').length,4);
@@ -57,7 +87,7 @@ function interactiveFixture(){
   const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},sent=[];
   let time=0;const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>time);
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:true,...ctx});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.13.0',interactive:true,...ctx});
   const r={session,encounter:'artillery-checkpoint',...ctx,id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
   const prepare=()=>{for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request:r,native:{...guard,armed:false,pressed:false}});};
   return {c,send,sent,r,ctx,prepare,elapse:ms=>{time+=ms;}};
@@ -116,7 +146,7 @@ test('selected phase requires two explicit ready messages and fresh preparation 
  const sent=[],state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:0,position:{x:3,y:3},active:true},{localId:1,position:{x:1,y:5},movementSpent:false},{localId:2,position:{x:0,y:3},movementSpent:false}]};
  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true);
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});let ctx={revision:0,phase:'player2',witness:JSON.stringify(state)};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.12.0',interactive:true,phaseRun:true,...ctx});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.13.0',interactive:true,phaseRun:true,...ctx});
  for(let n=0;n<4;n++){
   const origin=['guest','host','host','guest'][n],r=expected(session,n,ctx);
   if(n!==2)r.id=(n===1?'attack-':'move-')+origin+'-'+(n+1);

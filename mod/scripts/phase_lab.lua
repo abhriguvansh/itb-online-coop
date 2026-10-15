@@ -15,6 +15,7 @@ function M.install(env,mod,native,path)
     end
     local function planned()
         local n=self.session.revision
+        if wire and wire.repeatedTurns then return request('end-turn','end-turn-'..n),'host' end
         if n==0 then return request('move','artillery','artillery',0,3,1,1),'guest'
         elseif n==1 then return request('lab-punch','punch','combat',3,3,2,3),'host'
         elseif n==2 then return request('end-turn','end-turn'),'host'
@@ -41,7 +42,7 @@ function M.install(env,mod,native,path)
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..'attack'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
-            gate=mod.inputGate,capture=capture,json=json,witness=witness,
+            gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
         self.stage=0;self.status='Running protected phase sequence'

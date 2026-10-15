@@ -86,6 +86,7 @@ function M.new(o)
     move.bridge = o.bridge
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture) end
+    if o.repeatedTurns and ending then ending.repeatedTurns=true end
     local function result(record)
         return {status=record.status,reason=record.reason,revision=record.revision or self.revision}
     end
@@ -219,6 +220,9 @@ function M.new(o)
         if pending and observed and not move.pending and not attack.pending and not (ending and ending.pending) then
             if pending.request.kind=='end-turn' then
                 self.turn=self.turn+1;self.phase='player'..self.turn
+                -- Release only the successful previous turn's diagnostic reservation.
+                -- Engine allowances, protection, hooks and session replay records still gate every action.
+                if o.repeatedTurns then move.usedPawns={} end
             end
             self.revision=self.revision+1
             pending.status='observed'; pending.revision=self.revision

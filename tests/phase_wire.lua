@@ -15,7 +15,7 @@ assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
 local json=dofile('mod/scripts/json.lua')
 local function runtime(phaseRun)
-    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun and 'interactive-phase\n' or 'interactive\n')}
+    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
     local clock,previews,submits=0,0,0
     local env={os={getenv=function()return root end,rename=function(a,b)files[b]=files[a];files[a]=nil;return true end},
         modApi={elapsedTime=function()return clock end},io={open=function(p,mode)
@@ -57,3 +57,12 @@ f.add('CONSENT|test-session|host|2|player2|end-turn\n{}');f.tick()
 f.add('PREPARE|test-session|host|2|player2|end-turn\n{}');f.tick();assert(f.w.prepared)
 f.add('EXEC|test-session|host|2|player2|end-turn\n{}');f.tick();local _,n=f.counts();assert(n==1 and f.w.ending)
 print('3 selected-phase framing/readiness contracts passed; fake mailbox only.')
+f=runtime('repeat');assert(f.w.repeatedTurns and f.w.phaseRun and f.w.interactive)
+f.s.revision=5;f.s.phase='player3';f.r.revision=5;f.r.phase='player3';f.r.id='end-turn-5';f.r.kind='end-turn'
+local readiness=0;f.s.setReady=function()readiness=readiness+1;return true end
+f.add('INPUT|test-session|-|5|player3|-\n{}');f.tick();assert(f.w.inputReady and not f.w.readySent)
+f.w:ready(f.s,f.r);assert(readiness==1 and not f.w.inputReady)
+f.add('READY|test-session|-|5|player3|end-turn-5\n{}');f.tick();assert(not f.w.readyInput)
+assert(not pcall(function()f.w:ready(f.s,f.r)end))
+f.add('CONSENT|test-session|host|5|player3|end-turn-5\n{}');f.tick();assert(readiness==2)
+print('Repeated-turn mailbox config and fresh readiness passed (in-memory doubles).')
