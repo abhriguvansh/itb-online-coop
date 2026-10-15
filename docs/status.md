@@ -2,7 +2,9 @@
 
 **Provisional v0.1 approved, engineering resumed.** R1–R9 and the R5/R6 qualifications are recorded in the [ruleset](co-op-design.md). The next target is a restricted two-instance action/phase proof, then a full supported mission; campaign machinery remains deferred.
 
-**Current increment: probe 0.16.0 — coordinated spawning and combat to victory demonstrated.** Both real games used selected actions over TCP from player turn 2 through two surviving enemy phases and the final turn. Initial barrier 0 and outcomes 1–16 match; one native Scorpion selection, bookkeeping and placement are coordinated. Both displays reached Region Secured. A spawn/phase race was identified and corrected with a bounded engine wait plus explicit batch completion. The final End Turn intentionally stops at `onMissionEnd`: there is no post-retreat protocol completion or full-state/general-determinism claim. Both VMs are shut down and the original disposable checkpoint hashes restored. [Evidence](command-session.md#coordinated-spawning-and-combat-to-victory--probe-0160-october-15).
+**Current increment: probe 0.17.0 — protected mission-result completion passed from a final-turn checkpoint.** Both real games completed six selected tactical actions, final End Turn, retreat, explicit result approval, normal Continue/menu navigation, fresh committed-result comparison and both completion acknowledgments over TCP. Supported saved results match each other and the normal result-path control. A continuous run from player turn 2 subsequently stopped protected after command 11 when the guest runtime heartbeat expired; it did not complete. The result boundary is verified, but the uninterrupted combat-through-results milestone remains open. Both VMs are shut down and all original disposable save hashes restored. [Evidence and failures](command-session.md#protected-mission-results--probe-0170-october-15).
+
+**Previous increment: probe 0.16.0 — coordinated spawning and combat to victory demonstrated.** Both real games used selected actions over TCP from player turn 2 through two surviving enemy phases and the final turn. Initial barrier 0 and outcomes 1–16 match; one native Scorpion selection, bookkeeping and placement are coordinated. Both displays reached Region Secured. Its final End Turn stopped protected at the mission-end hook. [Historical evidence](command-session.md#coordinated-spawning-and-combat-to-victory--probe-0160-october-15).
 
 **Previous increment: probe 0.15.0 — spawn divergence demonstrated.** Native enemy type/location selection diverged; the corrected read-only trace established different selection RNG results. That blocker motivated 0.16.0. [Historical evidence](command-session.md#spawn-divergence--probe-0150-october-15).
 
@@ -89,7 +91,7 @@ Public portfolio destination: [abhriguvansh/itb-online-coop](https://github.com/
 
 ## Next playable milestone
 
-Complete a supported tactical battle across both real instances, with starting-squad weapon selection, repeated legal actions, fresh shared End Turn approval and an explicit mission-end outcome. Preserve the current losing sequence as evidence; do not repeat it merely to collect more matching states. Weapon execution is the next implementation priority. Independent inspection remains required for usable co-op; room codes/lobby, campaign voting and recovery remain deferred.
+Resolve the guest rendering/runtime heartbeat stall without weakening the stopped input guard, then run the existing selected-action battle continuously from the original checkpoint through the verified committed-result boundary. Do not repeat combat until a specific stability correction or controlled diagnostic hypothesis is ready. Independent inspection remains required for usable co-op; room codes/lobby, campaign voting and recovery remain deferred. Recommended: GPT-6.1 Sol, High reasoning, normal coding mode.
 
 ## Historical verification: 0.5.10
 

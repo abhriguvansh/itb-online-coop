@@ -88,6 +88,7 @@ function M.new(o)
     attack.bridge=o.bridge
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture,o.phaseSettled) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
+    if o.terminalCheckpoint and ending then ending.terminalCheckpoint=true end
     local function result(record)
         return {status=record.status,reason=record.reason,revision=record.revision or self.revision}
     end
@@ -99,6 +100,7 @@ function M.new(o)
         return value
     end
     function self:setReady(peer,phase,revision,value,confirmUnused)
+        if self.terminal then return false end
         if not players[peer] then return false end
         ready[peer]=nil
         if not health() or pending or self.phase~=phase or self.revision~=revision or confirmUnused~=true
@@ -117,6 +119,7 @@ function M.new(o)
         if count >= 128 then self:stop('experiment-record-limit'); return {status='stopped',reason=self.reason} end
         local rec={request=copy(r),status='rejected',revision=self.revision}; records[key]=rec; count=count+1
         local function reject(reason) rec.reason=reason; emit('command_rejected',{id=r.id,peer=peer,reason=reason}); return result(rec) end
+        if self.terminal then return reject('mission-result-pending') end
         if not health() then return reject(self.reason) end
         if r.session ~= o.session or r.encounter ~= o.encounter or r.phase ~= self.phase then return reject('wrong-context') end
         if pending then return reject('command-pending-renew-intent') end
@@ -167,6 +170,7 @@ function M.new(o)
     end
     -- Read-only draft check; never reserves a command or crosses the input boundary.
     function self:previewMove(peer,r)
+        if self.terminal then return false,'mission-result-pending' end
         if not players[peer] or not envelope(r) or r.kind~='move' then return false,'invalid-move-draft' end
         if not health() then return false,self.reason end
         if pending then return false,'command-pending-renew-intent' end
@@ -181,6 +185,7 @@ function M.new(o)
         return ok,ok and 'supported-move' or tostring(reason)
     end
     function self:previewAction(peer,r)
+        if self.terminal then return false,'mission-result-pending' end
         if type(r)=='table' and r.kind=='move' then return self:previewMove(peer,r) end
         if not players[peer] or not envelope(r) then return false,'invalid-action-draft' end
         if not health() then return false,self.reason end
@@ -219,6 +224,11 @@ function M.new(o)
         return true,'supported-action'
     end
     function self:update()
+        if self.terminal then
+            local ok,healthy=pcall(o.guardHealthy)
+            if not ok or not healthy then self:stop('protection-unavailable') end
+            return
+        end
         if not health() then return end
         local ok = pcall(function() move:update(); attack:update();if ending then ending:update() end end)
         if not ok then self:stop('update-exception'); return end
@@ -244,8 +254,22 @@ function M.new(o)
         local ok=pcall(function() ending:phaseEvent(name,mission) end)
         if not ok then self:stop('phase-hook-exception') end
     end
-    function self:draw() if attack.draw then attack:draw() end;if ending then ending:draw() end end
-    function self:missionUpdate() if attack.missionUpdate then attack:missionUpdate() end;if ending then ending:missionUpdate() end end
+    function self:beginTerminal(mission)
+        if self.stopped or self.terminal or not o.repeatedTurns or not pending or pending.request.kind~='end-turn'
+            or not ending or not ending.beginTerminal or not health() then return false end
+        if not ending:beginTerminal(mission) then return false end
+        self.terminal={id=pending.request.id,revision=self.revision,phase=self.phase}
+        ready={};emit('command_terminal_pending',self.terminal);return not self.stopped
+    end
+    function self:finishTerminal()
+        assert(not self.stopped and self.terminal and pending and pending.request.id==self.terminal.id,'terminal-command-missing')
+        assert(o.guardHealthy(),'terminal-protection-lost')
+        self.revision=self.revision+1;pending.status='observed';pending.revision=self.revision
+        emit('command_observed',{id=pending.request.id,revision=self.revision,terminal=true,proofOfPeerAgreement=false})
+        pending=nil;self.terminal.completed=true
+    end
+    function self:draw() if self.terminal then return end;if attack.draw then attack:draw() end;if ending then ending:draw() end end
+    function self:missionUpdate() if self.terminal then return end;if attack.missionUpdate then attack:missionUpdate() end;if ending then ending:missionUpdate() end end
     function self:setBlocked(value) move.blocked=value;if ending then ending.blocked=value end end
     function self:skillEvent(kind,pawn,weapon)
         if self.stopped then return end

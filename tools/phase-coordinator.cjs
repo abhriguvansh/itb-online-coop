@@ -10,9 +10,39 @@ function expected(session,revision,state){
   return {...r,kind:values[0],actor:values[1],fromX:values[2],fromY:values[3],toX:values[4],toY:values[5]};
 }
 class PhaseCoordinator{
-  constructor(session,send,record,interactive=false,now=()=>performance.now(),phaseRun=false,repeatedTurns=false){this.repeatedTurns=repeatedTurns;this.turn=2;this.phaseRun=phaseRun;this.now=now;this.interactive=interactive;this.limit=interactive&&!phaseRun?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
+  constructor(session,send,record,interactive=false,now=()=>performance.now(),phaseRun=false,repeatedTurns=false,terminalCheckpoint=false){this.terminalCheckpoint=terminalCheckpoint;this.repeatedTurns=repeatedTurns;this.turn=terminalCheckpoint?4:2;this.phaseRun=phaseRun;this.now=now;this.interactive=interactive;this.limit=interactive&&!phaseRun?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
   require(ok,reason){if(!ok)throw Error(reason);}
-  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');}
+  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');this.require(!this.result||this.mode==='complete'||this.now()<this.result.deadline,'mission-result-timeout');}
+  resultReceive(peer,m){
+    this.require(this.repeatedTurns&&this.pendingKind==='end-turn'&&this.turn===4&&!this.spawn,'result-outside-final-end-turn');
+    this.require(m.revision===this.stage&&m.phase===this.states.host.phase&&m.id===this.pendingId,'result-stale-context');
+    this.require(m.native?.guardActive===true&&m.native?.sessionState===1&&m.native?.releaseFailed===false,'result-protection-lost');
+    this.require(typeof m.witness==='string'&&Buffer.byteLength(m.witness)<=65536&&!/[\r\n]/.test(m.witness),'result-invalid-witness');
+    const state=JSON.parse(m.witness);
+    if(m.type==='result_prepared'){
+      this.require(this.mode==='executing'||this.mode==='result-preparing','result-unexpected-preparation');
+      if(!this.result){this.result={before:{},after:{},deadline:this.now()+90000};this.mode='result-preparing';}
+      this.require(!this.result.before[peer],'result-duplicate-preparation');
+      this.require(state.schema==='itb-observation-v1'&&state.unavailable?.length===0&&Array.isArray(state.pawns)&&state.pawns.every(p=>p.team!==6||p.dead),'result-retreat-incomplete');
+      this.result.before[peer]=m.witness;
+      if(this.result.before.host&&this.result.before.guest){
+        this.require(this.result.before.host===this.result.before.guest,'result-precondition-divergence');
+        this.mode='result-executing';this.result.deadline=this.now()+30000;
+        this.record({type:'result_prepared_barrier',revision:this.stage,witness:m.witness,fullStateProof:false});
+        this.both({...this.frame('RESULTCONTINUE','-',this.pendingId),witness:m.witness});
+      }return;
+    }
+    this.require(m.type==='result_observed'&&this.mode==='result-executing'&&!this.result.after[peer],'result-unexpected-outcome');
+    this.require(state.schema==='itb-mission-result-v1'&&state.coverage==='partial-result-only'&&state.region===2&&state.regionState===2&&state.mission===''&&Number.isInteger(state.grid)&&state.grid>0&&Number.isInteger(state.reputation)&&state.reputation>=0,'result-uncommitted-state');
+    this.require(Array.isArray(state.pilots)&&state.pilots.length===3&&state.pilots.every((p,i)=>p.slot===i&&typeof p.id==='string'&&Number.isInteger(p.experience)&&p.experience>=0&&Number.isInteger(p.level)&&p.level>=0),'result-incomplete-pilots');
+    this.require(Array.isArray(state.objectives)&&state.objectives.length===2&&state.objectives.every((v,i)=>v.slot===i&&v.value===1&&v.potential===1)&&state.objectives[0].text==='Mission_Artillery_Obj'&&state.objectives[1].text==='Bonus_Simple_Asset','result-incomplete-objectives');
+    this.result.after[peer]=m.witness;
+    if(this.result.after.host&&this.result.after.guest){
+      this.require(this.result.after.host===this.result.after.guest,'result-outcome-divergence');this.mode='result-finishing';
+      this.record({type:'result_committed_barrier',revision:this.stage+1,witness:m.witness,fullStateProof:false});
+      this.both({...this.frame('RESULTDONE','-',this.pendingId),witness:m.witness});
+    }
+  }
   spawnReceive(peer,m){
     this.require(this.repeatedTurns&&this.mode==='executing'&&this.pendingKind==='end-turn','spawn-outside-end-turn');
     this.require(m.revision===this.stage&&m.phase===this.states.host.phase&&Number.isInteger(m.index)&&m.index===(this.spawnIndex||0)+1&&m.index<=32,'spawn-stale-context');
@@ -74,9 +104,10 @@ class PhaseCoordinator{
     this.tick();
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
+    if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.16.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.17.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -132,6 +163,12 @@ class PhaseCoordinator{
       }return;
     }
     if(m.type==='complete'){
+      if(this.mode==='result-finishing'){
+        this.require(!this.complete[peer]&&m.revision===this.stage&&m.phase===this.states.host.phase&&m.id===this.pendingId&&m.witness===this.result.after[peer],'result-unexpected-completion');
+        this.require(m.native?.guardActive===true&&m.native?.sessionState===1&&m.native?.releaseFailed===false,'result-completion-protection-lost');
+        this.complete[peer]=true;
+        if(this.complete.host&&this.complete.guest){this.mode='complete';this.record({type:'complete',revision:this.stage+1,terminal:true,fullStateProof:false});}return;
+      }
       this.require(this.mode==='finishing' && !this.complete[peer] && m.revision===this.limit && m.witness===this.states[peer].witness,'unexpected-completion');
       this.require(m.native?.guardActive===true && m.native?.sessionState===1 && m.native?.releaseFailed===false,'completion-protection-lost');
       this.complete[peer]=true;
@@ -151,14 +188,14 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&request.kind!=='end-turn'?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
   const peers={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
   const record=value=>fs.appendFileSync(path.join(root,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...value})+'\n');
   const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(JSON.stringify(value)+'\n');};
-  const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns);
+  const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns,terminalCheckpoint);
   function stop(reason,success=false){
     if(stopped)return;stopped=true;clearInterval(timer);record({type:success?'passed':'stopped',reason});
     if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(JSON.stringify({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''})+'\n');
@@ -194,10 +231,10 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false){
   },1000);
   server.on('error',e=>stop(e.message));
   server.listen(0,'127.0.0.1',()=>{
-    for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns},null,2));
+    for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint},null,2));
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
 module.exports={PhaseCoordinator,expected};
-if(require.main===module){try{main(process.argv[2],['--interactive','--interactive-phase','--repeated-turns'].includes(process.argv[3]),['--interactive-phase','--repeated-turns'].includes(process.argv[3]),process.argv[3]==='--repeated-turns');}catch(e){console.error(e.message);process.exitCode=1;}}
+if(require.main===module){try{main(process.argv[2],['--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),['--interactive-phase','--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),['--repeated-turns','--terminal-checkpoint'].includes(process.argv[3]),process.argv[3]==='--terminal-checkpoint');}catch(e){console.error(e.message);process.exitCode=1;}}

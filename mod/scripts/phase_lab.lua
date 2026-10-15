@@ -29,9 +29,30 @@ function M.install(env,mod,native,path)
     local wire=require(path..'phase_wire').open(env,json,emit)
     local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
         identity=wire and wire.session or 'local-phase-proof'}
+    self.resultTrace=require(path..'mission_completion').observe(env,emit,json,native)
+    if wire and wire.repeatedTurns then
+        self.result=require(path..'mission_completion').runtime({env=env,native=native,json=json,wire=wire,
+            session=function() return self.session end,capture=capture,emit=emit})
+        wire.result=self.result
+    end
+    function self:context(event,mission,detail)
+        if event=='onMissionEnd' and mod.movement:profileAllowed() then self.resultTrace:begin(mission,detail) end
+        if not self.session then return false end
+        local ok,handled=pcall(function()
+            if self.result and event=='onMissionEnd' and self.session:beginTerminal(mission) then
+                self.result:start(mission,detail);return true
+            end
+            if self.result and self.result:context(event,mission,detail) then return true end
+            return false
+        end)
+        if ok and handled then return true end
+        self.session:stop(ok and 'context:'..event or 'result-context:'..tostring(handled))
+        return false
+    end
     if wire and wire.repeatedTurns then
         self.spawns=require(path..'spawn_sync').install({env=env,wire=wire,json=json,native=native,
-            session=function() return self.session end,capture=capture,emit=emit})
+            session=function() return self.session end,capture=capture,emit=emit,
+            resultPreview=function(mission) return self.result and self.result:allowsPreview(mission) end})
     end
     local function witness() local state=capture();assert(#state.unavailable==0,'incomplete-observation');return json.encode(state) end
     local function request(kind,id,actor,fx,fy,tx,ty)
@@ -56,19 +77,25 @@ function M.install(env,mod,native,path)
     local function start()
         check(not self.used and not mod.movement.armed and not mod.movement.pending
             and not mod.attack.armed and not mod.attack.pending and not mod.inputGate.active,'other-diagnostic-active')
-        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==2,'checkpoint-required')
-        local state,idle=capture();check(idle and state.gridPower==4,'checkpoint-not-ready')
-        for _,p in ipairs(state.pawns) do
-            if p.localId==2 then check(p.position.x==0 and p.position.y==3 and p.health==2 and not p.movementSpent,'artillery-checkpoint-required') end
+        local finalCheckpoint=wire and wire.terminalCheckpoint
+        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(finalCheckpoint and 4 or 2),'checkpoint-required')
+        local state,idle=capture();check(idle and state.gridPower==(finalCheckpoint and 1 or 4),'checkpoint-not-ready')
+        if finalCheckpoint then
+            local f=assert(env.io.open('C:/ITBCoopProbe/terminal-checkpoint.txt','rb'),'terminal-checkpoint-witness-missing')
+            local expected=f:read(65537);f:close();check(#expected<=65536 and json.encode(state)==expected,'terminal-checkpoint-witness-mismatch')
+        else
+            for _,p in ipairs(state.pawns) do
+                if p.localId==2 then check(p.position.x==0 and p.position.y==3 and p.health==2 and not p.movementSpent,'artillery-checkpoint-required') end
+            end
         end
         mod.movement:lockInput('protected')
         self.used=true;mod.movement.sessionOwned=true
         self.session=require(path..'command_session').new({env=env,session=self.identity,encounter='artillery-checkpoint',
-            phase='player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
+            phase=finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
-            gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,
+            gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
             phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
@@ -89,11 +116,13 @@ function M.install(env,mod,native,path)
         if wire then
             self.status='Network phase proof: revision '..s.revision
             if wire:tick(s,planned,native) then
-                emit('phase_lab_completed',{state=capture(),revision=s.revision,native=native.info(),networked=true})
+                emit('phase_lab_completed',{state=not s.terminal and capture() or nil,terminal=s.terminal~=nil,
+                    revision=s.revision,native=native.info(),networked=true,fullStateProof=false})
                 self.status='Network sequence passed - Esc exits';self.done=true
                 native.sessionStop();native.finish()
             end
-            if self.intent then self.status=self.intent:update(s,self.done) end
+            if self.intent and not s.terminal then self.status=self.intent:update(s,self.done) end
+            if s.terminal and not self.done then self.status=self.result:status() end
             return
         end
         if s.revision~=self.stage then return end
@@ -138,6 +167,7 @@ function M.install(env,mod,native,path)
                 and env.GetCurrentMission() and env.GetCurrentMission().ID=='Mission_Artillery'
             self.button:caption(self.status)
             if self.startAt and env.modApi:elapsedTime()>=self.startAt then self.startAt=nil;start() end
+            if mod.movement:profileAllowed() then self.resultTrace:draw() end
             if self.session and not self.done then self.session:draw();advance() end
             if self.intent then self.intent:draw(env.sdlext.getUiRoot(),self.session~=nil and self.button.visible) end
         end)
@@ -174,23 +204,10 @@ function M.install(env,mod,native,path)
         local event=name
         env.modapiext.events[event]:subscribe(function(_,pawn,weapon) if self.session then self.session:skillEvent(event,pawn,weapon) end end)
     end
-    for _,name in ipairs({'onMissionChanged','onMissionEnd','onGameExited','onProfileChanged'}) do
-        local event=name
-        env.modApi.events[event]:subscribe(function(mission)
-            if self.session then
-                self.session:stop('context:'..event)
-                if event=='onMissionEnd' then
-                    -- Evidence only: this hook precedes retreat effects and also fires on load.
-                    -- An armed session distinguishes this run from initial checkpoint loading.
-                    local ok,state=pcall(capture)
-                    emit('phase_lab_mission_end_observed',{mission=mission and mission.ID,
-                        revision=self.session.revision,state=ok and state or nil,observationSucceeded=ok,
-                        native=native.info(),proofOfFinalCompletion=false})
-                end
-            end
-        end)
-    end
-    env.modApi.events.onWindowShown:subscribe(function() if self.session then self.session:setBlocked(true);self.session:stop('unexpected-window') end end)
+    env.modApi.events.onMissionDismissed:subscribe(function(mission) if self.result then self.result:dismissed(mission) end end)
+    env.modApi.events.onWindowShown:subscribe(function()
+        if self.session and not (self.result and self.result:windowAllowed()) then self.session:setBlocked(true);self.session:stop('unexpected-window') end
+    end)
     return self
 end
 return M

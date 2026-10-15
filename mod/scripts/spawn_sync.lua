@@ -131,7 +131,7 @@ function M.install(o)
         if not ok then s:stop('spawn-wait:'..tostring(why)) end
     end
     env.Mission.SpawnPawns=function(m,count)
-        if not session() then return originalBatch(m,count) end
+        if not session() or (o.resultPreview and o.resultPreview(m)) then return originalBatch(m,count) end
         local ok,why=pcall(function()
             protected()
             assert(type(count)=='number' and count%1==0 and count>=0 and count<=8,'unsupported-spawn-count')
@@ -144,7 +144,7 @@ function M.install(o)
         if not ok then session():stop('spawn-batch:'..tostring(why)) end
     end
     env.Mission.SpawnPawn=function(m,location,pawnType)
-        if not session() then return originalSpawn(m,location,pawnType) end
+        if not session() or (o.resultPreview and o.resultPreview(m)) then return originalSpawn(m,location,pawnType) end
         local ok,why=pcall(function()
             protected();assert(not location and not pawnType and m.ID=='Mission_Artillery','unsupported-spawn-call')
             assert(#self.queue<8,'spawn-queue-limit');self.queue[#self.queue+1]=m
@@ -152,6 +152,7 @@ function M.install(o)
         if not ok then session():stop('spawn-intercept:'..tostring(why)) end
     end
     env.Mission.PlanEnvironment=function(m,...)
+        if o.resultPreview and o.resultPreview(m) then return originalPlan(m,...) end
         if session() and (session().stopped or self.pending or #self.queue>0) then return true end
         return originalPlan(m,...)
     end

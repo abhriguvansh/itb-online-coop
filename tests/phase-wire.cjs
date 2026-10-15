@@ -7,7 +7,7 @@ function testRepeatedTurns(){
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});
  const ctx=(revision,turn)=>({revision,phase:'player'+turn,witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],pawns:[{localId:2,position:{x:0,y:3},movementSpent:false,active:true}],turn})});
  const n={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.16.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.17.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
  let rev=0,turn=2;
  for(const kind of ['move','end-turn','move','end-turn','move']){
   let r,origin;
@@ -66,7 +66,7 @@ function spawnFixture(){
 function fixture(){
   const sent=[],events=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e));
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.16.0',interactive:false,...context(0)});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.17.0',interactive:false,...context(0)});
   return {c,sent,events,send};
 }
 let count=0;
@@ -118,7 +118,7 @@ function interactiveFixture(){
   const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},sent=[];
   let time=0;const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>time);
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.16.0',interactive:true,...ctx});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.17.0',interactive:true,...ctx});
   const r={session,encounter:'artillery-checkpoint',...ctx,id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
   const prepare=()=>{for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request:r,native:{...guard,armed:false,pressed:false}});};
   return {c,send,sent,r,ctx,prepare,elapse:ms=>{time+=ms;}};
@@ -177,7 +177,7 @@ test('selected phase requires two explicit ready messages and fresh preparation 
  const sent=[],state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:0,position:{x:3,y:3},active:true},{localId:1,position:{x:1,y:5},movementSpent:false},{localId:2,position:{x:0,y:3},movementSpent:false}]};
  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true);
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});let ctx={revision:0,phase:'player2',witness:JSON.stringify(state)};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.16.0',interactive:true,phaseRun:true,...ctx});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.17.0',interactive:true,phaseRun:true,...ctx});
  for(let n=0;n<4;n++){
   const origin=['guest','host','host','guest'][n],r=expected(session,n,ctx);
   if(n!==2)r.id=(n===1?'attack-':'move-')+origin+'-'+(n+1);
@@ -207,7 +207,7 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  const state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:1,position:{x:1,y:5},active:true}]},sent=[];
  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true,true);
  const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},send=(peer,m)=>c.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.16.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.17.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx});
  const request={session,encounter:'artillery-checkpoint',...ctx,id:'attack-guest-1',kind:'basic-attack',actor:'cannon',fromX:1,fromY:5,toX:1,toY:3};
  assert.throws(()=>send('host',{type:'proposal',request}),/actor-not-owned/);
  send('guest',{type:'proposal',request});assert.equal(c.mode,'preparing');
@@ -216,3 +216,31 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  send('guest',{type:'prepared',origin:'guest',request,native:{...guard,armed:false,pressed:false}});
  assert.equal(sent.filter(x=>x.frame.kind==='EXEC').length,2);
 });
+{
+ const make=()=>{
+  const sent=[],events=[];let clock=0;
+  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e),true,()=>clock,true,true);
+  c.stage=16;c.turn=4;c.mode='executing';c.pendingKind='end-turn';c.pendingId='end-turn-16';c.states={host:{phase:'player4'},guest:{phase:'player4'}};
+  const witness=JSON.stringify({schema:'itb-observation-v1',unavailable:[],pawns:[]});
+  const guard={guardActive:true,sessionState:1,releaseFailed:false};
+  const msg=(peer,type,body=witness)=>({session,peer,type,id:'end-turn-16',revision:16,phase:'player4',witness:body,native:guard});
+  return {c,sent,events,msg,witness,elapse:n=>clock+=n};
+ };
+ const {c,sent,msg,events}=make();c.receive('host',msg('host','result_prepared'));
+ assert.equal(sent.length,0);assert.throws(()=>c.receive('host',msg('host','result_prepared')),/duplicate-preparation/);
+ c.receive('guest',msg('guest','result_prepared'));assert.equal(sent.filter(s=>s.frame.kind==='RESULTCONTINUE').length,2);
+ const result={schema:'itb-mission-result-v1',coverage:'partial-result-only',region:2,regionState:2,mission:'',grid:2,reputation:1,pilots:[0,1,2].map(slot=>({slot,id:'p'+slot,experience:slot,level:0})),objectives:[{slot:0,text:'Mission_Artillery_Obj',value:1,potential:1},{slot:1,text:'Bonus_Simple_Asset',value:1,potential:1}]};
+ const after=JSON.stringify(result);
+ c.receive('host',msg('host','result_observed',after));assert.equal(c.mode,'result-executing');
+ c.receive('guest',msg('guest','result_observed',after));assert.equal(c.mode,'result-finishing');
+ c.receive('host',msg('host','complete',after));assert.equal(c.mode,'result-finishing');
+ c.receive('guest',msg('guest','complete',after));assert.equal(c.mode,'complete');assert(events.some(e=>e.terminal&&e.revision===17));
+ const stale=make();assert.throws(()=>stale.c.receive('host',{...stale.msg('host','result_prepared'),revision:15}),/stale-context/);
+ const early=make();early.c.turn=3;assert.throws(()=>early.c.receive('host',early.msg('host','result_prepared')),/outside-final/);
+ const lost=make();assert.throws(()=>lost.c.receive('host',{...lost.msg('host','result_prepared'),native:{...guard,sessionState:2}}),/protection-lost/);
+ const timed=make();timed.c.receive('host',timed.msg('host','result_prepared'));timed.elapse(90001);assert.throws(()=>timed.c.tick(),/result-timeout/);
+ const mismatch=make();for(const peer of ['host','guest'])mismatch.c.receive(peer,mismatch.msg(peer,'result_prepared'));
+ mismatch.c.receive('host',mismatch.msg('host','result_observed',after));
+ assert.throws(()=>mismatch.c.receive('guest',mismatch.msg('guest','result_observed',JSON.stringify({...result,reputation:2}))),/outcome-divergence/);
+ console.log('Terminal coordinator requires both preparations, committed result equality and both acknowledgments (fake peers).');
+}

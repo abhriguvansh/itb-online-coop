@@ -10,7 +10,7 @@ function M.decode(text,session)
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
     local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
-    assert(spawn or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    assert(spawn or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
@@ -26,6 +26,9 @@ function M.open(env,json,emit)
     assert(root=='C:/ITBCoopProbe/Wire','unsupported-wire-directory')
     local f=assert(env.io.open(root..'/session.txt','rb'),'wire-config-missing')
     local config=f:read(256);f:close()
+    local terminalSuffix='terminal-checkpoint\n'
+    local terminalCheckpoint=config:sub(-#terminalSuffix)==terminalSuffix
+    if terminalCheckpoint then config=config:sub(1,-#terminalSuffix-1)..'repeated-turns\n' end
     local repeatedTurns=config:sub(-15)=='repeated-turns\n'
     if repeatedTurns then config=config:sub(1,-16)..'interactive-phase\n' end
     local phaseRun=config:sub(-18)=='interactive-phase\n'
@@ -35,7 +38,7 @@ function M.open(env,json,emit)
     local session,peer=config:match('^([%w-]+)\n(host)\n$')
     if not session then session,peer=config:match('^([%w-]+)\n(guest)\n$') end
     assert(ident(session) and peer,'wire-config-invalid')
-    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,limit=interactive and not phaseRun and 2 or 4}
+    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,limit=interactive and not phaseRun and 2 or 4}
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
         assert(self.tx<=192,'wire-output-limit')
@@ -48,7 +51,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.16.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.17.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -72,9 +75,13 @@ function M.open(env,json,emit)
             local data=f:read(70001);f:close();self.rx=self.rx+1
             local m=M.decode(data,self.session);self.last=now()
             assert(m.kind~='STOP','wire-peer-or-coordinator-stopped')
-            if m.kind:sub(1,5)=='SPAWN' then
+            if m.kind:sub(1,6)=='RESULT' then
+                assert(self.repeatedTurns and self.result and s.terminal,'wire-result-unavailable')
+                if self.result:receive(m) then self.pending=nil;self.pendingKind=nil;return true end
+            elseif m.kind:sub(1,5)=='SPAWN' then
                 assert(self.repeatedTurns and self.spawn,'wire-spawn-unavailable');self.spawn:receive(m)
             elseif m.kind~='PING' then
+                assert(not s.terminal,'wire-gameplay-after-mission-end')
                 local r=request()
                 assert(m.revision==s.revision and m.phase==s.phase and m.witness==r.witness,'wire-stale-context')
                 if m.kind=='INPUT' then
@@ -122,6 +129,10 @@ function M.open(env,json,emit)
                     return true
                 end
             end
+        end
+        if s.terminal then
+            assert(self.result and self.pendingKind=='end-turn' and self.pending==s.terminal.id,'wire-result-command-missing')
+            self.result:update();return false
         end
         if self.spawn then self.spawn:tick() end
         if self.pending and s.revision==self.observed+1 then

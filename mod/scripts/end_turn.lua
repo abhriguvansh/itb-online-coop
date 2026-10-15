@@ -20,10 +20,11 @@ function M.new(env,native,emit,capture,phaseSettled)
         native.sessionStop();native.finish()
         emit('end_turn_failed',{reason=reason,stage=self.pending and self.pending.stage})
     end
+    local function initialFinal() return self.repeatedTurns and self.terminalCheckpoint and not self.used and env.Game:GetTurnCount()==4 end
     function self:arm()
         local ok,reason=pcall(function()
             context();assert((not self.used or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())) and not self.pending and not self.fault,'one-call-lockout')
-            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and (env.Game:GetTurnCount()==2 or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())),'unsupported-start-phase')
+            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and (env.Game:GetTurnCount()==2 or initialFinal() or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())),'unsupported-start-phase')
             local _,idle=capture();assert(idle,'not-idle')
             local selected=env.Board:GetSelectedPawn()
             assert(not selected or selected:GetArmedWeaponId()<=0,'weapon-armed')
@@ -47,6 +48,14 @@ function M.new(env,native,emit,capture,phaseSettled)
     end
     function self:draw() self.frame=self.frame+1 end
     function self:missionUpdate() self.updates=self.updates+1 end
+    function self:beginTerminal(mission)
+        local p=self.pending
+        if not self.repeatedTurns or self.fault or not p or p.mission~=mission
+            or p.turn~=4 or p.step~=2 or not p.endSent or mission.ID~='Mission_Artillery' then return false end
+        context()
+        self.pending=nil;self.armed=false;self.status='Awaiting protected mission result'
+        return true
+    end
     function self:phaseEvent(name,mission)
         local p=self.pending;if not p or self.fault then return end
         local ok,why=pcall(function()

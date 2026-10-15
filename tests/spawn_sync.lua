@@ -27,7 +27,7 @@ local function fixture(peer)
     local native={info=function()return {guardActive=true,sessionState=1,releaseFailed=false}end}
     f.controller=module.install({env=env,wire=wire,json=json,native=native,session=function()return s end,
         capture=function()return {schema='itb-observation-v1',unavailable=json.array(),queued=m.QueuedSpawns and m.QueuedSpawns[1].type or nil}end,
-        emit=function(_,v)json.encode(v)end})
+        emit=function(_,v)json.encode(v)end,resultPreview=function(mission)return f.preview==mission end})
     f.env=env;f.m=m;f.s=s;f.native=native;f.random=random
     function f.begin()m:SpawnPawn();assert(f.spawns==0);assert(m:PlanEnvironment());f.controller:tick();return f.sent[1]end
     function f.frame(kind,witness)return {kind=kind,revision=3,phase='player2',id='spawn-1',witness=witness}end
@@ -66,4 +66,10 @@ h.m:SpawnPawns(1);h.m:SpawnPawns(1);assert(h.s.stopped)
 h=fixture('host');h.m:SpawnPawns(1);h.time=25000;h.env.ITBCoopSpawnWait()
 assert(h.s.stopped and h.s.reason:find('spawn%-batch%-timeout') and h.waits==1)
 h.env.ITBCoopSpawnWait();assert(h.waits==1 and h.draws==0 and h.spawns==0)
-print('Coordinated spawn contracts passed: real serializers, engine doubles only.')
+h=fixture('host')
+local preview=setmetatable({ID='Mission_Train'},{__index=h.env.Mission});h.preview=preview
+preview:SpawnPawn(h.env.Point(1,1),{GetType=function()return 'Firefly1' end,GetId=function()return 200 end})
+preview:SpawnPawns(2);assert(not preview:PlanEnvironment())
+assert(h.spawns==1 and h.batchCount==2 and h.plans==1 and not h.s.stopped and #h.sent==0)
+h.m:SpawnPawn();assert(h.spawns==1 and #h.controller.queue==1,'active battle must still be intercepted')
+print('Coordinated spawn contracts passed: real serializers, engine doubles only; authorized result previews retain native calls.')

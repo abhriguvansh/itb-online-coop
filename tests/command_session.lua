@@ -53,6 +53,7 @@ local function endFixture()
         lab.request=function()e.endCalls=e.endCalls+1;lab.pending=true;return true end
         lab.update=function()if e.phaseComplete then lab.pending=nil;emit('end_turn_postconditions_observed',{}) end end
         lab.phaseEvent=function()end;lab.draw=function()end;lab.missionUpdate=function()end
+        lab.beginTerminal=function()return e.final==true end
         return lab
     end}
     local s=session.new(o)
@@ -60,6 +61,15 @@ local function endFixture()
     local function ready() assert(s:setReady('host','player2',0,e.witness,true));assert(s:setReady('guest','player2',0,e.witness,true)) end
     return e,o,s,req,ready,r
 end
+test('terminal completion requires the pending authorized End Turn and never admits campaign actions',function()
+    local e,o,s,r,ready,move=endFixture();o.repeatedTurns=true
+    assert(not s:beginTerminal({}));ready();assert(s:submit('host',r).status=='pending')
+    assert(not s:beginTerminal({}));e.final=true;assert(s:beginTerminal({}))
+    assert(not s:beginTerminal({}) and not s:setReady('host','player2',0,e.witness,true))
+    local nextMove=move('move','later');assert(s:submit('guest',nextMove).reason=='mission-result-pending')
+    assert(not s:previewAction('guest',nextMove));e.Board=nil;s:update();assert(not s.stopped)
+    s:finishTerminal();assert(s.revision==1);assert(not pcall(function()s:finishTerminal()end))
+end)
 test('End Turn requires two same-state readiness records',function()
     local e,_,s,r,ready=endFixture();assert(s:submit('host',r).reason=='both-players-must-be-ready')
     r.id='new';ready();assert(s:submit('host',r).status=='pending' and e.endCalls==1)

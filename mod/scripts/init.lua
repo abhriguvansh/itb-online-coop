@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.16.0',
+    version = '0.17.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Research probe with an opt-in validated-path movement lab on ITB_Coop_Probe. No multiplayer yet.',
@@ -69,7 +69,10 @@ function mod:init()
     modApi.events.onMissionUpdate:subscribe(function() self.movement:update(); self.moveTrace:update(); self.attack:update() end)
     for _, name in ipairs({ 'onMissionChanged', 'onMissionEnd', 'onGameExited', 'onProfileChanged' }) do
         local eventName = name
-        modApi.events[eventName]:subscribe(function() self.attack:reset(eventName); self.inputGate:stop(eventName, true); self.movement:reset(eventName); self.moveTrace:reset() end)
+        modApi.events[eventName]:subscribe(function(mission,detail)
+            if self.phaseLab and self.phaseLab:context(eventName,mission,detail) then return end
+            self.attack:reset(eventName); self.inputGate:stop(eventName, true); self.movement:reset(eventName); self.moveTrace:reset()
+        end)
     end
     for _, name in ipairs({ 'onSkillStart', 'onSkillEnd' }) do
         local eventName = name

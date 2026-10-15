@@ -8,10 +8,15 @@ if($config.host-ne'10.0.2.2' -or $config.peer-notin@('host','guest') -or $config
 $utf8=[Text.UTF8Encoding]::new($false,$true);$incoming=1;$outgoing=1;$complete=$false
 $frameLimit=if($config.repeatedTurns){2048}else{1024}
 $durationLimit=if($config.repeatedTurns){1510}else{610}
+function Assert-MailboxSession {
+    $active=Get-Content -LiteralPath (Join-Path $Root 'connection.json') -Raw | ConvertFrom-Json
+    if($active.session-ne$config.session-or$active.peer-ne$config.peer-or$active.token-ne$config.token){throw 'Mailbox replaced; stale bridge refuses delivery'}
+}
 function Write-Frame($frame){
+    Assert-MailboxSession
     if($script:incoming-gt$frameLimit){throw 'Incoming frame limit'}
     $spawnFrame=$frame.kind-in@('SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE')
-    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'\r' -or (-not$spawnFrame-and$frame.witness-match'\n')){throw 'Invalid coordinator frame'}
+    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'\r' -or (-not$spawnFrame-and$frame.witness-match'\n')){throw 'Invalid coordinator frame'}
     $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
     if($null-ne$frame.move){
         if($frame.kind-notin@('EXEC','PREPARE') -or $frame.move.actor-notin@('combat','cannon','artillery') -or $frame.move.kind-notin@('move','lab-punch','basic-attack') -or ($frame.move.kind-eq'lab-punch'-and$frame.move.actor-ne'combat')){throw 'Invalid move payload'}
@@ -29,6 +34,7 @@ try{
     $waiting=[Diagnostics.Stopwatch]::StartNew()
     [IO.File]::WriteAllText((Join-Path $Root 'bridge-ready.txt'),$config.session,$utf8)
     while(-not(Test-Path -LiteralPath (Join-Path $Root 'out-0001.json'))){
+        Assert-MailboxSession
         if($waiting.Elapsed.TotalSeconds-gt300){throw 'Game was not armed before startup deadline'}
         Start-Sleep -Milliseconds 100
     }
@@ -45,6 +51,7 @@ try{
     $buffer='';$bytes=[byte[]]::new(8192);$chars=[char[]]::new(8192);$decoder=$utf8.GetDecoder()
     $last=[Diagnostics.Stopwatch]::StartNew();$total=[Diagnostics.Stopwatch]::StartNew()
     while($total.Elapsed.TotalSeconds-lt$durationLimit){
+        Assert-MailboxSession
         if($client.Client.Poll(0,[Net.Sockets.SelectMode]::SelectRead)-and$client.Available-eq0){
             if($complete){Write-Output 'Guest phase bridge completed';exit 0};throw 'Coordinator disconnected'
         }
@@ -75,7 +82,7 @@ try{
 }catch{
     $reason=$_.Exception.Message
     try{Write-Frame @{kind='STOP';session=$config.session;peer='-';revision=0;phase='-';id='-';witness=''}}catch{}
-    [IO.File]::WriteAllText((Join-Path $Root 'bridge-failure.txt'),$reason,$utf8)
+    try{Assert-MailboxSession;[IO.File]::WriteAllText((Join-Path $Root 'bridge-failure.txt'),$reason,$utf8)}catch{}
     Write-Error $reason
     exit 1
 }finally{$client.Dispose()}
