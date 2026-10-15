@@ -53,11 +53,11 @@ f.s.revision=2;f.r.revision=2;f.r.id='end-turn';f.r.kind='end-turn';f.r.confirmU
 local consents={};f.s.setReady=function(_,peer)consents[peer]=true;return true end
 f.s.previewAction=function()return consents.host and consents.guest end
 f.add('READY|test-session|-|2|player2|end-turn\n{}');f.tick()
-assert(f.w.readyInput and not f.files[f.root..'/out-0002.json'])
-f.w:ready(f.s,f.r);assert(not f.w.readyInput and f.files[f.root..'/out-0002.json']:find('ready'))
+assert(f.w.readyInput and f.w.inspectionReady and not f.files[f.root..'/out-0002.json'])
+f.w:ready(f.s,f.r);assert(not f.w.readyInput and f.w.inspectionReady and f.files[f.root..'/out-0002.json']:find('ready'))
 assert(not pcall(function()f.w:ready(f.s,f.r)end))
 f.add('CONSENT|test-session|host|2|player2|end-turn\n{}');f.tick()
-f.add('PREPARE|test-session|host|2|player2|end-turn\n{}');f.tick();assert(f.w.prepared)
+f.add('PREPARE|test-session|host|2|player2|end-turn\n{}');f.tick();assert(f.w.prepared and not f.w.inspectionReady)
 f.add('EXEC|test-session|host|2|player2|end-turn\n{}');f.tick();local _,n=f.counts();assert(n==1 and f.w.ending)
 print('3 selected-phase framing/readiness contracts passed; fake mailbox only.')
 f=runtime('repeat');assert(f.w.repeatedTurns and f.w.phaseRun and f.w.interactive)
@@ -78,3 +78,6 @@ for _,actor in ipairs({'combat','cannon','artillery'}) do
  assert(r.move.kind=='basic-attack' and r.move.actor==actor and r.move.toY==3)
 end
 print('Three basic-weapon wire aliases passed (decoder only).')
+f=runtime();f.add('INPUT|test-session|-|0|player2|-\n{}');f.tick();assert(f.w.inputReady and f.w.inspectionReady)
+f.w:propose(f.r);assert(not f.w.inputReady and not f.w.inspectionReady)
+print('Inspection lease follows explicit input/readiness barriers and closes on proposal/preparation (in-memory mailbox).')

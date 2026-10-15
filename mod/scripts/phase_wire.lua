@@ -51,12 +51,12 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.17.1',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.18.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
         assert(r.revision==self.inputRevision and r.witness==self.inputWitness,'wire-stale-draft')
-        self.inputReady=false
+        self.inputReady=false;self.inspectionReady=false
         self:send({type='proposal',request=r})
     end
     function self:ready(s,r)
@@ -86,13 +86,13 @@ function M.open(env,json,emit)
                 assert(m.revision==s.revision and m.phase==s.phase and m.witness==r.witness,'wire-stale-context')
                 if m.kind=='INPUT' then
                     assert(self.interactive and not self.pending,'wire-input-context')
-                    self.readySent=false;self.readyInput=false;self.inputReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
+                    self.readySent=false;self.readyInput=false;self.inputReady=true;self.inspectionReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
                 elseif m.kind=='PROPOSE' then
                     assert(m.peer==self.peer and m.id==r.id,'wire-proposal-owner')
                     self:send({type='proposal',request=r})
                 elseif m.kind=='READY' then
                     assert((self.repeatedTurns or s.revision==2) and m.id==r.id,'wire-readiness-context')
-                    if self.phaseRun then self.inputReady=false;self.readyInput=not self.readySent
+                    if self.phaseRun then self.inputReady=false;self.readyInput=not self.readySent;self.inspectionReady=true
                     else self:send({type='ready',revision=s.revision,phase=s.phase,witness=r.witness,confirmUnused=true}) end
                 elseif m.kind=='CONSENT' then
                     assert((self.repeatedTurns or s.revision==2) and m.id==r.id,'wire-consent-context')
@@ -100,7 +100,7 @@ function M.open(env,json,emit)
                 elseif m.kind=='PREPARE' then
                     assert(self.interactive and (m.move or (self.phaseRun and r.kind=='end-turn')) and not self.pending and not self.prepared,'wire-prepare-context')
                     local preparedRequest=m.move or r
-                    self.inputReady=false
+                    self.inputReady=false;self.inspectionReady=false
                     local ok,reason
                     if self.phaseRun then ok,reason=s:previewAction(m.peer,preparedRequest) else ok,reason=s:previewMove(m.peer,preparedRequest) end
                     assert(ok,'wire-prepare-rejected:'..tostring(reason))
@@ -111,7 +111,7 @@ function M.open(env,json,emit)
                     emit('network_command_prepared',{peer=m.peer,id=m.id,revision=s.revision})
                 elseif m.kind=='EXEC' then
                     if self.interactive then
-                        assert(m.move or (self.phaseRun and r.kind=='end-turn'),'wire-command-missing');r=m.move or r;self.inputReady=false
+                        assert(m.move or (self.phaseRun and r.kind=='end-turn'),'wire-command-missing');r=m.move or r;self.inputReady=false;self.inspectionReady=false
                         local p=self.prepared
                         assert(p and p.peer==m.peer and p.request==json.encode(r) and now()-p.at<5000,'wire-exec-not-prepared')
                         self.prepared=nil
@@ -124,6 +124,7 @@ function M.open(env,json,emit)
                     if r.kind=='end-turn' then self.ending=true end
                     emit('network_command_received',{peer=m.peer,request=r,fixture=true})
                 elseif m.kind=='DONE' then
+                    self.inspectionReady=false
                     assert(not self.repeatedTurns and s.revision==self.limit and not self.pending,'wire-premature-finish')
                     self:send({type='complete',revision=s.revision,witness=r.witness,native=native.info()})
                     return true

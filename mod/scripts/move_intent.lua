@@ -13,6 +13,9 @@ function M.new(o)
         return s:previewMove(o.wire.peer,r)
     end
     function self:click(x,y,s)
+        if o.inspection and o.inspection:click(x,y,s) then
+            self.actor=nil;self.draft=nil;self.attacking=false;return
+        end
         if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=720 and y<756 and not s.stopped then
             o.wire:ready(s,o.request('end-turn','end-turn-'..s.revision));self.actor=nil;self.draft=nil;return
         end
@@ -65,6 +68,7 @@ function M.new(o)
         o.emit('move_intent_draft',{request=r,peer=o.wire.peer})
     end
     function self:update(s,done)
+        if o.inspection then o.inspection:update(s) end
         local n=o.native.info()
         assert(type(n.intentSerial)=='number','intent-capable-native-bridge-required')
         if self.revision~=s.revision then
@@ -78,7 +82,8 @@ function M.new(o)
         end
         if done or s.stopped then self.status='Experiment ended - Escape exits'
         elseif o.wire.readyInput then self.status='End Turn includes unused units; both must agree'
-        elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion' end
+        elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion'
+        elseif self.status=='Waiting for the other game / action completion' then self.status='Choose your mech, then a board tile' end
         return self.status
     end
     function self:draw(root,visible)
@@ -99,6 +104,7 @@ function M.new(o)
         self.controls.status:caption(self.status)
         self.controls.confirm:caption(o.wire.readyInput and 'Ready End Turn (unused units OK)'
             or (o.wire.repeatedTurns and self.attacking or not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
+        if o.inspection then o.inspection:draw(root,visible) end
     end
     return self
 end

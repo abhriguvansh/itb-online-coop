@@ -71,7 +71,8 @@ function M.install(env,mod,native,path)
     end
     local function check(value,reason) assert(value,reason) end
     if wire and wire.interactive then
-        self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit})
+        self.inspection=require(path..'inspection').new({env=env,native=native,wire=wire,capture=capture,json=json,emit=emit})
+        self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit,inspection=self.inspection})
         self.status=wire.phaseRun and 'Interactive co-op phase' or 'Interactive co-op moves'
     end
     local function start()
@@ -151,7 +152,15 @@ function M.install(env,mod,native,path)
         end
         self.stage=self.stage+1
     end
-    env.modApi.events.onMissionUpdate:subscribe(function() if self.session then self.session:missionUpdate() end end)
+    env.modApi.events.onMissionUpdate:subscribe(function()
+        if self.session then
+            self.session:missionUpdate()
+            if self.inspection and not self.done then
+                local ok,why=pcall(function()self.inspection:mark(self.session)end)
+                if not ok then self.session:stop('inspection-mark:'..tostring(why)) end
+            end
+        end
+    end)
     env.modApi.events.onFrameDrawStart:subscribe(function()
         if not self.button then
             local root=env.sdlext.getUiRoot();if not root then return end

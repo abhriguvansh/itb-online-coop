@@ -32,3 +32,13 @@ s.revision=2;wire.inputReady=false;wire.readyInput=true;ui:update(s,false);asser
 ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==1)
 ui:click(20,610,s);assert(readyCount==1)
 print('2 selected punch/readiness UI contracts passed; fake clicks only.')
+do
+    local inspecting=false
+    local inspect={click=function(_,x)if x>=1600 then inspecting=not inspecting;return true end;return inspecting end}
+    wire.peer='guest';wire.phaseRun=false;wire.inputReady=true;s.previewMove=function()return true end
+    local routed=module.new({env=env,wire=wire,native={info=function()return current end},request=function()return {}end,
+        emit=function()end,inspection=inspect})
+    routed.actor='artillery';routed.draft={};local before=#sent
+    routed:click(1610,350,s);assert(not routed.actor and not routed.draft)
+    routed:click(20,610,s);assert(#sent==before,'inspection clicks cannot confirm an action')
+end
