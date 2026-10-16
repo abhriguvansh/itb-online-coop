@@ -51,7 +51,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.18.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.19.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -66,7 +66,7 @@ function M.open(env,json,emit)
         self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=true})
     end
     function self:tick(s,request,native)
-        assert(now()-self.since<(self.repeatedTurns and 1500000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
+        assert(now()-self.since<(self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
         assert(now()-self.last<10000,'wire-heartbeat-timeout')
         for _=1,4 do
             assert(self.rx<=(self.repeatedTurns and 2048 or 1024),'wire-input-limit')

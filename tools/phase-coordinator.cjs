@@ -107,7 +107,7 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.18.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.19.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -228,7 +228,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   const timer=setInterval(()=>{
     try{core.tick();if(fixture)fixture(core,record);}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
-    if(started && Date.now()-started>(repeatedTurns?1500000:interactive?600000:180000)){stop('experiment-deadline');return;}
+    if(started && Date.now()-started>(repeatedTurns?1800000:interactive?600000:180000)){stop('experiment-deadline');return;}
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});
   },1000);
   server.on('error',e=>stop(e.message));

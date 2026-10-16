@@ -2,6 +2,10 @@
 local M={}
 local function same(a,b) return a and b and a.x==b.x and a.y==b.y end
 local function point(p) return {x=p.x,y=p.y} end
+local weapons={combat={id=0,type='PunchMech',skill='Prime_Punchmech',label='Titan Fist'},
+    cannon={id=1,type='TankMech',skill='Brute_Tankmech',label='Taurus Cannon'},
+    artillery={id=2,type='ArtiMech',skill='Ranged_Artillerymech',label='Artemis Artillery'}}
+local function off(v) return v==nil or v==false or v==0 end
 function M.new(o)
     local env=o.env
     local self={enabled=false,lines={},controls={},status='Inspect board',previews=0}
@@ -59,7 +63,7 @@ function M.new(o)
                 local pawn=assert(env.Board:GetPawn(p.localId),'inspection-pawn-missing')
                 self.lines[3]=pawn:GetMechName()
                 self.lines[4]=('Health: %d   Move: %d'):format(p.health,p.moveSpeed)
-                self.lines[5]=p.team==env.TEAM_PLAYER and (p.active and 'Attack available' or 'Action used') or 'Enemy'
+                self.lines[5]=p.team==env.TEAM_PLAYER and (p.active and 'Action active' or 'Action used') or 'Enemy'
                 local statuses={}
                 for _,k in ipairs({'fire','acid','frozen','shield','grappled'}) do if p[k] then statuses[#statuses+1]=k end end
                 self.lines[6]=#statuses>0 and table.concat(statuses,', ') or 'No marked unit conditions'
@@ -72,20 +76,41 @@ function M.new(o)
         unchanged(before,ui)
         o.emit('inspection_tile',{revision=s.revision,tile=to,lines=self.lines,observedStateUnchanged=true,selectionUnchanged=true})
     end
-    function self:punch(s,to)
+    function self:weapon(s,to,actor)
         assert(available(s),'inspection-unavailable')
         local before,witness=capture();local ui=uiState()
-        local p=assert(env.Board:GetPawn(0),'preview-combat-missing');local from=p:GetSpace()
-        local skill=env.Prime_Punchmech
-        local supported=p:GetType()=='PunchMech' and p:IsActive() and p:IsPowered() and not p:IsFrozen()
-            and not p:IsBoosted() and not env.Board:IsSmoke(from) and p:GetPoweredWeapons()[1]=='Prime_Punchmech'
-            and skill and skill.Damage==2 and not skill.Dash and not skill.Projectile and not skill.Flip
-            and not skill.Shield and not skill.PushBack and not skill.TwoClick
-        if not supported then self.preview=nil;self.lines={};self.status='Stock active Titan Fist only';return false end
+        local spec=assert(weapons[actor],'unsupported-preview-actor')
+        local p=assert(env.Board:GetPawn(spec.id),'preview-actor-missing');local from=p:GetSpace()
+        local skill=env[spec.skill]
+        local supported=p:GetType()==spec.type and p:IsActive() and p:IsPowered() and not p:IsDead() and not p:IsFrozen()
+            and not p:IsBoosted() and not env.Board:IsSmoke(from) and p:GetPoweredWeapons()[1]==spec.skill
+            and not p:IsAbility('Double_Shot') and not p:IsAbility('Post_Move') and not p:IsAbility('Shifty')
+            and skill and off(skill.TwoClick) and off(skill.Limited)
+        if actor=='combat' then
+            supported=supported and skill.Damage==2 and off(skill.Dash) and off(skill.Projectile) and off(skill.Flip)
+                and off(skill.Shield) and off(skill.PushBack)
+        elseif actor=='cannon' then
+            supported=supported and skill.Damage==1 and skill.Push==1 and off(skill.PushBack) and off(skill.BackShot)
+                and off(skill.Freeze) and off(skill.Acid) and off(skill.Flip) and off(skill.Fire) and off(skill.Shield)
+                and off(skill.Phase) and off(skill.PhaseShield)
+        else
+            supported=supported and skill.DamageCenter==1 and skill.DamageOuter==0 and skill.Push==1 and skill.BuildingDamage==true
+        end
+        if not supported then self.preview=nil;self.lines={};self.status='Stock active '..spec.label..' only';return false end
         local targets=skill:GetTargetArea(from);assert(targets:size()<=64,'preview-target-count')
         local legal=false
         for i=1,targets:size() do if same(targets:index(i),to) then legal=true end end
-        if not legal then self.preview=nil;self.lines={};self.status='Choose an adjacent legal target';return false end
+        if not legal then self.preview=nil;self.lines={};self.status='Choose a legal weapon target';return false end
+        local expected=o.json.array()
+        local function add(p,damage,push)expected[#expected+1]={x=p.x,y=p.y,damage=damage,push=push}end
+        if actor=='artillery' then
+            add(to,1,env.DIR_NONE)
+            for dir=0,3 do local v=env.DIR_VECTORS[dir];add({x=to.x+v.x,y=to.y+v.y},0,dir) end
+        else
+            assert(from.x==to.x or from.y==to.y,'preview-target-not-aligned')
+            local impact=actor=='cannon' and env.GetProjectileEnd(from,env.Point(to.x,to.y),env.PATH_PROJECTILE) or to
+            add(impact,actor=='combat' and 2 or 1,env.GetDirection(env.Point(to.x,to.y)-from))
+        end
         -- Observe known Lua RNG entry points; never rewind a consumed draw.
         local random,mathRandom=env.random_int,env.math.random;local draws=0
         env.random_int=function(...)draws=draws+1;return random(...)end
@@ -95,28 +120,31 @@ function M.new(o)
         assert(ok,'preview-builder-failed:'..tostring(not ok and fx or ''))
         assert(draws==0,'preview-consumed-rng-no-retry')
         assert(fx.q_effect:empty() and fx.effect:size()<=16,'preview-effect-unsupported')
-        local damage
+        local seen={};local count=0
         for i=1,fx.effect:size() do
             local d=fx.effect:index(i)
             -- Wrapped builders add scripts and a zero-damage achievement marker.
             -- Neither is executed or handed to the rendering API.
-            if d.iDamage~=0 then
-                assert(not damage and d.iDamage==2 and same(d.loc,to)
-                    and d.iPush==env.GetDirection(env.Point(to.x,to.y)-from),'preview-damage-unsupported')
-                damage={x=d.loc.x,y=d.loc.y,damage=d.iDamage,push=d.iPush}
+            if d.iDamage~=0 or d.iPush~=env.DIR_NONE then
+                local matched
+                for j,want in ipairs(expected) do
+                    if not seen[j] and same(d.loc,want) and d.iDamage==want.damage and d.iPush==want.push then matched=j;break end
+                end
+                assert(matched,'preview-damage-unsupported');seen[matched]=true;count=count+1
             end
         end
-        assert(damage,'preview-damage-missing')
+        assert(count==#expected,'preview-damage-missing')
         local after=unchanged(witness,ui)
         self.previews=self.previews+1;assert(self.previews<=64,'preview-experiment-limit')
-        self.preview={revision=s.revision,witness=witness,damage=damage}
+        self.preview={revision=s.revision,witness=witness,damages=expected}
         self.status='Preview only; no action sent'
-        self.lines=o.json.array({"Combat's Titan Fist",('Target (%d,%d)'):format(to.x,to.y),'Base damage: '..damage.damage,
-            'Push: '..({'north-east','south-east','south-west','north-west'})[damage.push+1],
+        local first=expected[1]
+        self.lines=o.json.array({spec.label,('Target (%d,%d)'):format(to.x,to.y),'Base damage: '..first.damage,
+            actor=='artillery' and 'Four outward pushes' or ('Impact (%d,%d), push %s'):format(first.x,first.y,({'NE','SE','SW','NW'})[first.push+1]),
             'Damage/push marks only','Other effects not predicted','Command rights unchanged'})
-        o.emit('inspection_preview',{revision=s.revision,actor='combat',weapon='Prime_Punchmech',from=point(from),to=to,
-            damage=damage,rngCalls=draws,selectionBefore=ui,selectionAfter=uiState(),before=before,after=after,
-            commandSubmitted=false,coverage='stock-titan-fist-damage-push-only'})
+        o.emit('inspection_preview',{revision=s.revision,actor=actor,weapon=spec.skill,from=point(from),to=to,
+            damages=expected,rngCalls=draws,selectionBefore=ui,selectionAfter=uiState(),before=before,after=after,
+            commandSubmitted=false,coverage='three-stock-weapons-damage-push-only'})
         return true
     end
     function self:click(x,y,s)
@@ -126,28 +154,33 @@ function M.new(o)
         end
         if not self.enabled then return false end
         if not available(s) then return true end
-        if x>=1600 and x<1912 and y>=720 and y<756 then
-            self:clear('Choose a Titan Fist target');self.selecting=true;return true
+        if x>=1600 and x<1912 then
+            for i,actor in ipairs({'combat','cannon','artillery'}) do
+                local top=680+i*40
+                if y>=top and y<top+36 then self:clear('Choose a '..weapons[actor].label..' target');self.selecting=actor;return true end
+            end
+            if y>=840 and y<876 then self:clear();return true end
         end
-        if x>=1600 and x<1912 and y>=760 and y<796 then self:clear();return true end
         if x<350 or x>1580 or y<150 or y>975 then return true end
         local to=env.screenPointToTile({x=x,y=y},false)
         if not to or to.x<0 or to.y<0 or to.x>7 or to.y>7 then return true end
         to=point(to)
-        if self.selecting then self:punch(s,to) else self:inspect(s,to) end
+        if self.selecting then self:weapon(s,to,self.selecting) else self:inspect(s,to) end
         return true
     end
     function self:mark(s)
         local p=self.preview
         if not self.enabled or not p or not available(s) or p.revision~=s.revision then return end
-        local d=p.damage
         local before,ui
         if not p.marked then local _;_,before=capture();assert(before==p.witness,'preview-stale-before-mark');ui=uiState() end
         -- Fresh safe SpaceDamage, containing no scripts, animation, status or movement.
-        env.Board:MarkSpaceDamage(env.SpaceDamage(env.Point(d.x,d.y),d.damage,d.push))
+        for _,d in ipairs(p.damages) do
+            local pos=env.Point(d.x,d.y)
+            if env.Board:IsValid(pos) then env.Board:MarkSpaceDamage(env.SpaceDamage(pos,d.damage,d.push)) end
+        end
         if not p.marked then
             unchanged(before,ui);p.marked=true
-            o.emit('inspection_mark_observed',{revision=s.revision,damage=d,observedStateUnchanged=true,selectionUnchanged=true})
+            o.emit('inspection_mark_observed',{revision=s.revision,damages=p.damages,observedStateUnchanged=true,selectionUnchanged=true})
         end
     end
     function self:draw(root,visible)
@@ -159,14 +192,14 @@ function M.new(o)
             end
             label('mode',340);label('status',380)
             for i=1,7 do label(i,384+i*40) end
-            label('preview',720);label('clear',760)
+            label('combat',720);label('cannon',760);label('artillery',800);label('clear',840)
         end
         for _,b in pairs(self.controls) do b.visible=visible and self.enabled end
         self.controls.mode.visible=visible
         self.controls.mode:caption(self.enabled and 'Return to action choices' or 'Inspect board / teammate')
         self.controls.status:caption(self.allowed and self.status or 'Action running; please wait')
         for i=1,7 do self.controls[i]:caption(self.allowed and (self.lines[i] or '') or '') end
-        self.controls.preview:caption("Preview Combat's Titan Fist")
+        for _,actor in ipairs({'combat','cannon','artillery'}) do self.controls[actor]:caption('Preview '..weapons[actor].label) end
         self.controls.clear:caption('Clear inspection / preview')
     end
     return self
