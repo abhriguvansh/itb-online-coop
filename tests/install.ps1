@@ -21,7 +21,7 @@ function Expect-Failure([scriptblock]$Action) {
 Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Plan wrote into fixture.'
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
 Assert-Condition (Test-Path -LiteralPath (Join-Path $modRoot 'scripts\init.lua')) 'Probe missing.'
-Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 23) 'Unexpected install payload.'
+Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 24) 'Unexpected install payload.'
 Expect-Failure { & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture }
 $initPath = Join-Path $modRoot 'scripts\init.lua'
 $original = [IO.File]::ReadAllBytes($initPath)
@@ -40,8 +40,8 @@ Assert-Condition (Test-Path -LiteralPath (Join-Path $gameRoot 'scripts\mod_loade
 # Simulate the exact earlier five-file ownership schema to exercise upgrade removal.
 $markerPath = Join-Path $modRoot '.itb-coop-probe.json'
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
-$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment' })
+foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment','initial_choices')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
+$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment|initial_choices' })
 Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\ui_bridge.lua')
 Remove-Item -LiteralPath (Join-Path $modRoot 'itb_input.dll')
 $marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'ui_bridge|itb_input' })
@@ -57,8 +57,8 @@ $marker | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encodi
 Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Legacy probe could not be removed for upgrade.'
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
-$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment' })
+foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment','initial_choices')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
+$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment|initial_choices' })
 Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\ui_bridge.lua')
 Remove-Item -LiteralPath (Join-Path $modRoot 'itb_input.dll')
 $marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'ui_bridge|itb_input' })
@@ -75,8 +75,8 @@ Write-Output "Inert test evidence retained at $fixtureRoot"
 
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
-$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment' })
+foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment','initial_choices')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
+$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment|initial_choices' })
 Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\ui_bridge.lua')
 Remove-Item -LiteralPath (Join-Path $modRoot 'itb_input.dll')
 $marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'ui_bridge|itb_input' })
@@ -90,8 +90,8 @@ Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Eight-file probe upgr
 
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
 $marker = Get-Content -LiteralPath $markerPath -Raw | ConvertFrom-Json
-foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
-$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment' })
+foreach ($newFile in @('command_session','end_turn','phase_lab','phase_wire','move_intent','basic_attack','spawn_sync','mission_completion','inspection','deployment','initial_choices')) { Remove-Item -LiteralPath (Join-Path $modRoot ('scripts\'+$newFile+'.lua')) }
+$marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'command_session|end_turn|phase_lab|phase_wire|move_intent|basic_attack|spawn_sync|mission_completion|inspection|deployment|initial_choices' })
 Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\ui_bridge.lua')
 Remove-Item -LiteralPath (Join-Path $modRoot 'itb_input.dll')
 $marker.Files = @($marker.Files | Where-Object { $_.RelativePath -notmatch 'ui_bridge|itb_input' })
@@ -101,3 +101,17 @@ Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\attack.lua')
 $marker | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Nine-file probe upgrade removal failed.'
+
+& $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture | Out-Null
+Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 25) 'Optional bootstrap payload mismatch.'
+& $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
+Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) 'Optional bootstrap uninstall failed.'
+& $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
+$marker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json
+Remove-Item -LiteralPath (Join-Path $modRoot 'scripts\initial_choices.lua')
+$marker.Files=@($marker.Files|Where-Object RelativePath -ne 'scripts\initial_choices.lua')
+$marker.Version='0.20.0'
+$marker|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $markerPath -Encoding utf8
+& $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
+Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) '0.20.0 upgrade removal failed.'
+Write-Output 'Optional bootstrap ownership and 0.20.0 upgrade removal passed (inert DLL fixtures).'

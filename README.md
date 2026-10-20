@@ -4,7 +4,7 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
-**Current source: 0.20.0. All three owner-selected native mech placements passed across two real games over TCP. Both-player deployment confirmation also executed, but reliable entry into turn one remains blocked: native initial enemy planning and pod placement can disagree even with identical observed deployment. A paired normal-input control reproduced that disagreement without an active co-op session. The experiment stops on disagreement; it is not a playable release or deployment-to-victory proof.** [Evidence and limits](docs/command-session.md#protected-deployment--probe-0200-october-20).
+**Current source: 0.21.0. Two real games completed fresh mission entry, all three owner-selected native placements, joint deployment confirmation, the complete initial phase with coordinated spawning, and a legal turn-one move over TCP. A captured normal-choice bootstrap resolves the tested initial AI and pending-pod path. All six observation barriers match, and both runtimes acknowledged completion. This remains a pinned experiment with a private transcript prerequisite; deployment-to-victory, automatic joining and general synchronization are unfinished.** [Evidence and limits](docs/command-session.md#initial-choice-bootstrap--probe-0210-october-20).
 
 The previous [0.19.0 selected-combat experiment](docs/command-session.md#selected-combat-with-three-weapon-inspection--probe-0190-october-15) completed 17 operator-selected commands from a shared turn-2 checkpoint through victory and matching saved results, with independent previews of three stock Rift Walker weapons. That restricted checkpoint result does not establish native initial-phase determinism or general synchronization.
 
@@ -26,7 +26,7 @@ The [native-boundary audit](docs/native-boundary.md) identifies an existing even
 
 - An opt-in four-command TCP experiment with connection-bound peer roles, two-peer observation barriers, same-state End Turn readiness and no action retries.
 - A separate protected local inspection pane for visible current units/tiles and stock Titan Fist, Taurus Cannon and Artemis Artillery base damage/push. Cannon marks the projectile obstruction; Artillery includes its four zero-damage outward pushes. Either role can inspect the teammate; inspection grants no command rights. Previews invalidate when the board revision changes and disable during preparation/execution. Other weapons, upgrades and complete outcome prediction remain unsupported.
-- An experimental selected-action chooser (legal movement, three stock weapons, explicit End Turn readiness and protected mission results), plus preserved shorter regression modes. Selected tactics now pass from the player-turn-2 checkpoint through committed results in both replicas. Ordinary clicks remain blocked from game input. This does not yet support deployment or a normal campaign start; the preceding one-sided execution failures remain preserved.
+- An experimental selected-action chooser (legal movement, three stock weapons, explicit End Turn readiness and protected mission results), plus preserved shorter regression modes. Selected tactics now pass from the player-turn-2 checkpoint through committed results in both replicas. Ordinary clicks remain blocked from game input. Fresh deployment now has a separate captured-choice experiment; normal campaign joining is unfinished, and the preceding one-sided execution failures remain preserved.
 - A manually armed, 30-second input gate restricted to the disposable test profile.
 - A Lua mod that registers source-backed execution and mission-phase hooks.
 - A bounded, read-only trace of normal Move effects, movement allowance, and undo state.
@@ -56,7 +56,7 @@ npm test
 npm run check:tracked
 ```
 
-The local suite parses 21 mod/experiment Lua files as Lua 5.1 and runs focused Lua contracts under Fengari/Lua 5.3, plus Node coordinator, framing and fixture checks and inert PowerShell installer checks. These cover legality, ownership, preparation, phase/result boundaries, stale input, diagnostic isolation, inspection refusal/invalidation and no retries using engine/UI doubles. The separate native CI job builds the original DLL and runs C contracts with mocked OS input. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
+The local suite parses 23 mod/experiment Lua files as Lua 5.1 and runs focused Lua contracts under Fengari/Lua 5.3, plus Node coordinator, framing and fixture checks and inert PowerShell installer checks. These cover legality, ownership, preparation, phase/result boundaries, stale input, diagnostic isolation, inspection refusal/invalidation and no retries using engine/UI doubles. The separate native CI job builds the input and initial-choice DLLs and runs their C contracts with mocked OS/RNG functions. Native test executables remain CI-only on this development machine after its unresolved antivirus alert. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
 
@@ -82,6 +82,8 @@ The local suite parses 21 mod/experiment Lua files as Lua 5.1 and runs focused L
 7. Use Rift Walkers, standard equipment, Normal difficulty, and advanced content off. Do not continue the normal profile's timeline. Follow [the smoke test](docs/test-plan.md#first-real-game-smoke-test). Leave the movement lab off for observation. For the current movement lab, enable/calibrate memedit and read the exact supported route and layout in [the movement record](docs/ui-movement.md). To inspect the historical effect-path failure, use the separate [effect procedure](docs/effect-experiment.md#repeat-and-next-investigation), which changes the disposable timeline and requires memedit. The older native-move procedure describes version 0.2.0.
 
 The profile check restricts this probe's tactical logging. It does not isolate Steam Cloud or stop the loader from touching game resources. Steam showed Cloud **Up to date** before and after the single-instance test; no Cloud settings were changed. The later two-guest experiment uses separate virtual disks and disposable saves, with no host shares or guest Steam login; two authenticated Steam sessions remain untested. The four pre-existing normal-profile files matched their backup hashes after the test.
+
+The opt-in initial-choice module is restricted to the pinned disposable VM installation. Its separate DLL build, private capture/replay data and exact limits are described in the [0.21.0 record](docs/command-session.md#initial-choice-bootstrap--probe-0210-october-20); ordinary probe installation does not enable it.
 
 ## Read the results
 

@@ -3,11 +3,12 @@ function fixture(){
  const sent=[],events=[],s='deployment-session';let time=0;
  const c=new PhaseCoordinator(s,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e),true,()=>time,true,false,false,true);
  const state={schema:'itb-observation-v1',unavailable:[],mission:'Mission_Tides',turn:0,team:6,
+  initialChoices:Array.from({length:19},(_,i)=>({kind:i<17?'ai-constructor':i===17?'pod-delivery':'pod-select',limit:i<17?32768:i===17?3:9,value:42})),
   deployment:{inProgress:true,phase:0,mechs:[0,1,2].map(id=>({id,state:id?1:0,x:-1,y:-1}))},
   pawns:[0,1,2].map(localId=>({localId,position:{x:-1,y:-1},active:true}))};
  const ctx=revision=>({revision,phase:revision>=4?'player1':'deployment',witness:JSON.stringify(state)});
  const send=(peer,m)=>c.receive(peer,{session:s,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.20.0',interactive:true,phaseRun:true,deployment:true,...ctx(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.21.0',interactive:true,phaseRun:true,deployment:true,...ctx(0)});
  const request=i=>({session:s,encounter:'artillery-checkpoint',...ctx(i),id:'move-'+(i?'guest':'host')+'-'+(i+1),kind:'deploy',actor:['combat','cannon','artillery'][i],fromX:-1,fromY:-1,toX:1,toY:4+i});
  return {c,send,sent,events,state,ctx,request,elapse:()=>{time=3000}};
 }
@@ -40,3 +41,8 @@ function fixture(){
  assert.equal(f.events.filter(e=>e.type==='dispatch').length,0);
 }
 console.log('Deployment coordinator: three placements, both launch consents, next-turn move, ownership/order, preparations, duplicate refusal and stopped-peer timeout (fake peers).');
+{
+ const f=fixture();delete f.state.initialChoices;
+ assert.throws(()=>f.c.context(f.ctx(0),0),/incomplete-initial-choices/);
+ assert.equal(f.events.filter(e=>e.type==='dispatch').length,0);
+}

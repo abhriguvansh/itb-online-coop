@@ -2,7 +2,8 @@
 param(
     [Parameter(Mandatory)][string]$GamePath,
     [ValidateSet('Plan','Install','Uninstall')][string]$Mode = 'Plan',
-    [string]$NativeBridgePath
+    [string]$NativeBridgePath,
+    [string]$InitialChoicesPath
 )
 $ErrorActionPreference = 'Stop'
 $repoPath = Split-Path -Parent $PSScriptRoot
@@ -44,6 +45,9 @@ $resultFiles = @($files)
 $files += @('scripts\inspection.lua')
 $inspectionFiles = @($files)
 $files += @('scripts\deployment.lua')
+$deploymentFiles=@($files)
+$files += @('scripts\initial_choices.lua')
+if($InitialChoicesPath){$files+=@('itb_initial_choices.dll')}
 $markerName = '.itb-coop-probe.json'
 $markerPath = Join-Path $modRoot $markerName
 if ($Mode -eq 'Plan') {
@@ -57,20 +61,21 @@ if ($Mode -eq 'Install') {
     if (-not (Test-Path -LiteralPath $loaderInit)) { throw 'Install the separately obtained loader first.' }
     if ((Get-Content -LiteralPath $loaderInit -Raw) -notmatch 'self\.version\s*=\s*"2\.9\.6"') { throw 'Expected pinned loader 2.9.6.' }
     if (-not $NativeBridgePath -or -not (Test-Path -LiteralPath $NativeBridgePath -PathType Leaf)) { throw 'Supply a separately built, reviewed native bridge using -NativeBridgePath.' }
-    foreach ($relative in ($files | Where-Object { $_ -ne 'itb_input.dll' })) {
+    if($InitialChoicesPath-and-not(Test-Path -LiteralPath $InitialChoicesPath -PathType Leaf)){throw 'InitialChoicesPath missing'}
+    foreach ($relative in ($files | Where-Object { $_ -notin @('itb_input.dll','itb_initial_choices.dll') })) {
         if (-not (Test-Path -LiteralPath (Join-Path $sourceRoot $relative) -PathType Leaf)) { throw "Missing source $relative" }
     }
     New-Item -ItemType Directory -Path (Join-Path $modRoot 'scripts') | Out-Null
     $installed = @()
     foreach ($relative in $files) {
-        $source = if ($relative -eq 'itb_input.dll') { $NativeBridgePath } else { Join-Path $sourceRoot $relative }
+        $source = if ($relative -eq 'itb_input.dll') { $NativeBridgePath } elseif($relative-eq'itb_initial_choices.dll'){$InitialChoicesPath}else { Join-Path $sourceRoot $relative }
         $destination = Join-Path $modRoot $relative
         Copy-Item -LiteralPath $source -Destination $destination
         $hash = (Get-FileHash -LiteralPath $source).Hash
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.20.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.21.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }
@@ -89,7 +94,12 @@ elseif ($marker.Version -in @('0.14.0','0.15.0')) { $files=$basicFiles }
 elseif ($marker.Version -eq '0.16.0') { $files=$spawnFiles }
 elseif ($marker.Version -in @('0.17.0','0.17.1')) { $files=$resultFiles }
 elseif ($marker.Version -in @('0.18.0','0.19.0')) { $files=$inspectionFiles }
-elseif ($marker.Version -ne '0.20.0') { throw 'Unrecognized probe version; preserve and inspect before removal.' }
+elseif ($marker.Version -eq '0.20.0') { $files=$deploymentFiles }
+elseif ($marker.Version -eq '0.21.0') {
+    $files=@($deploymentFiles)+@('scripts\initial_choices.lua')
+    if('itb_initial_choices.dll'-in$marker.Files.RelativePath){$files+=@('itb_initial_choices.dll')}
+}
+else { throw 'Unrecognized probe version; preserve and inspect before removal.' }
 if ($marker.Id -ne 'aman_itb_coop_probe' -or $marker.Files.Count -ne $files.Count) { throw 'Unrecognized ownership manifest.' }
 $actualFiles = @(Get-ChildItem -LiteralPath $modRoot -File -Force -Recurse)
 if (Get-ChildItem -LiteralPath $modRoot -Force -Recurse | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Link in probe folder; refusing removal.' }

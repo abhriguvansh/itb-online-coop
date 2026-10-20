@@ -1,6 +1,6 @@
 # Protected command session — October 13, 2026
 
-**Current: probe 0.20.0 proves three protected owner-selected native placements in both real games. Joint deployment confirmation executes, but native initial AI/pod disagreement blocks reliable turn-one admission. [Latest evidence](#protected-deployment--probe-0200-october-20).** The historical 0.19.0 checkpoint-to-results proof remains separate.
+**Current: probe 0.21.0 — fresh deployment through initial planning and a legal turn-one move passed in both real games. [Latest evidence](#initial-choice-bootstrap--probe-0210-october-20).** The historical 0.19.0 checkpoint-to-results proof remains separate.
 
 **Historical probe 0.10.0: the restricted two-instance network milestone passed.** Two independently running Windows guests executed guest-origin movement → host-origin punch → protected native End Turn with both-peer readiness and normal unused-unit confirmation → enemy/environment/spawn/planning → guest-origin movement on player turn 3. Requests and outcomes crossed real TCP. Intent remains scripted for one checkpoint; this is not general determinism, full-state synchronization or a playable human-selected session. The historical increments below retain their original evidence scopes.
 
@@ -554,3 +554,59 @@ Focused offline checks cover legal/native-order placement, protected single disp
 All games closed normally and evidence was preserved. The three original disposable checkpoint hashes per VM were restored and verified, exact owned triggerless launch tasks removed, and both VMs shut down normally. Original A=3/B=4 CPU counts and default providers are restored. Attempts to change running VM process affinities were denied and made no change. Host saves, security software/settings, execution policies, Steam Cloud and firewall were unchanged.
 
 **Next substantial step:** identify the native initial AI/pod choice boundary and prove a supported coordination path, using the paired normal disagreement and saved AI-seed difference as the new hypothesis. Do not repeat identical launch attempts until choices happen to match, hide differences, patch post-state or broaden lobby/campaign/recovery work. Once initial choices can be coordinated, finish launch → player-one movement and connect to the existing combat/results path. Recommended: **GPT-6.1 Sol, High reasoning**, normal coding mode.
+
+# Initial-choice bootstrap — probe 0.21.0 (October 20)
+
+**Game-verified:** two independently running games now complete fresh mission entry → three owner-selected placements → jointly authorized native Confirm → initial enemy/environment/spawn/planning sequences → a legal turn-one Cannon move. Final-source run 8 has five preparations, admissions and observed completions per game, matching observation barriers 0–5, three coordinated future-spawn barriers and both completion acknowledgments. One operator selected actions in both roles. This is a restricted fresh-entry proof; deployment-to-victory and two-human usability remain unfinished.
+
+## Narrow implementation
+
+The new optional `native/initial_choices.c` DLL intercepts four exact native CALL sites in the current process. Installation requires an explicit capture/replay environment value, the disposable VM executable path, its complete SHA-256, PE32 identity and exact surrounding instruction bytes. The tested executable is SHA-256 `31fe352655982398fb3ee8b0bbe80efd5d65e3a9aa11e3dc39d0364354493fe9` (game 1.2.93). The tested choice DLL is SHA-256 `8DA135B506593D89C7CB0EE5AB3BF1229CA32B21E7CEBBE6F0850C536C3956EA`. These identify the observed build; reproducible-build and broader executable compatibility are unproven.
+
+Read-only native inspection and the pass-through game trace establish the following bounded fixture sequence:
+
+| Native boundary | RVA | Observed calls before deployment |
+|---|---|---|
+| AI constructor random return | `0x0f5f22` | 17 draws, each in the CRT's 0–32767 range |
+| Campaign pod-reward delivery decision | `0x201c1c` | One draw; the native divisor is 3 in this checkpoint |
+| Preselected pod tile | `0x172462` | One draw; nine native candidate tiles |
+| Conditional special-pod draw | `0x201caa` | Zero calls in the supported reference; an unexpected call prevents replay admission |
+
+Each wrapper calls the original native random function exactly once. Capture returns that result unchanged. Replay checks the exact kind/order/candidate count, then returns the agreed captured value before native code performs its normal commitment. It never assigns board, allowance, save or AI-seed fields. The fourth hook detects an unsupported branch. Wrong-thread, overflow, unexpected shape, incomplete playback or hook-restoration failures latch refusal; no action retry or reroll occurs. Hook writes are confined to the verified process-local CALL bytes, with instruction-cache flushes and original page-protection restoration. Partial installation tracks every changed site for bounded rollback; unknown bytes are preserved and faulted.
+
+All 19 supported calls occurred before `onDeploymentPhaseStart`. Replay removes all four hooks there. Protected-session admission requires the complete, fault-free sealed transcript, fresh unplaced mission entry and the existing profile/checkpoint/input checks. The agreed transcript joins the shared observation witness; the coordinator also validates its shape. Original local draws and clock values are diagnostic data and do not enter that witness. The existing input guard DLL is unchanged.
+
+This increment retains the seven-hook launch boundary, actual SDL release, later draw/update, idle board, empty loader callback queue, restored player allowances and acknowledged turn-zero spawn batch from 0.20.0. Neither unchanged snapshots nor a temporary idle interval proves completion.
+
+## Preserved experiments
+
+Raw traces, game/coordinator logs, complete disposable-profile archives, comparisons, manifests and VM diagnostics remain private under `.local/evidence/initial-choices-0.21.0/`.
+
+| Attempt | Evidence and consequence |
+|---|---|
+| Run 1, pass-through prototype | Exact-build installation succeeded. A diagnostic JSON array-marking error prevented useful trace serialization. No protected session or placement began. The error and old-build setup log were preserved, then the logger was corrected. |
+| Run 2, normal reference | Normal fresh entry, three placements and Confirm completed. The first tracer recorded 17 constructor draws plus pod-location selection, with no later intercepted draws or native fault. This established coverage of those two boundaries, not of all initial randomness. |
+| Run 3, replay initialization | The private prototype called a nonexistent JSON decoder. Both games stopped during initialization before session admission. A bounded data-only transcript reader replaced that call. Installer preflight also caught unmanifested compiler symbols/import-library artifacts; known hashes were verified and those artifacts excluded from subsequent payloads. |
+| Run 4, incomplete 18-choice replay | Five commands, six matching peer barriers and both acknowledgments passed. Detailed normal-control comparison then found both replicas had postponed the pod while the reference delivered it. Matching peers had hidden an omitted random boundary. Native saved pod coordinates matched, but the campaign pending-reward and mission-reward fields differed. This is preserved as incomplete coverage, not complete pod synchronization. |
+| Run 5, final-module refusal | Omitting bootstrap opt-in and pressing session start in a fresh deployment produced `initial-choice-bootstrap-incomplete` before guard/session creation. Zero preparations, admissions or native deployment clicks. |
+| Run 6 | Final-build startup only; canceled before any session or action when run 4's missing pod-delivery coverage was identified. |
+| Run 7, expanded pass-through control | Added delivery/special-pod tracing. Nineteen unchanged native draws occurred before deployment, with no fault or later extra call through player turn one. Normal placements/Confirm completed. This captured delivery result postpones the reward; that outcome was retained without rerolling. |
+| Run 8, corrected final source | Both replicas consumed 19 different original draws, applied the same captured 19 choices, removed all hooks before protected placement, and completed the five-command network sequence. All six peer observation barriers, three spawn barriers and both acknowledgments passed. Ten early commands were rejected per game while launch remained pending. |
+
+## Comparisons and limits
+
+All six final-run placement comparisons (two peers × three placements) match the fresh normal control in every captured field. The initial phase's observed pawn fields, including enemy positions/targets and player action allowances, also match it. The seven required initial hooks occur in the same order. Both games use a native host choice for each of the three future spawns, acknowledge the resulting bookkeeping and reach player turn one before the next move is admitted.
+
+Saved preselected pod location, pending pod-reward list, empty current-mission pod reward and active AI seed match the normal control in both final replicas. This verifies the **pending-pod path** for the captured fixture. Actual pod delivery and the conditional special-pod path have no completed paired live proof. The independent normal control has different future-spawn queues and two different marked-spawn tiles; those differences remain in the private comparison. The replicas agree with each other on their authorized native host spawn choices. No full vanilla-state equality, complete campaign-state coverage or general determinism is claimed.
+
+The Cannon (1,5) → (1,6) move passes the existing legal-reachability/native-preview checks, executes once per replica and completes normal observed movement postconditions. This control ended before movement, so it does not provide a new independent post-move vanilla comparison. The older normal-movement evidence remains separate.
+
+## Build and operation
+
+`Build-InitialChoices.ps1 -ZigPath PATH_TO_PINNED_ZIG -LuaHeaders PATH_TO_LUA_5_1_HEADERS` builds only the separate DLL under `.local/initial-choices-build/`. Optional `Install-Probe.ps1 -InitialChoicesPath PATH_TO_DLL` includes it in the exact ownership manifest. Ordinary installation leaves it absent and disabled. No local native test executable was built or run; native contracts are CI-only after the unresolved local antivirus alert. Lua/Node contracts and inert installer fixtures cover transcript validation, disabled mode, admission/sealing, coordinator shape checks, optional-DLL ownership and 0.20.0 upgrade removal. Native CI contracts use RNG/page-protection doubles and do not run the game.
+
+The private launch environment uses `ITB_COOP_INITIAL_CHOICES=capture` for an ordinary-control trace or `replay` for the restricted experiment. Replay reads only the bounded data file `C:/ITBCoopProbe/initial-choices.txt`. `node tools/initial-choices.cjs PRIVATE_LOG PRIVATE_OUTPUT` extracts that data from a completed fault-free normal trace; it requires the supported 19-call shape, writes exclusively under `.local/` and refuses to overwrite. The current protocol still uses private per-run TCP configuration and manually provisioned matching checkpoints. It does not negotiate or distribute a fresh initial transcript automatically.
+
+Both games closed normally. Final 24-file manifests and both DLL hashes were verified, original three-file disposable checkpoints restored and hash-checked, exact owned triggerless launch tasks removed, and VMs shut down normally. Original A=3/B=4 CPU counts and default providers are restored. Host saves, security software/settings, execution policies, Steam Cloud and firewall were unchanged. A foreground activation recovered an inconclusive black VM capture; no general rendering/stability cure is claimed.
+
+**Next substantial step:** connect the fresh-deployment session to the existing selected-combat/result path and complete one uninterrupted mission through victory. Runtime integration is the immediate blocker: this harness stops after five commands; the earlier combat/result fixture begins on turn two in a different mission. Keep the captured-choice prerequisite and pending-pod limit explicit. Automatic fresh-choice exchange, joining UI, room codes, campaign voting, recovery and broad compatibility remain deferred. Recommended: **GPT-6.1 Sol, High reasoning**, normal coding mode.

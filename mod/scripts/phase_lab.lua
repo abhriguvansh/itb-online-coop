@@ -28,7 +28,10 @@ function M.install(env,mod,native,path)
     local deploymentModule=require(path..'deployment')
     local function capture()
         local state,idle=require(path..'snapshot').capture(env,env.GetCurrentMission(),json)
-        if wire and wire.deployment then deploymentModule.capture(env,state,json) end
+        if wire and wire.deployment then
+            deploymentModule.capture(env,state,json)
+            state.initialChoices=mod.initialChoices and mod.initialChoices.choices
+        end
         return state,idle
     end
     local function emit(k,p) mod.probe:record(k,p) end
@@ -96,6 +99,7 @@ function M.install(env,mod,native,path)
         check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(deploying and 0 or finalCheckpoint and 4 or 2),'checkpoint-required')
         local state,idle=capture();check(idle and state.gridPower==(deploying and 2 or finalCheckpoint and 1 or 4),'checkpoint-not-ready')
         if deploying then
+            check(mod.initialChoices and mod.initialChoices.healthy and mod.initialChoices:healthy(),'initial-choice-bootstrap-incomplete')
             check(self.freshDeployment==true,'fresh-deployment-entry-required')
             check(env.GetCurrentMission().ID=='Mission_Tides' and env.Game:GetTeamTurn()==env.TEAM_ENEMY
                 and state.deployment.inProgress and state.deployment.phase==0 and env.sdlext.isGame() and not env.sdlext.isConsoleOpen(),'deployment-checkpoint-required')

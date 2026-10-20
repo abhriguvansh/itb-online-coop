@@ -36,3 +36,9 @@ jobs:
           -SdlHeaders .local/native-ci/native-source/sdl
           -RunMockTests
         shell: pwsh
+      - run: >-
+          ./tools/Build-InitialChoices.ps1
+          -ZigPath .local/native-ci/zig-x86_64-windows-0.14.1/zig.exe
+          -LuaHeaders .local/native-ci/lua-5.1.5/src
+          -RunMockTests
+        shell: pwsh

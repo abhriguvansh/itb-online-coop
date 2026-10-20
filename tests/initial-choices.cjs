@@ -1,0 +1,10 @@
+const assert=require('node:assert/strict'),{extract}=require('../tools/initial-choices.cjs');
+const v={passThrough:true,fault:0,overflow:false,count:19,entries:Array.from({length:19},(_,i)=>({kind:i<17?'ai-constructor':i===17?'pod-delivery':'pod-select',limit:i<17?32768:i===17?3:9,value:42}))};
+const log=()=>`ITBCOOP ${JSON.stringify({event:'initial_choice_trace',payload:{boundary:'onNextTurn',native:v}})}\n`;
+assert.equal(extract(log()).split('\n').length,20);
+v.fault=8;assert.throws(()=>extract(log()));v.fault=0;
+v.passThrough=false;assert.throws(()=>extract(log()));v.passThrough=true;
+v.entries[18].limit=8;assert.throws(()=>extract(log()));v.entries[18].limit=9;
+v.entries[0].applied=41;assert.throws(()=>extract(log()));delete v.entries[0].applied;
+assert.throws(()=>extract(log().replace('onNextTurn','onMissionStart')));
+console.log('Initial-choice reference extraction refuses incomplete, replayed, faulty and unsupported captures (fake records).');

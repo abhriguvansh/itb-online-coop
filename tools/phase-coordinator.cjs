@@ -84,7 +84,10 @@ class PhaseCoordinator{
     this.require(typeof m.witness==='string' && m.witness.length>0 && Buffer.byteLength(m.witness)<=65536,'invalid-witness');
     const state=JSON.parse(m.witness);
     this.require(state.schema==='itb-observation-v1' && Array.isArray(state.unavailable) && state.unavailable.length===0,'incomplete-state');
-    if(this.deployment)this.require(state.mission==='Mission_Tides'&&state.turn===(revision>=4?1:0)&&state.team===(revision>=4?1:6)&&state.deployment?.inProgress===(revision<4)&&state.deployment.phase===(revision>=4?2:0)&&state.deployment.mechs?.length===3,'incomplete-deployment-state');
+    if(this.deployment){
+      this.require(state.mission==='Mission_Tides'&&state.turn===(revision>=4?1:0)&&state.team===(revision>=4?1:6)&&state.deployment?.inProgress===(revision<4)&&state.deployment.phase===(revision>=4?2:0)&&state.deployment.mechs?.length===3,'incomplete-deployment-state');
+      this.require(Array.isArray(state.initialChoices)&&state.initialChoices.length===19&&state.initialChoices.every((v,i)=>v.kind===(i<17?'ai-constructor':i===17?'pod-delivery':'pod-select')&&v.limit===(i<17?32768:i===17?3:9)&&Number.isInteger(v.value)&&v.value>=0&&v.value<=32767),'incomplete-initial-choices');
+    }
   }
   frame(kind,peer='-',id='-'){
     const state=this.states.host;
@@ -108,7 +111,7 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.20.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.21.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }

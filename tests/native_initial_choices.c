@@ -1,0 +1,45 @@
+/* CI only. RNG and protection functions are doubles; no game or input APIs run. */
+#include <assert.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include "../native/initial_choices.c"
+static int calls,raw=123,flush_ok=1,protect_ok=1;
+static int __cdecl fake_rand(void){calls++;return raw;}
+static BOOL WINAPI fake_protect(LPVOID p,SIZE_T n,DWORD flags,PDWORD prior){
+    (void)p;(void)n;(void)flags;*prior=PAGE_EXECUTE_READ;return protect_ok;
+}
+static BOOL WINAPI fake_flush(HANDLE h,LPCVOID p,SIZE_T n){(void)h;(void)p;(void)n;return flush_ok;}
+static void reset(void){
+    count=calls=fault=overflow=installed=sealed=0;live_mask=0;replaying=1;expected_count=19;
+    owner=GetCurrentThreadId();original_rand=fake_rand;raw=123;
+    for(int i=0;i<19;i++)choices[i]=(struct choice){i<17?0:i==17?2:1,42+i,i<17?32768:i==17?3:9};
+}
+int main(void){
+    reset();for(int i=0;i<19;i++)assert(draw(i<17?0:i==17?2:1,i<17?32768:i==17?3:9)==42+i);
+    assert(calls==19&&count==19&&!fault&&entries[18].value==123&&entries[18].applied==60);
+    assert(draw(0,32768)==123&&fault==8&&calls==20);
+    reset();assert(draw(1,9)==123&&fault==8);assert(draw(0,32768)==123&&calls==2);
+    reset();count=18;assert(draw(1,8)==123&&fault==8);
+    reset();replaying=0;assert(draw(0,32768)==123&&calls==1&&!fault);
+    reset();count=128;assert(draw(0,32768)==123&&calls==1&&fault==4&&overflow);
+    reset();owner++;assert(draw(0,32768)==123&&calls==1&&fault==3);
+    assert(valid_choice(0,0,LUA_TNUMBER,LUA_TNUMBER,0,32768));
+    assert(valid_choice(18,1,LUA_TNUMBER,LUA_TNUMBER,32767,9));
+    assert(valid_choice(17,2,LUA_TNUMBER,LUA_TNUMBER,123,3));
+    assert(!valid_choice(19,3,LUA_TNUMBER,LUA_TNUMBER,123,100));
+    assert(!valid_choice(0,0,LUA_TNUMBER,LUA_TNUMBER,NAN,32768));
+    assert(!valid_choice(0,0,LUA_TNUMBER,LUA_TNUMBER,0.5,32768));
+    assert(!valid_choice(0,0,LUA_TSTRING,LUA_TNUMBER,0,32768));
+    assert(!valid_choice(17,0,LUA_TNUMBER,LUA_TNUMBER,0,32768));
+    reset();game=calloc(5697536,1);assert(game);protect_page=fake_protect;flush_cache=fake_flush;
+    for(int i=0;i<2;i++){memcpy(saved[i],expected[i],5);memcpy(patched[i],"\xe8\x01\x02\x03\x04",5);memcpy(game+sites[i],saved[i],5);}
+    assert(patch(0,saved[0],patched[0],1)&&live_mask==1&&installed);
+    flush_ok=0;assert(!patch(1,saved[1],patched[1],1)&&live_mask==3);
+    flush_ok=1;restore_hooks();assert(!live_mask&&!installed&&!fault);
+    assert(!memcmp(game+sites[0],saved[0],5)&&!memcmp(game+sites[1],saved[1],5));
+    protect_ok=0;assert(!patch(0,saved[0],patched[0],1)&&!live_mask);
+    protect_ok=1;assert(patch(0,saved[0],patched[0],1));game[sites[0]]=0;restore_hooks();
+    assert(fault==7&&live_mask==1&&installed);
+    free(game);puts("Initial-choice native contracts passed (CI doubles; no game proof).");return 0;
+}
