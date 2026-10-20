@@ -161,6 +161,34 @@ test('snapshot ordering survives pawn enumeration order', function()
     local b=snapshot.capture(env, {ID='fixture'}, json)
     eq(json.encode(a), json.encode(b))
 end)
+
+test('phase rejection diagnostic never captures a transitional spawn witness',function()
+    local names={'onMissionUpdate','onFrameDrawStart','onPreEnvironment','onPostEnvironment','onNextTurn',
+        'onVekSpawnAdded','onVekSpawnRemoved','onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned',
+        'onMissionDismissed','onDeploymentPhaseStart','onPawnSelectedForDeployment','onPawnUnselectedForDeployment',
+        'onPawnDeployed','onPawnUndeployed','onLandingPhaseStart','onPawnLanding','onPawnLanded','onDeploymentPhaseEnd','onWindowShown'}
+    local events={};for _,name in ipairs(names)do events[name]={subscribe=function(self,fn)self.listener=fn end}end
+    local env={modApi={events=events},modapiext={events={onSkillStart={subscribe=function()end},onSkillEnd={subscribe=function()end}}}}
+    local prefix='phase-rejection-fixture/'
+    package.loaded[prefix..'json']=json
+    package.loaded[prefix..'deployment']={}
+    package.loaded[prefix..'phase_wire']={open=function()end}
+    package.loaded[prefix..'mission_completion']={observe=function()return {}end}
+    local captures=0;package.loaded[prefix..'snapshot']={capture=function()captures=captures+1;error('transitional queue')end}
+    local emitted={};local mod={probe={record=function(_,name)emitted[#emitted+1]=name end}}
+    local lab=dofile('mod/scripts/phase_lab.lua').install(env,mod,{},prefix)
+    local submissions=0
+    lab.session={phase='player2',revision=15,phaseEvent=function()end,
+        submit=function(_,peer,r)
+            submissions=submissions+1;eq(peer,'guest');eq(r.witness,'unadmittable-phase-rejection-probe')
+            return {status='rejected',reason='command-pending-renew-intent'}
+        end,stop=function()error('unexpected stop')end}
+    lab.ending=true;events.onVekSpawningEnd.listener({})
+    eq(submissions,1);eq(captures,0);eq(emitted[1],'phase_lab_early_command_rejected')
+    lab.session.submit=function()return {status='rejected',reason='stale-observation-renew-intent'}end
+    local stopped=false;lab.session.stop=function()stopped=true end
+    events.onVekSpawningEnd.listener({});eq(stopped,true)
+end)
 test('unexpected board size fails instead of looping unboundedly', function()
     local env=environment(); env.Board.GetSize=function() return env.Point(9999,1) end
     fails(function() snapshot.capture(env, {}, json) end)

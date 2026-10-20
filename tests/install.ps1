@@ -104,6 +104,8 @@ Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Nine-file probe upgra
 
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture | Out-Null
 Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 25) 'Optional bootstrap payload mismatch.'
+$currentMarker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json
+Assert-Condition ($currentMarker.Version-eq'0.22.0') 'Current installer version mismatch.'
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) 'Optional bootstrap uninstall failed.'
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
@@ -115,3 +117,8 @@ $marker|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $markerPath -Encoding u
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) '0.20.0 upgrade removal failed.'
 Write-Output 'Optional bootstrap ownership and 0.20.0 upgrade removal passed (inert DLL fixtures).'
+& $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture | Out-Null
+$marker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json;$marker.Version='0.21.0'
+$marker|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $markerPath -Encoding utf8
+& $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
+Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) '0.21.0 upgrade removal failed.'

@@ -91,3 +91,9 @@ local p=wire.decode(placement,'test-session').move;assert(p.kind=='deploy' and p
 assert(not pcall(wire.decode,placement:gsub('deploycombat','combat'),'test-session'))
 assert(not pcall(wire.decode,placement:gsub('|%-1|%-1|','|0|0|'),'test-session'))
 print('Deployment config and exact off-board origins are separate from normal move framing (mailbox doubles).')
+do
+ local files={['C:/ITBCoopProbe/Wire/session.txt']='full-session\nguest\nfull-mission\n'}
+ local env={os={getenv=function()return 'C:/ITBCoopProbe/Wire'end},io={open=function(p)return files[p] and {read=function()return files[p]end,close=function()end}end}}
+ local w=wire.open(env,{},function()end)
+ assert(w.fullMission and w.deployment and w.repeatedTurns and w.phaseRun and w.interactive)
+end

@@ -109,6 +109,18 @@ test('phase pending rejects moves even when engine temporarily reports player id
     local nextRequest=move('move','next');nextRequest.phase='player3';nextRequest.revision=1
     assert(s:submit('guest',nextRequest).status=='pending' and e.moveCalls==1)
 end)
+
+test('pending phase refuses the diagnostic sentinel before any transitional witness read',function()
+    local e,o,s,r,ready,move=endFixture();ready();assert(s:submit('host',r).status=='pending')
+    local reads=0;o.witness=function()reads=reads+1;error('transitional spawn observation')end
+    local probe=move('move','phase-probe');probe.witness='unadmittable-phase-rejection-probe'
+    assert(s:submit('guest',probe).reason=='command-pending-renew-intent')
+    assert(reads==0 and not s.stopped and e.moveCalls==0 and e.endCalls==1)
+    e.phaseComplete=true;e.turn=3;s:update()
+    probe.id='after-phase';probe.phase='player3';probe.revision=1
+    assert(s:submit('guest',probe).reason=='observation-unavailable')
+    assert(reads==1 and s.stopped and e.moveCalls==0 and e.endCalls==1)
+end)
 test('End Turn readiness is invalidated by an intervening admitted action',function()
     local e,_,s,r,ready,move=endFixture();ready();s:submit('guest',move());completeMove(e,s)
     r.revision=1;assert(s:submit('host',r).reason=='both-players-must-be-ready' and e.endCalls==0)

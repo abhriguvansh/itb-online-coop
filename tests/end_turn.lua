@@ -12,7 +12,7 @@ local function fixture()
         sessionStop=function()n.sessionState=2 end,aim=function(x,y)n.mouseX=x-(e.offset or 0);n.mouseY=y-(e.offset or 0);n.cursorX=n.mouseX;n.cursorY=n.mouseY;return true end,
         click=function(x,y)e.clicks=e.clicks+1;e.lastClick={x=x,y=y};return not e.rejectClick end}
     local function capture()
-        local pawns={};for _,id in ipairs({0,1,2,100})do pawns[#pawns+1]={localId=id,team=1,active=e.ready,movementSpent=false,dead=false,frozen=false} end
+        local pawns={};for _,id in ipairs(e.friendlyIds or {0,1,2,100})do pawns[#pawns+1]={localId=id,team=1,active=e.ready,movementSpent=false,dead=false,frozen=false} end
         return {pawns=pawns,unavailable=e.missing and {'field'} or {}}, e.busy==0
     end
     local lab=M.new(e,native,function(k,p)e.records[#e.records+1]={kind=k,payload=p}end,capture,
@@ -135,5 +135,24 @@ test('final-turn-only test requires explicit checkpoint mode and ordered environ
     l:phaseEvent('onPreEnvironment',e.mission);assert(not l:beginTerminal(e.mission))
     l:phaseEvent('onPostEnvironment',e.mission);assert(l:beginTerminal(e.mission) and not l.pending)
     assert(not l:beginTerminal(e.mission) and not l:arm())
+end)
+test('fresh Tides mode requires three renewed mechs plus the full ordered boundary',function()
+    local e,l,t,start,_,n=fixture();e.mission.ID='Mission_Tides';e.turn=1
+    assert(not l:arm());l.fullMission=true;l.repeatedTurns=true;start();e.ready=true
+    -- The fixture's fourth pawn must be rejected, never silently ignored.
+    for i,name in ipairs({'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned','onNextTurn'}) do
+        if i==3 then e.phase=6 end;if i==7 then e.phase=1;e.turn=2 end
+        l:phaseEvent(name,e.mission)
+    end
+    t();assert(l.fault and n.sessionState==2,'unexpected fourth friendly must stop fresh mission')
+end)
+test('fresh Tides turn one completes only after seven hooks and the settled spawn batch',function()
+    local e,l,t,start=fixture();e.mission.ID='Mission_Tides';e.turn=1;e.friendlyIds={0,1,2};l.fullMission=true;l.repeatedTurns=true;start();e.ready=true;e.spawnPending=true
+    for i,name in ipairs({'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned','onNextTurn'}) do
+        if i==3 then e.phase=6 end;if i==7 then e.phase=1;e.turn=2 end
+        l:phaseEvent(name,e.mission)
+    end
+    t();assert(l.pending and not l.fault);e.spawnPending=false;t();assert(not l.pending and l.completedTurn==2 and not l.fault)
+    assert(l:arm());e.turn=4;assert(not l:arm(),'cannot jump directly to final turn')
 end)
 print('Protected End Turn contracts: '..passed..' passed (mocked engine/native input).')

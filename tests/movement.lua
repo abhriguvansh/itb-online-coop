@@ -196,6 +196,21 @@ local function friendlyRoute()
     e.Board.GetPawn=function(_,id)return type(id)=='table' and ally or e.pawn end
     return e,l,r,points,ally
 end
+
+test('Tides UI retreat permits only future danger on origin and intermediate tiles',function()
+    local e,l,r,points=longRoute()
+    e.mission.ID='Mission_Tides';r.mission='Mission_Tides';l.supportedMission='Mission_Tides'
+    e.Board.IsEnvironmentDanger=function(_,p)return p.y~=r.to.y end
+    assert(l:validate(r) and e.calls==0 and e.effectCalls==0)
+    e.Board.IsEnvironmentDanger=function()return true end
+    assert(not l:validate(r),'destination must remain safe')
+    e.Board.IsEnvironmentDanger=function(_,p)return p.y~=r.to.y end
+    e.Board.IsDangerous=function(_,p)return p.y==r.from.y end
+    assert(not l:validate(r),'other danger flags remain restricted')
+    e.Board.IsDangerous=function()return false end
+    e.mission.ID='Mission_Artillery';r.mission='Mission_Artillery';l.supportedMission=nil
+    assert(not l:validate(r),'exception is restricted to Tides')
+end)
 test('UI path permits engine-reachable friendly intermediate transit without dispatch',function()
     local e,l,r=friendlyRoute();assert(l:validate(r));assert(e.calls==0 and e.effectCalls==0 and not l.pending)
 end)

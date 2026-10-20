@@ -1,4 +1,4 @@
--- Explicitly opted-in four-command fixture. Scripted intent; optional ordered TCP mailbox.
+-- Opt-in checkpoint/deployment experiments with the ordered TCP mailbox.
 local M={}
 local unpack=unpack or table.unpack
 -- Bounded observation only: preserve the native RNG results and call count.
@@ -65,16 +65,17 @@ function M.install(env,mod,native,path)
             resultPreview=function(mission) return self.result and self.result:allowsPreview(mission) end})
     end
     local function witness() local state=capture();assert(#state.unavailable==0,'incomplete-observation');return json.encode(state) end
-    local function request(kind,id,actor,fx,fy,tx,ty)
+    local function request(kind,id,actor,fx,fy,tx,ty,rejectionProbe)
         return {session=self.identity,encounter='artillery-checkpoint',phase=self.session.phase,
-            revision=self.session.revision,witness=witness(),id=id,kind=kind,actor=actor,
+            revision=self.session.revision,witness=rejectionProbe and 'unadmittable-phase-rejection-probe' or witness(),id=id,kind=kind,actor=actor,
             fromX=fx,fromY=fy,toX=tx,toY=ty,confirmUnused=kind=='end-turn' and true or nil,
             confirmDeployment=kind=='deployment-confirm' and true or nil}
     end
     local function planned()
         local n=self.session.revision
         if wire and wire.deployment then
-            if n==3 then return request('deployment-confirm','deployment-confirm-3'),'host' end
+            if self.session.phase=='deployment' and n==3 then return request('deployment-confirm','deployment-confirm-3'),'host' end
+            if wire.fullMission and self.session.phase~='deployment' then return request('end-turn','end-turn-'..n),'host' end
             if self.session.phase=='player1' then local p=env.Board:GetPawn(1):GetSpace();return request('move','deployment-move-context','cannon',p.x,p.y,1,6),'guest' end
             return request('deploy','deployment-context','combat',-1,-1,1,4),'host'
         end
@@ -87,7 +88,7 @@ function M.install(env,mod,native,path)
     end
     local function check(value,reason) assert(value,reason) end
     if wire and wire.interactive then
-        if not wire.deployment then self.inspection=require(path..'inspection').new({env=env,native=native,wire=wire,capture=capture,json=json,emit=emit}) end
+        if not wire.deployment or wire.fullMission then self.inspection=require(path..'inspection').new({env=env,native=native,wire=wire,capture=capture,json=json,emit=emit}) end
         self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit,inspection=self.inspection})
         self.status=wire.phaseRun and 'Interactive co-op phase' or 'Interactive co-op moves'
     end
@@ -120,7 +121,7 @@ function M.install(env,mod,native,path)
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
-            deployment=deploying and deploymentModule or nil,
+            deployment=deploying and deploymentModule or nil,fullMission=wire and wire.fullMission,
             phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
@@ -224,7 +225,10 @@ function M.install(env,mod,native,path)
             if (self.ending or (wire and wire.ending)) and not self.session.stopped then
                 local ok,err=pcall(function()
                     self.phaseProbe=(self.phaseProbe or 0)+1
-                    local r=request('move','during-'..event..'-'..self.phaseProbe,'cannon',1,5,0,3)
+                    -- This negative probe must reject at the pending-command gate,
+                    -- before reading a witness from transitional spawn bookkeeping.
+                    -- Its sentinel cannot authorize a real action if that gate regresses.
+                    local r=request('move','during-'..event..'-'..self.phaseProbe,'cannon',1,5,0,3,true)
                     local result=self.session:submit('guest',r)
                     check(result.reason=='command-pending-renew-intent' or result.status=='duplicate','phase-admission-opened-early')
                     emit('phase_lab_early_command_rejected',{phaseEvent=event,result=result})

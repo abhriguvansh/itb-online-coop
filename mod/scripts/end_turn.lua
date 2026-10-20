@@ -1,4 +1,5 @@
--- One protected Mission_Artillery phase transition. Never infer completion from idle alone.
+-- Protected checkpoint phases; opt-in fullMission pins the three-mech Tides fixture.
+-- Never infer completion from idle alone.
 local M = {}
 local order={'onPreEnvironment','onPostEnvironment','onNextTurn','onVekSpawningEnd',
     'onPreEnvPlanned','onPostEnvPlanned','onNextTurn'}
@@ -7,7 +8,7 @@ function M.new(env,native,emit,capture,phaseSettled)
     local function context()
         assert(env.Profile and env.Profile.visible_name=='ITB_Coop_Probe'
             and type(env.modApi:getCurrentProfile())=='string' and env.modApi:getCurrentProfile()~='', 'wrong-profile')
-        assert(env.modApi:getGameVersion()=='1.2.93' and env.GetCurrentMission().ID=='Mission_Artillery','unsupported-context')
+        assert(env.modApi:getGameVersion()=='1.2.93' and env.GetCurrentMission().ID==(self.fullMission and 'Mission_Tides' or 'Mission_Artillery'),'unsupported-context')
         assert(env.sdlext.isGame() and not env.sdlext.isConsoleOpen() and not self.blocked,'not-tactical')
         assert(not env.modApi.deployment:isDeploymentPhase() and not env.modApi.deployment:isLandingPhase(),'deployment')
         assert(env.Board and not env.Board:IsTipImage(),'unsupported-board')
@@ -24,7 +25,7 @@ function M.new(env,native,emit,capture,phaseSettled)
     function self:arm()
         local ok,reason=pcall(function()
             context();assert((not self.used or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())) and not self.pending and not self.fault,'one-call-lockout')
-            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and (env.Game:GetTurnCount()==2 or initialFinal() or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())),'unsupported-start-phase')
+            assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and (env.Game:GetTurnCount()==2 or (self.fullMission and not self.used and env.Game:GetTurnCount()==1) or initialFinal() or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())),'unsupported-start-phase')
             local _,idle=capture();assert(idle,'not-idle')
             local selected=env.Board:GetSelectedPawn()
             assert(not selected or selected:GetArmedWeaponId()<=0,'weapon-armed')
@@ -51,7 +52,7 @@ function M.new(env,native,emit,capture,phaseSettled)
     function self:beginTerminal(mission)
         local p=self.pending
         if not self.repeatedTurns or self.fault or not p or p.mission~=mission
-            or p.turn~=4 or p.step~=2 or not p.endSent or mission.ID~='Mission_Artillery' then return false end
+            or p.turn~=4 or p.step~=2 or not p.endSent or mission.ID~=(self.fullMission and 'Mission_Tides' or 'Mission_Artillery') then return false end
         context()
         self.pending=nil;self.armed=false;self.status='Awaiting protected mission result'
         return true
@@ -95,7 +96,7 @@ function M.new(env,native,emit,capture,phaseSettled)
                         ready[pawn.localId]=true;count=count+1
                     end
                 end
-                assert(count==4 and ready[0] and ready[1] and ready[2] and ready[100],'unsupported-friendly-transition')
+                assert(count==(self.fullMission and 3 or 4) and ready[0] and ready[1] and ready[2] and (self.fullMission or ready[100]),'unsupported-friendly-transition')
                 if env.modApi.runLaterQueue and next(env.modApi.runLaterQueue) then return end
                 emit('end_turn_postconditions_observed',{turn=p.turn+1,team=env.TEAM_PLAYER,phaseHooks=p.step,
                     busy=env.Board:GetBusyState(),state=state,proofOfGeneralQuiescence=false,proofOfPeerAgreement=false})

@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.21.0',
+    version = '0.22.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Experimental co-op research probe for ITB_Coop_Probe; not a playable release.',
@@ -89,6 +89,25 @@ function mod:init()
         self.moveTrace:observe('build', pawn, weapon, from, to)
     end)
     if loaded then self.phaseLab=require(path..'phase_lab').install(_G,self,native,path) end
+    -- Optional bounded observation of actual draws, independent of Guest Additions.
+    -- Reading info can detect expiry; it never renews the protection heartbeat.
+    if loaded and os.getenv('ITB_COOP_FRAME_TRACE')=='1' then
+        local last,reported,frames,maximum,count=nil,0,0,0,0
+        modApi.events.onFrameDrawStart:subscribe(function()
+            if count>=600 then return end
+            local now=modApi:elapsedTime();frames=frames+1
+            if last then maximum=math.max(maximum,now-last) end;last=now
+            if now-reported<1000 then return end
+            local ok=pcall(function()
+                self.probe:record('runtime_frame_liveness',{elapsed=now,wall=os.time(),frames=frames,maxGapMs=maximum,native=native.info()})
+            end)
+            count=count+1;reported=now;frames=0;maximum=0
+            if not ok then
+                count=600
+                if self.phaseLab and self.phaseLab.session then self.phaseLab.session:stop('runtime-trace-evidence-failed') end
+            end
+        end)
+    end
 end
 
 function mod:load()

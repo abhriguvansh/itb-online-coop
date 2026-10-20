@@ -68,7 +68,7 @@ function M.new(o)
         if not pawn then reject('Mech unavailable');return end
         local from=pawn:GetSpace();self.counter=self.counter+1
         assert(self.counter<=999,'intent-limit')
-        local attacking=not o.wire.deployment and (o.wire.repeatedTurns and self.attacking or (not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1))
+        local attacking=(not o.wire.deployment or (o.wire.fullMission and s.phase~='deployment')) and (o.wire.repeatedTurns and self.attacking or (not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1))
         local placing=o.wire.deployment and s.phase=='deployment'
         local r=o.request(placing and 'deploy' or attacking and (o.wire.repeatedTurns and 'basic-attack' or 'lab-punch') or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
         local ok,reason=preview(s,r)

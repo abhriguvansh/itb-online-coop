@@ -70,7 +70,11 @@ function movement.new(env, emit, path)
             -- Normal-control proof: crossing a burning intermediate tile does not ignite
             -- these ground mechs. Origin/destination and every other hazard stay restricted.
             local fireTransit=path=='ui' and transit and method=='IsFire' and value==true
-            need(value==false or fireTransit,'unsafe-tile:'..method)
+            -- Normal Tides control: leaving/crossing the next flooded row is legal.
+            -- Never end there; retain every other hazard and native route check.
+            local tideEscape=path=='ui' and self.supportedMission=='Mission_Tides'
+                and (origin or transit) and method=='IsEnvironmentDanger' and value==true
+            need(value==false or fireTransit or tideEscape,'unsafe-tile:'..method)
         end
     end
     local function validate(request, allowPending)

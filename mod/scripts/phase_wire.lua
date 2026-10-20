@@ -30,14 +30,17 @@ function M.open(env,json,emit)
     assert(root=='C:/ITBCoopProbe/Wire','unsupported-wire-directory')
     local f=assert(env.io.open(root..'/session.txt','rb'),'wire-config-missing')
     local config=f:read(256);f:close()
+    local fullSuffix='full-mission\n'
+    local fullMission=config:sub(-#fullSuffix)==fullSuffix
+    if fullMission then config=config:sub(1,-#fullSuffix-1)..'deployment\n' end
     local deploymentSuffix='deployment\n'
     local deployment=config:sub(-#deploymentSuffix)==deploymentSuffix
     if deployment then config=config:sub(1,-#deploymentSuffix-1)..'interactive-phase\n' end
     local terminalSuffix='terminal-checkpoint\n'
     local terminalCheckpoint=config:sub(-#terminalSuffix)==terminalSuffix
     if terminalCheckpoint then config=config:sub(1,-#terminalSuffix-1)..'repeated-turns\n' end
-    local repeatedTurns=config:sub(-15)=='repeated-turns\n'
-    if repeatedTurns then config=config:sub(1,-16)..'interactive-phase\n' end
+    local repeatedTurns=fullMission or config:sub(-15)=='repeated-turns\n'
+    if repeatedTurns and not fullMission then config=config:sub(1,-16)..'interactive-phase\n' end
     local phaseRun=config:sub(-18)=='interactive-phase\n'
     if phaseRun then config=config:sub(1,-19)..'interactive\n' end
     local interactive=config:sub(-12)=='interactive\n'
@@ -45,7 +48,7 @@ function M.open(env,json,emit)
     local session,peer=config:match('^([%w-]+)\n(host)\n$')
     if not session then session,peer=config:match('^([%w-]+)\n(guest)\n$') end
     assert(ident(session) and peer,'wire-config-invalid')
-    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,deployment=deployment,limit=deployment and 5 or interactive and not phaseRun and 2 or 4}
+    local self={fullMission=fullMission,session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,deployment=deployment,limit=deployment and 5 or interactive and not phaseRun and 2 or 4}
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
         assert(self.tx<=192,'wire-output-limit')
@@ -58,7 +61,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.21.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.22.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -70,7 +73,7 @@ function M.open(env,json,emit)
         assert(self.phaseRun and (self.readyInput or ((self.repeatedTurns or self.deployment) and self.inputReady)) and not self.readySent,'wire-not-accepting-readiness')
         assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true),'wire-local-readiness-rejected')
         self.readySent=true;self.readyInput=false;self.inputReady=false
-        self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=not self.deployment and true or nil,confirmDeployment=self.deployment and true or nil})
+        self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=r.kind=='end-turn' and true or nil,confirmDeployment=r.kind=='deployment-confirm' and true or nil})
     end
     function self:tick(s,request,native)
         assert(now()-self.since<(self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')

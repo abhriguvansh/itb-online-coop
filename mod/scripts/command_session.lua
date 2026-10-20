@@ -98,6 +98,7 @@ function M.new(o)
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture,o.phaseSettled) end
     if o.deployment then deployment=o.deployment.new(o.env,o.native,labEvent,o.capture,o.json,o.phaseSettled) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
+    if o.fullMission and ending then ending.fullMission=true end
     if o.terminalCheckpoint and ending then ending.terminalCheckpoint=true end
     local function result(record)
         return {status=record.status,reason=record.reason,revision=record.revision or self.revision}
@@ -240,7 +241,7 @@ function M.new(o)
             lab=attack
         end
         local entity=registry[r.actor]
-        local command=entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn}
+        local command=entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn,mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery'}
         local ok,armed=pcall(function()return lab:arm(command)end)
         local reason=lab.status
         if lab==attack then attack:disarm() else lab.armed=false end

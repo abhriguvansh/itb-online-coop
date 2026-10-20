@@ -33,6 +33,13 @@ ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==
 ui:click(20,610,s);assert(readyCount==1)
 print('2 selected punch/readiness UI contracts passed; fake clicks only.')
 do
+ wire.deployment=true;wire.fullMission=true;wire.repeatedTurns=true;wire.phaseRun=true;wire.peer='guest';wire.inputReady=true;wire.readyInput=false;s.phase='player1';s.revision=4
+ s.previewAction=function(_,peer,r)return peer=='guest' and r.kind=='basic-attack' end
+ ui:update(s,false);ui:click(20,430,s);ui:click(20,690,s);ui:click(800,600,s)
+ assert(ui.draft and ui.draft.kind=='basic-attack' and ui.draft.actor=='cannon','deployment mode must expose native attacks after launch')
+ wire.deployment=false;wire.fullMission=false;wire.repeatedTurns=false;s.phase='player2'
+end
+do
     local inspecting=false
     local inspect={click=function(_,x)if x>=1600 then inspecting=not inspecting;return true end;return inspecting end}
     wire.peer='guest';wire.phaseRun=false;wire.inputReady=true;s.previewMove=function()return true end

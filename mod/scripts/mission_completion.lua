@@ -28,7 +28,7 @@ function M.saved(env,index,json)
     end
     return result
 end
--- Narrow final-turn boundary for the verified Artillery checkpoint. No campaign admission.
+-- Narrow final-turn boundary for Artillery or opt-in Tides. No campaign admission.
 function M.runtime(o)
     local env,native,json,wire=o.env,o.native,o.json,o.wire
     local self={frame=0}
@@ -76,9 +76,9 @@ function M.runtime(o)
     end
     function self:start(mission,fx)
         assert(not self.pending and wire.repeatedTurns,'result-overlap')
-        healthy();assert(env.RegionData.iBattleRegion==2 and mission.ID=='Mission_Artillery','unsupported-result-region')
+        healthy();assert(env.RegionData.iBattleRegion==(wire.fullMission and 1 or 2) and mission.ID==(wire.fullMission and 'Mission_Tides' or 'Mission_Artillery'),'unsupported-result-region')
         assert(type(fx.AddScript)=='function','result-effect-missing')
-        self.pending={mission=mission,index=2,context=o.session().terminal,at=now(),stage='retreat'}
+        self.pending={mission=mission,index=wire.fullMission and 1 or 2,context=o.session().terminal,at=now(),stage='retreat'}
         wire.inputReady=false;wire.readyInput=false
         o.emit('mission_result_hook_observed',{protected=true,revision=o.session().revision,proofOfFinalCompletion=false})
         fx:AddScript('ITBCoopProtectedMissionTail()')
