@@ -8,7 +8,7 @@ function M.install(o)
     local function session() return o.session() end
     local function protected()
         local s=session();local n=o.native.info()
-        assert(s and not s.stopped and wire.pendingKind=='end-turn' and wire.pending,'spawn-outside-end-turn')
+        assert(s and not s.stopped and (wire.pendingKind=='end-turn' or (wire.deployment and wire.pendingKind=='deployment-confirm')) and wire.pending,'spawn-outside-end-turn')
         assert(n.guardActive and n.sessionState==1 and not n.releaseFailed,'spawn-protection-lost')
         return s
     end
@@ -146,7 +146,7 @@ function M.install(o)
     env.Mission.SpawnPawn=function(m,location,pawnType)
         if not session() or (o.resultPreview and o.resultPreview(m)) then return originalSpawn(m,location,pawnType) end
         local ok,why=pcall(function()
-            protected();assert(not location and not pawnType and m.ID=='Mission_Artillery','unsupported-spawn-call')
+            protected();assert(not location and not pawnType and m.ID==(wire.deployment and 'Mission_Tides' or 'Mission_Artillery'),'unsupported-spawn-call')
             assert(#self.queue<8,'spawn-queue-limit');self.queue[#self.queue+1]=m
         end)
         if not ok then session():stop('spawn-intercept:'..tostring(why)) end

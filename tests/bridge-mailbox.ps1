@@ -16,8 +16,14 @@ foreach($name in @('Assert-MailboxSession','Write-Frame')){
 $frame=@{kind='PING';session=$config.session;peer='-';revision=0;phase='-';id='-';witness=''}
 Write-Frame $frame
 if(-not(Test-Path (Join-Path $Root 'in-0001.txt'))){throw 'Valid frame missing'}
+$placement=@{kind='EXEC';session=$config.session;peer='host';revision=0;phase='deployment';id='move-host-1';witness='{}';move=@{actor='combat';kind='deploy';fromX=-1;fromY=-1;toX=1;toY=4}}
+Write-Frame $placement
+if((Get-Content (Join-Path $Root 'in-0002.txt') -Raw)-notmatch '\|deploycombat\|-1\|-1\|1\|4'){throw 'Deployment frame mismatch'}
+$placement.move.kind='move';$failed=$false
+try{Write-Frame $placement}catch{$failed=$true}
+if(-not$failed-or(Test-Path (Join-Path $Root 'in-0003.txt'))){throw 'Normal movement accepted an off-board origin'}
 @{session='replacement-session';peer='host';token='replacement-token'}|ConvertTo-Json|Set-Content (Join-Path $Root 'connection.json')
 $rejected=$false
 try{Write-Frame $frame}catch{if($_.Exception.Message-notlike'*Mailbox replaced*'){throw};$rejected=$true}
-if(-not$rejected-or(Test-Path (Join-Path $Root 'in-0002.txt'))-or(Test-Path (Join-Path $Root 'in-0002.txt.tmp'))){throw 'Stale bridge wrote into a replacement mailbox'}
+if(-not$rejected-or(Test-Path (Join-Path $Root 'in-0003.txt'))-or(Test-Path (Join-Path $Root 'in-0003.txt.tmp'))){throw 'Stale bridge wrote into a replacement mailbox'}
 'Bridge filesystem contract passed: valid frame committed, replaced mailbox refused before any write. No sockets or game input.'

@@ -5,7 +5,7 @@ function M.decode(text,session)
     assert(type(text)=='string' and #text<=70000,'wire-frame-size')
     local header,body=text:match('^([^\n]+)\n(.*)$')
     assert(header and body,'wire-header')
-    local base,actor,fx,fy,tx,ty=header:match('^(.-)|([%w]+)|([0-7])|([0-7])|([0-7])|([0-7])$')
+    local base,actor,fx,fy,tx,ty=header:match('^(.-)|([%w]+)|([%-0-7]+)|([%-0-7]+)|([0-7])|([0-7])$')
     if base then text=base..'\n'..body end
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
@@ -15,10 +15,14 @@ function M.decode(text,session)
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
     assert(#witness<=65536 and not witness:find('\r') and (spawn or not witness:find('\n')),'wire-witness')
-    if base then assert((kind=='EXEC' or kind=='PREPARE') and (actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move') end
+    local deploying=base and (actor=='deploycombat' or actor=='deploycannon' or actor=='deployartillery')
+    if base then
+        assert((kind=='EXEC' or kind=='PREPARE') and (deploying or actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move')
+        assert(deploying and fx=='-1' and fy=='-1' or not deploying and fx:match('^[0-7]$') and fy:match('^[0-7]$'),'wire-origin')
+    end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
-        id=id,kind=actor=='punch' and 'lab-punch' or actor:sub(1,6)=='attack' and 'basic-attack' or 'move',actor=actor=='punch' and 'combat' or actor:sub(1,6)=='attack' and actor:sub(7) or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
+        id=id,kind=deploying and 'deploy' or actor=='punch' and 'lab-punch' or actor:sub(1,6)=='attack' and 'basic-attack' or 'move',actor=deploying and actor:sub(7) or actor=='punch' and 'combat' or actor:sub(1,6)=='attack' and actor:sub(7) or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
 end
 function M.open(env,json,emit)
     local root=env.os.getenv('ITB_COOP_WIRE_DIR')
@@ -26,6 +30,9 @@ function M.open(env,json,emit)
     assert(root=='C:/ITBCoopProbe/Wire','unsupported-wire-directory')
     local f=assert(env.io.open(root..'/session.txt','rb'),'wire-config-missing')
     local config=f:read(256);f:close()
+    local deploymentSuffix='deployment\n'
+    local deployment=config:sub(-#deploymentSuffix)==deploymentSuffix
+    if deployment then config=config:sub(1,-#deploymentSuffix-1)..'interactive-phase\n' end
     local terminalSuffix='terminal-checkpoint\n'
     local terminalCheckpoint=config:sub(-#terminalSuffix)==terminalSuffix
     if terminalCheckpoint then config=config:sub(1,-#terminalSuffix-1)..'repeated-turns\n' end
@@ -38,7 +45,7 @@ function M.open(env,json,emit)
     local session,peer=config:match('^([%w-]+)\n(host)\n$')
     if not session then session,peer=config:match('^([%w-]+)\n(guest)\n$') end
     assert(ident(session) and peer,'wire-config-invalid')
-    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,limit=interactive and not phaseRun and 2 or 4}
+    local self={session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,deployment=deployment,limit=deployment and 5 or interactive and not phaseRun and 2 or 4}
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
         assert(self.tx<=192,'wire-output-limit')
@@ -51,7 +58,7 @@ function M.open(env,json,emit)
     end
     function self:arm(context)
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.19.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.20.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -60,10 +67,10 @@ function M.open(env,json,emit)
         self:send({type='proposal',request=r})
     end
     function self:ready(s,r)
-        assert(self.phaseRun and (self.readyInput or (self.repeatedTurns and self.inputReady)) and not self.readySent,'wire-not-accepting-readiness')
+        assert(self.phaseRun and (self.readyInput or ((self.repeatedTurns or self.deployment) and self.inputReady)) and not self.readySent,'wire-not-accepting-readiness')
         assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true),'wire-local-readiness-rejected')
         self.readySent=true;self.readyInput=false;self.inputReady=false
-        self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=true})
+        self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=not self.deployment and true or nil,confirmDeployment=self.deployment and true or nil})
     end
     function self:tick(s,request,native)
         assert(now()-self.since<(self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
@@ -79,7 +86,7 @@ function M.open(env,json,emit)
                 assert(self.repeatedTurns and self.result and s.terminal,'wire-result-unavailable')
                 if self.result:receive(m) then self.pending=nil;self.pendingKind=nil;return true end
             elseif m.kind:sub(1,5)=='SPAWN' then
-                assert(self.repeatedTurns and self.spawn,'wire-spawn-unavailable');self.spawn:receive(m)
+                assert((self.repeatedTurns or self.deployment) and self.spawn,'wire-spawn-unavailable');self.spawn:receive(m)
             elseif m.kind~='PING' then
                 assert(not s.terminal,'wire-gameplay-after-mission-end')
                 local r=request()
@@ -91,14 +98,14 @@ function M.open(env,json,emit)
                     assert(m.peer==self.peer and m.id==r.id,'wire-proposal-owner')
                     self:send({type='proposal',request=r})
                 elseif m.kind=='READY' then
-                    assert((self.repeatedTurns or s.revision==2) and m.id==r.id,'wire-readiness-context')
+                    assert((self.repeatedTurns or (self.deployment and s.revision==3) or (not self.deployment and s.revision==2)) and m.id==r.id,'wire-readiness-context')
                     if self.phaseRun then self.inputReady=false;self.readyInput=not self.readySent;self.inspectionReady=true
                     else self:send({type='ready',revision=s.revision,phase=s.phase,witness=r.witness,confirmUnused=true}) end
                 elseif m.kind=='CONSENT' then
-                    assert((self.repeatedTurns or s.revision==2) and m.id==r.id,'wire-consent-context')
+                    assert((self.repeatedTurns or (self.deployment and s.revision==3) or (not self.deployment and s.revision==2)) and m.id==r.id,'wire-consent-context')
                     assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true),'wire-consent-rejected')
                 elseif m.kind=='PREPARE' then
-                    assert(self.interactive and (m.move or (self.phaseRun and r.kind=='end-turn')) and not self.pending and not self.prepared,'wire-prepare-context')
+                    assert(self.interactive and (m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm'))) and not self.pending and not self.prepared,'wire-prepare-context')
                     local preparedRequest=m.move or r
                     self.inputReady=false;self.inspectionReady=false
                     local ok,reason
@@ -111,7 +118,7 @@ function M.open(env,json,emit)
                     emit('network_command_prepared',{peer=m.peer,id=m.id,revision=s.revision})
                 elseif m.kind=='EXEC' then
                     if self.interactive then
-                        assert(m.move or (self.phaseRun and r.kind=='end-turn'),'wire-command-missing');r=m.move or r;self.inputReady=false;self.inspectionReady=false
+                        assert(m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm')),'wire-command-missing');r=m.move or r;self.inputReady=false;self.inspectionReady=false
                         local p=self.prepared
                         assert(p and p.peer==m.peer and p.request==json.encode(r) and now()-p.at<5000,'wire-exec-not-prepared')
                         self.prepared=nil
@@ -121,7 +128,7 @@ function M.open(env,json,emit)
                     assert(result.status=='pending','wire-command-rejected:'..tostring(result.reason))
                     self.pending=r.id
                     self.pendingKind=r.kind
-                    if r.kind=='end-turn' then self.ending=true end
+                    if r.kind=='end-turn' or r.kind=='deployment-confirm' then self.ending=true end
                     emit('network_command_received',{peer=m.peer,request=r,fixture=true})
                 elseif m.kind=='DONE' then
                     self.inspectionReady=false

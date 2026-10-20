@@ -21,7 +21,7 @@ function movement.new(env, emit, path)
         need(env.modApi:getGameVersion() == '1.2.93', 'wrong-game-version')
         need(env.sdlext.isGame() and not env.sdlext.isConsoleOpen() and not self.blocked and not self.gateBlocked and not self.attackBlocked, 'not-tactical-ui')
         local mission = env.GetCurrentMission()
-        need(mission and mission.ID == 'Mission_Artillery', 'unsupported-mission')
+        need(mission and mission.ID == (self.supportedMission or 'Mission_Artillery'), 'unsupported-mission')
         need(env.Board and env.Game and env.Board:IsTipImage() == false, 'no-normal-board')
         need(env.modApi.deployment:isDeploymentPhase() == false
             and env.modApi.deployment:isLandingPhase() == false, 'deployment')

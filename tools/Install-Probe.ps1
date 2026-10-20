@@ -42,6 +42,8 @@ $spawnFiles = @($files)
 $files += @('scripts\mission_completion.lua')
 $resultFiles = @($files)
 $files += @('scripts\inspection.lua')
+$inspectionFiles = @($files)
+$files += @('scripts\deployment.lua')
 $markerName = '.itb-coop-probe.json'
 $markerPath = Join-Path $modRoot $markerName
 if ($Mode -eq 'Plan') {
@@ -68,7 +70,7 @@ if ($Mode -eq 'Install') {
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.19.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.20.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }
@@ -86,7 +88,8 @@ elseif ($marker.Version -in @('0.11.0','0.11.1','0.11.2','0.12.0','0.13.0')) { $
 elseif ($marker.Version -in @('0.14.0','0.15.0')) { $files=$basicFiles }
 elseif ($marker.Version -eq '0.16.0') { $files=$spawnFiles }
 elseif ($marker.Version -in @('0.17.0','0.17.1')) { $files=$resultFiles }
-elseif ($marker.Version -notin @('0.18.0','0.19.0')) { throw 'Unrecognized probe version; preserve and inspect before removal.' }
+elseif ($marker.Version -in @('0.18.0','0.19.0')) { $files=$inspectionFiles }
+elseif ($marker.Version -ne '0.20.0') { throw 'Unrecognized probe version; preserve and inspect before removal.' }
 if ($marker.Id -ne 'aman_itb_coop_probe' -or $marker.Files.Count -ne $files.Count) { throw 'Unrecognized ownership manifest.' }
 $actualFiles = @(Get-ChildItem -LiteralPath $modRoot -File -Force -Recurse)
 if (Get-ChildItem -LiteralPath $modRoot -Force -Recurse | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }) { throw 'Link in probe folder; refusing removal.' }

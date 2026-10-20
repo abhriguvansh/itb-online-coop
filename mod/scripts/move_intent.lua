@@ -16,6 +16,14 @@ function M.new(o)
         if o.inspection and o.inspection:click(x,y,s) then
             self.actor=nil;self.draft=nil;self.attacking=false;return
         end
+        if o.wire.deployment and s.phase=='deployment' and s.revision==3 then
+            if (o.wire.inputReady or o.wire.readyInput) and not s.stopped and x>=8 and x<298 and y>=600 and y<636 then
+                o.wire:ready(s,o.request('deployment-confirm','deployment-confirm-3'));self.actor=nil;self.draft=nil
+                self.status='Ready to launch; waiting for teammate'
+                o.emit('deployment_launch_ready',{peer=o.wire.peer,revision=s.revision})
+            end
+            return
+        end
         if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=720 and y<756 and not s.stopped then
             o.wire:ready(s,o.request('end-turn','end-turn-'..s.revision));self.actor=nil;self.draft=nil;return
         end
@@ -35,10 +43,10 @@ function M.new(o)
             if actor then
                 self.actor=nil;self.draft=nil
                 if actors[actor].owner~=o.wire.peer then reject('That mech belongs to your teammate');return end
-                if o.wire.phaseRun and not o.wire.repeatedTurns and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
+                if o.wire.phaseRun and not o.wire.repeatedTurns and not o.wire.deployment and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
                     reject('Unsupported actor for this phase test');return
                 end
-                self.actor=actor;self.status=not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
+                self.actor=actor;self.status=not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
                 o.emit('move_intent_selected',{actor=actor,peer=o.wire.peer});return
             end
             if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.draft=nil;self.status=self.attacking and 'Basic weapon selected' or 'Movement selected';return end
@@ -60,14 +68,16 @@ function M.new(o)
         if not pawn then reject('Mech unavailable');return end
         local from=pawn:GetSpace();self.counter=self.counter+1
         assert(self.counter<=999,'intent-limit')
-        local attacking=o.wire.repeatedTurns and self.attacking or (not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1)
-        local r=o.request(attacking and (o.wire.repeatedTurns and 'basic-attack' or 'lab-punch') or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
+        local attacking=not o.wire.deployment and (o.wire.repeatedTurns and self.attacking or (not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1))
+        local placing=o.wire.deployment and s.phase=='deployment'
+        local r=o.request(placing and 'deploy' or attacking and (o.wire.repeatedTurns and 'basic-attack' or 'lab-punch') or 'move',(attacking and 'attack-' or 'move-')..o.wire.peer..'-'..self.counter,self.actor,from.x,from.y,to.x,to.y)
         local ok,reason=preview(s,r)
         if not ok then reject(reason);return end
-        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm '..(attacking and 'attack' or 'move')
+        self.draft=r;self.status=actors[self.actor].label..' to ('..to.x..','..to.y..') - Confirm '..(placing and 'placement' or attacking and 'attack' or 'move')
         o.emit('move_intent_draft',{request=r,peer=o.wire.peer})
     end
     function self:update(s,done)
+        self.placing=o.wire.deployment and s.phase=='deployment';self.launchReady=self.placing and s.revision==3
         if o.inspection then o.inspection:update(s) end
         local n=o.native.info()
         assert(type(n.intentSerial)=='number','intent-capable-native-bridge-required')
@@ -81,7 +91,7 @@ function M.new(o)
             elseif not contiguous then reject('Multiple clicks; choose again') end
         end
         if done or s.stopped then self.status='Experiment ended - Escape exits'
-        elseif o.wire.readyInput then self.status='End Turn includes unused units; both must agree'
+        elseif o.wire.readyInput then self.status=self.launchReady and 'Both players must agree to launch' or 'End Turn includes unused units; both must agree'
         elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion'
         elseif self.status=='Waiting for the other game / action completion' then self.status='Choose your mech, then a board tile' end
         return self.status
@@ -102,8 +112,8 @@ function M.new(o)
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
-        self.controls.confirm:caption(o.wire.readyInput and 'Ready End Turn (unused units OK)'
-            or (o.wire.repeatedTurns and self.attacking or not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
+        self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'
+            or self.placing and 'Confirm placement' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
         if o.inspection then o.inspection:draw(root,visible) end
     end
     return self

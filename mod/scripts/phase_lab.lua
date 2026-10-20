@@ -24,9 +24,15 @@ function M.traceSpawns(env,active,emit,array,onError)
 end
 function M.install(env,mod,native,path)
     local json=require(path..'json')
-    local function capture() return require(path..'snapshot').capture(env,env.GetCurrentMission(),json) end
+    local wire
+    local deploymentModule=require(path..'deployment')
+    local function capture()
+        local state,idle=require(path..'snapshot').capture(env,env.GetCurrentMission(),json)
+        if wire and wire.deployment then deploymentModule.capture(env,state,json) end
+        return state,idle
+    end
     local function emit(k,p) mod.probe:record(k,p) end
-    local wire=require(path..'phase_wire').open(env,json,emit)
+    wire=require(path..'phase_wire').open(env,json,emit)
     local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
         identity=wire and wire.session or 'local-phase-proof'}
     self.resultTrace=require(path..'mission_completion').observe(env,emit,json,native)
@@ -36,6 +42,7 @@ function M.install(env,mod,native,path)
         wire.result=self.result
     end
     function self:context(event,mission,detail)
+        if event=='onMissionChanged' or event=='onGameExited' or event=='onProfileChanged' then self.freshDeployment=false end
         if event=='onMissionEnd' and mod.movement:profileAllowed() then self.resultTrace:begin(mission,detail) end
         if not self.session then return false end
         local ok,handled=pcall(function()
@@ -49,7 +56,7 @@ function M.install(env,mod,native,path)
         self.session:stop(ok and 'context:'..event or 'result-context:'..tostring(handled))
         return false
     end
-    if wire and wire.repeatedTurns then
+    if wire and (wire.repeatedTurns or wire.deployment) then
         self.spawns=require(path..'spawn_sync').install({env=env,wire=wire,json=json,native=native,
             session=function() return self.session end,capture=capture,emit=emit,
             resultPreview=function(mission) return self.result and self.result:allowsPreview(mission) end})
@@ -58,10 +65,16 @@ function M.install(env,mod,native,path)
     local function request(kind,id,actor,fx,fy,tx,ty)
         return {session=self.identity,encounter='artillery-checkpoint',phase=self.session.phase,
             revision=self.session.revision,witness=witness(),id=id,kind=kind,actor=actor,
-            fromX=fx,fromY=fy,toX=tx,toY=ty,confirmUnused=kind=='end-turn' and true or nil}
+            fromX=fx,fromY=fy,toX=tx,toY=ty,confirmUnused=kind=='end-turn' and true or nil,
+            confirmDeployment=kind=='deployment-confirm' and true or nil}
     end
     local function planned()
         local n=self.session.revision
+        if wire and wire.deployment then
+            if n==3 then return request('deployment-confirm','deployment-confirm-3'),'host' end
+            if self.session.phase=='player1' then local p=env.Board:GetPawn(1):GetSpace();return request('move','deployment-move-context','cannon',p.x,p.y,1,6),'guest' end
+            return request('deploy','deployment-context','combat',-1,-1,1,4),'host'
+        end
         if wire and wire.repeatedTurns then return request('end-turn','end-turn-'..n),'host' end
         if n==0 then return request('move','artillery','artillery',0,3,1,1),'guest'
         elseif n==1 then return request('lab-punch','punch','combat',3,3,2,3),'host'
@@ -71,7 +84,7 @@ function M.install(env,mod,native,path)
     end
     local function check(value,reason) assert(value,reason) end
     if wire and wire.interactive then
-        self.inspection=require(path..'inspection').new({env=env,native=native,wire=wire,capture=capture,json=json,emit=emit})
+        if not wire.deployment then self.inspection=require(path..'inspection').new({env=env,native=native,wire=wire,capture=capture,json=json,emit=emit}) end
         self.intent=require(path..'move_intent').new({env=env,native=native,wire=wire,request=request,emit=emit,inspection=self.inspection})
         self.status=wire.phaseRun and 'Interactive co-op phase' or 'Interactive co-op moves'
     end
@@ -79,9 +92,15 @@ function M.install(env,mod,native,path)
         check(not self.used and not mod.movement.armed and not mod.movement.pending
             and not mod.attack.armed and not mod.attack.pending and not mod.inputGate.active,'other-diagnostic-active')
         local finalCheckpoint=wire and wire.terminalCheckpoint
-        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(finalCheckpoint and 4 or 2),'checkpoint-required')
-        local state,idle=capture();check(idle and state.gridPower==(finalCheckpoint and 1 or 4),'checkpoint-not-ready')
-        if finalCheckpoint then
+        local deploying=wire and wire.deployment
+        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(deploying and 0 or finalCheckpoint and 4 or 2),'checkpoint-required')
+        local state,idle=capture();check(idle and state.gridPower==(deploying and 2 or finalCheckpoint and 1 or 4),'checkpoint-not-ready')
+        if deploying then
+            check(self.freshDeployment==true,'fresh-deployment-entry-required')
+            check(env.GetCurrentMission().ID=='Mission_Tides' and env.Game:GetTeamTurn()==env.TEAM_ENEMY
+                and state.deployment.inProgress and state.deployment.phase==0 and env.sdlext.isGame() and not env.sdlext.isConsoleOpen(),'deployment-checkpoint-required')
+            for _,p in ipairs(state.deployment.mechs) do check(p.x==-1 and p.y==-1,'unplaced-squad-required') end
+        elseif finalCheckpoint then
             local f=assert(env.io.open('C:/ITBCoopProbe/terminal-checkpoint.txt','rb'),'terminal-checkpoint-witness-missing')
             local expected=f:read(65537);f:close();check(#expected<=65536 and json.encode(state)==expected,'terminal-checkpoint-witness-mismatch')
         else
@@ -89,14 +108,15 @@ function M.install(env,mod,native,path)
                 if p.localId==2 then check(p.position.x==0 and p.position.y==3 and p.health==2 and not p.movementSpent,'artillery-checkpoint-required') end
             end
         end
-        mod.movement:lockInput('protected')
+        if deploying then mod.movement.bridge:startSession() else mod.movement:lockInput('protected') end
         self.used=true;mod.movement.sessionOwned=true
         self.session=require(path..'command_session').new({env=env,session=self.identity,encounter='artillery-checkpoint',
-            phase=finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
+            phase=deploying and 'deployment' or finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
+            deployment=deploying and deploymentModule or nil,
             phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
@@ -173,7 +193,7 @@ function M.install(env,mod,native,path)
         end
         local ok,err=pcall(function()
             self.button.visible=mod.movement:profileAllowed() and env.sdlext.isGame()
-                and env.GetCurrentMission() and env.GetCurrentMission().ID=='Mission_Artillery'
+                and env.GetCurrentMission() and env.GetCurrentMission().ID==(wire and wire.deployment and 'Mission_Tides' or 'Mission_Artillery')
             self.button:caption(self.status)
             if self.startAt and env.modApi:elapsedTime()>=self.startAt then self.startAt=nil;start() end
             if mod.movement:profileAllowed() then self.resultTrace:draw() end
@@ -214,6 +234,17 @@ function M.install(env,mod,native,path)
         env.modapiext.events[event]:subscribe(function(_,pawn,weapon) if self.session then self.session:skillEvent(event,pawn,weapon) end end)
     end
     env.modApi.events.onMissionDismissed:subscribe(function(mission) if self.result then self.result:dismissed(mission) end end)
+    for _,name in ipairs({'onDeploymentPhaseStart','onPawnSelectedForDeployment','onPawnUnselectedForDeployment','onPawnDeployed','onPawnUndeployed','onLandingPhaseStart','onPawnLanding','onPawnLanded','onDeploymentPhaseEnd'}) do
+        local event=name
+        env.modApi.events[event]:subscribe(function(id)
+            if event=='onDeploymentPhaseStart' then self.freshDeployment=true end
+            if mod.movement:profileAllowed() and env.GetCurrentMission() and env.GetCurrentMission().ID=='Mission_Tides' then
+                local ok,state=pcall(function()return deploymentModule.capture(env,capture(),json)end)
+                emit('deployment_event',{name=event,id=id,state=ok and state or nil,error=not ok and tostring(state) or nil})
+            end
+            if self.session and not self.done and wire and wire.deployment then self.session:deploymentEvent(event,id) end
+        end)
+    end
     env.modApi.events.onWindowShown:subscribe(function()
         if self.session and not (self.result and self.result:windowAllowed()) then self.session:setBlocked(true);self.session:stop('unexpected-window') end
     end)

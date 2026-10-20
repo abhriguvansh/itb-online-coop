@@ -18,7 +18,7 @@ assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
 local json=dofile('mod/scripts/json.lua')
 local function runtime(phaseRun)
-    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
+    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='deploy' and 'deployment\n' or phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
     local clock,previews,submits=0,0,0
     local env={os={getenv=function()return root end,rename=function(a,b)files[b]=files[a];files[a]=nil;return true end},
         modApi={elapsedTime=function()return clock end},io={open=function(p,mode)
@@ -85,3 +85,9 @@ f=runtime('repeat');f.elapsed(1500100);f.w.last=1500100;assert(not f.tick(),'hea
 f.elapsed(299900);f.w.last=1800000;assert(not pcall(f.tick),'30-minute repeated-turn budget remains bounded')
 f=runtime();f.elapsed(600000);f.w.last=600000;assert(not pcall(f.tick),'short interactive experiment limit remains unchanged')
 print('Operator session budget is bounded at 30 minutes; short-mode and preparation deadlines are unchanged (clock doubles).')
+f=runtime('deploy');assert(f.w.deployment and f.w.phaseRun and f.w.interactive and f.w.limit==5 and not f.w.repeatedTurns)
+local placement='EXEC|test-session|host|0|deployment|move-host-1|deploycombat|-1|-1|1|4\n{}'
+local p=wire.decode(placement,'test-session').move;assert(p.kind=='deploy' and p.actor=='combat' and p.fromX==-1 and p.fromY==-1)
+assert(not pcall(wire.decode,placement:gsub('deploycombat','combat'),'test-session'))
+assert(not pcall(wire.decode,placement:gsub('|%-1|%-1|','|0|0|'),'test-session'))
+print('Deployment config and exact off-board origins are separate from normal move framing (mailbox doubles).')

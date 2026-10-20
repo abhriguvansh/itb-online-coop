@@ -41,6 +41,28 @@ local function completeMove(e,s)
     s:skillEvent('onSkillStart',e.pawn,'Move');s:skillEvent('onSkillEnd',e.pawn,'Move')
     for i=1,3 do e.clock=e.clock+100;s:update()end
 end
+test('deployment uses the common ownership, duplicate, stale and observed revision lifecycle',function()
+    local e,o=fixture();e.TEAM_ENEMY=6;e.Game.GetTurnCount=function()return 0 end;e.Game.GetTeamTurn=function()return 6 end;o.phase='deployment'
+    local calls=0
+    o.deployment={new=function(_,_,emit)
+        local l={arm=function()return true end,draw=function()end,missionUpdate=function()end}
+        l.request=function()calls=calls+1;l.pending=true;return true end
+        l.update=function()if l.pending and e.placementObserved then l.pending=nil;emit('deployment_postconditions_observed',{}) end end
+        l.event=function()end;return l
+    end}
+    local s=session.new(o)
+    local r={session='s1',encounter='enc1',phase='deployment',revision=0,witness=e.witness,id='place1',kind='deploy',actor='combat',fromX=-1,fromY=-1,toX=1,toY=4}
+    assert(s:submit('guest',r).reason=='actor-not-owned')
+    assert(s:previewAction('host',r));assert(s:submit('host',r).status=='pending');assert(calls==1)
+    assert(s:submit('host',r).status=='duplicate');assert(calls==1)
+    local changed={};for k,v in pairs(r)do changed[k]=v end;changed.toY=5
+    assert(s:submit('host',changed).reason=='request-id-conflict')
+    s:update();assert(s.revision==0);e.placementObserved=true;s:update();assert(s.revision==1 and s.phase=='deployment')
+    local stale={};for k,v in pairs(r)do stale[k]=v end;stale.id='stale'
+    assert(s:submit('host',stale).reason=='stale-revision-renew-intent')
+    local move={};for k,v in pairs(r)do move[k]=v end;move.id='move';move.kind='move';move.revision=1;move.fromX=1;move.fromY=4
+    assert(s:submit('host',move).reason=='wrong-engine-phase');assert(calls==1)
+end)
 local function completeAttack(e,s)
     s:skillEvent('onSkillStart',e.actor,'Prime_Punchmech');e.actor.active=false;e.target.hp=1;e.target.pos={x=1,y=3}
     s:skillEvent('onSkillEnd',e.actor,'Prime_Punchmech')
@@ -240,5 +262,29 @@ test('repeat mode renews movement reservation only on admitted completed End Tur
  nextMove.phase='player3';nextMove.revision=2
  assert(s:previewMove('guest',nextMove));assert(s:submit('guest',nextMove).status=='pending' and e.moveCalls==2)
  assert(s:submit('guest',first).status=='duplicate' and e.moveCalls==2)
+end)
+test('deployment launch needs both exact consents and only observed launch admits player one',function()
+ local e,o=fixture();e.TEAM_ENEMY=6;e.turn=0;e.team=6
+ e.Game.GetTurnCount=function()return e.turn end;e.Game.GetTeamTurn=function()return e.team end;o.phase='deployment'
+ local calls=0
+ o.deployment={new=function(_,_,emit)
+  local l={arm=function()return true end,draw=function()end,missionUpdate=function()end}
+  l.request=function(_,c)assert(c.launch);calls=calls+1;l.pending=true;return true end
+  l.update=function()if l.pending and e.launchObserved then l.pending=nil;emit('deployment_launch_observed',{})end end
+  return l
+ end}
+ local s=session.new(o)
+ local function request(id)return {session='s1',encounter='enc1',phase='deployment',revision=0,witness=e.witness,id=id,
+  kind='deployment-confirm',confirmDeployment=true}end
+ assert(not s:previewAction('host',request('draft')))
+ assert(s:setReady('guest','deployment',0,e.witness,true))
+ assert(s:submit('host',request('unready')).reason=='both-players-must-be-ready' and calls==0)
+ assert(not s:setReady('host','deployment',1,e.witness,true))
+ assert(s:setReady('host','deployment',0,e.witness,true));assert(s:previewAction('host',request('launch')))
+ local r=request('launch');assert(s:submit('host',r).status=='pending' and calls==1)
+ assert(s:submit('host',r).status=='duplicate' and calls==1)
+ e.turn=1;e.team=1;s:update();assert(s.phase=='deployment' and s.revision==0)
+ e.launchObserved=true;s:update();assert(s.phase=='player1' and s.turn==1 and s.revision==1)
+ local stale=request('stale');assert(s:submit('host',stale).reason=='wrong-context' and calls==1)
 end)
 print('Shared command session contracts: '..passed..' passed (real Lua diagnostics, mocked game/guard).')
