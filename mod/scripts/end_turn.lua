@@ -52,7 +52,7 @@ function M.new(env,native,emit,capture,phaseSettled)
     function self:beginTerminal(mission)
         local p=self.pending
         if not self.repeatedTurns or self.fault or not p or p.mission~=mission
-            or p.turn~=4 or p.step~=2 or not p.endSent or mission.ID~=(self.fullMission and 'Mission_Tides' or 'Mission_Artillery') then return false end
+            or p.turn~=(self.fullMission and 3 or 4) or p.step~=2 or not p.endSent or mission.ID~=(self.fullMission and 'Mission_Tides' or 'Mission_Artillery') then return false end
         context()
         self.pending=nil;self.armed=false;self.status='Awaiting protected mission result'
         return true

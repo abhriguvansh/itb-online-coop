@@ -14,7 +14,7 @@ class PhaseCoordinator{
   require(ok,reason){if(!ok)throw Error(reason);}
   tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');this.require(!this.result||this.mode==='complete'||this.now()<this.result.deadline,'mission-result-timeout');}
   resultReceive(peer,m){
-    this.require(this.repeatedTurns&&this.pendingKind==='end-turn'&&this.turn===4&&!this.spawn,'result-outside-final-end-turn');
+    this.require(this.repeatedTurns&&this.pendingKind==='end-turn'&&this.turn===(this.fullMission?3:4)&&!this.spawn,'result-outside-final-end-turn');
     this.require(m.revision===this.stage&&m.phase===this.states.host.phase&&m.id===this.pendingId,'result-stale-context');
     this.require(m.native?.guardActive===true&&m.native?.sessionState===1&&m.native?.releaseFailed===false,'result-protection-lost');
     this.require(typeof m.witness==='string'&&Buffer.byteLength(m.witness)<=65536&&!/[\r\n]/.test(m.witness),'result-invalid-witness');

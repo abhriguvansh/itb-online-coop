@@ -155,4 +155,15 @@ test('fresh Tides turn one completes only after seven hooks and the settled spaw
     t();assert(l.pending and not l.fault);e.spawnPending=false;t();assert(not l.pending and l.completedTurn==2 and not l.fault)
     assert(l:arm());e.turn=4;assert(not l:arm(),'cannot jump directly to final turn')
 end)
+test('Tides terminal hook requires its observed third turn and both environment hooks',function()
+    local e,l,t,start,phases=fixture();e.mission.ID='Mission_Tides';e.friendlyIds={0,1,2}
+    l.fullMission=true;l.repeatedTurns=true;start();e.ready=true;phases();t()
+    assert(l.completedTurn==3);assert(l:arm());l:request();for i=1,8 do t()end
+    assert(not l:beginTerminal(e.mission))
+    l:phaseEvent('onPreEnvironment',e.mission);assert(not l:beginTerminal(e.mission))
+    l:phaseEvent('onPostEnvironment',e.mission)
+    assert(not l:beginTerminal({ID='Mission_Tides'}),'different mission cannot terminate command')
+    assert(l:beginTerminal(e.mission) and not l.pending)
+    assert(not l:beginTerminal(e.mission),'committed terminal transition cannot repeat')
+end)
 print('Protected End Turn contracts: '..passed..' passed (mocked engine/native input).')

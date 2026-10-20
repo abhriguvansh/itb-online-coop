@@ -244,12 +244,15 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  assert.throws(()=>mismatch.c.receive('guest',mismatch.msg('guest','result_observed',JSON.stringify({...result,reputation:2}))),/outcome-divergence/);
  console.log('Terminal coordinator requires both preparations, committed result equality and both acknowledgments (fake peers).');
  const fresh=make();fresh.c.fullMission=true;fresh.c.deployment=true;
- for(const peer of ['host','guest'])fresh.c.receive(peer,fresh.msg(peer,'result_prepared'));
- assert.throws(()=>fresh.c.receive('host',fresh.msg('host','result_observed',after)),/uncommitted-state/,'old fixture region cannot finish a fresh mission');
+ assert.throws(()=>fresh.c.receive('host',fresh.msg('host','result_prepared')),/outside-final/,'Tides does not use the Artillery turn-four boundary');
+ fresh.c.turn=3;fresh.c.states={host:{phase:'player3'},guest:{phase:'player3'}};
+ const freshMsg=(peer,type,body)=>({...fresh.msg(peer,type,body),phase:'player3'});
+ for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'result_prepared'));
+ assert.throws(()=>fresh.c.receive('host',freshMsg('host','result_observed',after)),/uncommitted-state/,'old fixture region cannot finish a fresh mission');
  const freshResult={...result,region:1,objectives:[{slot:0,text:'Bonus_GridDamage',value:0,potential:1},{slot:1,text:'Bonus_Power',value:1,potential:1}]};
  const freshAfter=JSON.stringify(freshResult);
- for(const peer of ['host','guest'])fresh.c.receive(peer,fresh.msg(peer,'result_observed',freshAfter));
+ for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'result_observed',freshAfter));
  assert.equal(fresh.c.mode,'result-finishing');
- for(const peer of ['host','guest'])fresh.c.receive(peer,fresh.msg(peer,'complete',freshAfter));
+ for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'complete',freshAfter));
  assert.equal(fresh.c.mode,'complete','mission completion does not require every bonus objective to succeed');
 }
