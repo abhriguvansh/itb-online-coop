@@ -14,6 +14,13 @@ function Assert-MailboxSession {
 }
 function Write-Frame($frame){
     Assert-MailboxSession
+    if($frame.kind-in@('BOOTSTRAPCHOICES','BOOTSTRAPREADY')){
+        if(-not$config.liveBootstrap-or$frame.session-ne$config.session-or$frame.witness-isnot[string]-or$frame.witness.Length-gt2048-or($frame.kind-eq'BOOTSTRAPCHOICES'-and$config.peer-ne'guest')){throw 'Invalid bootstrap frame'}
+        $name=if($frame.kind-eq'BOOTSTRAPCHOICES'){'bootstrap-offer.txt'}else{'bootstrap-agreed.txt'}
+        $target=Join-Path $Root $name
+        [IO.File]::WriteAllText($target+'.tmp',$config.session+"`n"+$frame.witness,$utf8)
+        [IO.File]::Move($target+'.tmp',$target);return
+    }
     if($script:incoming-gt$frameLimit){throw 'Incoming frame limit'}
     $spawnFrame=$frame.kind-in@('SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE')
     if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'\r' -or (-not$spawnFrame-and$frame.witness-match'\n')){throw 'Invalid coordinator frame'}
@@ -33,7 +40,7 @@ $client=[Net.Sockets.TcpClient]::new()
 try{
     $waiting=[Diagnostics.Stopwatch]::StartNew()
     [IO.File]::WriteAllText((Join-Path $Root 'bridge-ready.txt'),$config.session,$utf8)
-    while(-not(Test-Path -LiteralPath (Join-Path $Root 'out-0001.json'))){
+    while(-not$config.liveBootstrap-and-not(Test-Path -LiteralPath (Join-Path $Root 'out-0001.json'))){
         Assert-MailboxSession
         if($waiting.Elapsed.TotalSeconds-gt300){throw 'Game was not armed before startup deadline'}
         Start-Sleep -Milliseconds 100
@@ -48,6 +55,7 @@ try{
         $stream.Write($bytes,0,$bytes.Length)
     }
     Send-Message @{type='hello';session=$config.session;peer=$config.peer;token=$config.token}
+    $bootstrapSent=@{}
     $buffer='';$bytes=[byte[]]::new(8192);$chars=[char[]]::new(8192);$decoder=$utf8.GetDecoder()
     $last=[Diagnostics.Stopwatch]::StartNew();$total=[Diagnostics.Stopwatch]::StartNew()
     while($total.Elapsed.TotalSeconds-lt$durationLimit){
@@ -67,6 +75,17 @@ try{
             }
         }
         if($last.Elapsed.TotalSeconds-gt10){throw 'Coordinator heartbeat expired'}
+        if($config.liveBootstrap){
+            foreach($name in @('bootstrap-ready.json','bootstrap-offer.json','bootstrap-sealed.json')){
+                $file=Join-Path $Root $name
+                if(-not$bootstrapSent[$name]-and(Test-Path -LiteralPath $file)){
+                    if((Get-Item -LiteralPath $file).Length-gt8192){throw 'Bootstrap output size'}
+                    $message=Get-Content -LiteralPath $file -Raw|ConvertFrom-Json
+                    if($message.session-ne$config.session-or$message.peer-ne$config.peer-or$message.type-notin@('bootstrap_ready','bootstrap_offer','bootstrap_sealed')){throw 'Bootstrap identity mismatch'}
+                    Send-Message $message;$bootstrapSent[$name]=$true
+                }
+            }
+        }
         if($outgoing-gt192){throw 'Outgoing message limit'}
         $file=Join-Path $Root ('out-{0:d4}.json'-f$outgoing)
         if(Test-Path -LiteralPath $file){

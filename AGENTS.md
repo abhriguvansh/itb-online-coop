@@ -2,6 +2,8 @@
 
 Build native shared-squad PvE co-op for two actual Windows Steam game instances. No streaming, hotseat PvP, browser recreation, or mock-network demonstration as a substitute.
 
+Current source is 0.23.0. Read the final live-bootstrap section of docs/command-session.md: a fresh 19-choice host batch now reaches the guest before mission entry without the prerecorded file, both hooks restore/seal, and one session completed 20 protected native commands through matching committed Tides results. Barriers 0–19 and 72 ordered execution/phase payloads match; this is pinned partial evidence, not general determinism or two-human usability. Preserve run 1's unsupported count, run 2's real 135-second VM stall and run 3's tactical loss. Run 4 passed with guest-only LP_NUM_THREADS=1; do not claim that cures VM reliability or weaken guard/preparation deadlines. The next blocker is external-bridge runtime integration, not another equivalent captured replay. Both native DLLs are unchanged in 0.23.0. No local native test executable may be built or run.
+
 ## Standing milestone directive — October 13, 2026
 
 - Start each run by inspecting current repository state and choosing the highest-impact obstacle to two real instances executing legal coordinated actions through a complete enemy phase.

@@ -22,8 +22,16 @@ if((Get-Content (Join-Path $Root 'in-0002.txt') -Raw)-notmatch '\|deploycombat\|
 $placement.move.kind='move';$failed=$false
 try{Write-Frame $placement}catch{$failed=$true}
 if(-not$failed-or(Test-Path (Join-Path $Root 'in-0003.txt'))){throw 'Normal movement accepted an off-board origin'}
+$config|Add-Member liveBootstrap $true
+$config.peer='guest';$config|ConvertTo-Json|Set-Content (Join-Path $Root 'connection.json')
+Write-Frame @{kind='BOOTSTRAPCHOICES';session=$config.session;witness="ai-constructor|32768|42`n"}
+if((Get-Content (Join-Path $Root 'bootstrap-offer.txt') -Raw)-ne($config.session+"`nai-constructor|32768|42`n")){throw 'Bootstrap delivery mismatch'}
+if($incoming-ne3){throw 'Bootstrap consumed a gameplay frame number'}
+$failed=$false;try{Write-Frame @{kind='BOOTSTRAPREADY';session='stale';witness=''}}catch{$failed=$true}
+if(-not$failed-or(Test-Path (Join-Path $Root 'bootstrap-agreed.txt'))){throw 'Stale bootstrap delivered'}
 @{session='replacement-session';peer='host';token='replacement-token'}|ConvertTo-Json|Set-Content (Join-Path $Root 'connection.json')
 $rejected=$false
 try{Write-Frame $frame}catch{if($_.Exception.Message-notlike'*Mailbox replaced*'){throw};$rejected=$true}
 if(-not$rejected-or(Test-Path (Join-Path $Root 'in-0003.txt'))-or(Test-Path (Join-Path $Root 'in-0003.txt.tmp'))){throw 'Stale bridge wrote into a replacement mailbox'}
 'Bridge filesystem contract passed: valid frame committed, replaced mailbox refused before any write. No sockets or game input.'
+'Live bootstrap side-channel delivery preserves gameplay numbering and refuses stale sessions (filesystem fixture only).'

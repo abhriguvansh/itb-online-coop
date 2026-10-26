@@ -24,6 +24,7 @@ if (!process.exitCode) {
   require('./phase-wire.cjs');
   require('./deployment-wire.cjs');
   require('./initial-choices.cjs');
+  require('./bootstrap-exchange.cjs');
   require('./fixed-combat.cjs');
   console.log('Contract tests use Fengari (Lua 5.3) and engine doubles. No in-game result is implied.');
 }
