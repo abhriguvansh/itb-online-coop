@@ -65,9 +65,20 @@ function probe.new(mod, env, json, snapshot, settle)
         end)
         for _, name in ipairs({ 'onPawnUndoMove', 'onResetTurn' }) do
             local eventName = name
-            subscribe(extEvents, eventName, function()
+            subscribe(extEvents, eventName, function(mission,pawn,previous)
                 clear()
                 if allowed() then emit('unsupported_action_observed', { source = eventName, blocked = false }) end
+                if eventName=='onPawnUndoMove' and allowed() and pawn and env.Board and not env.Board:IsTipImage() then
+                    local ok,payload=pcall(function()
+                        local p=pawn:GetSpace()
+                        return {localPawnId=pawn:GetId(),previous=previous and {x=previous.x,y=previous.y},
+                            position={x=p.x,y=p.y},health=pawn:GetHealth(),active=pawn:IsActive(),
+                            movementSpent=pawn:IsMovementSpent(),undoPossible=pawn:IsUndoPossible(),
+                            fire=pawn:IsFire(),mission=mission and mission.ID,elapsed=env.modApi:elapsedTime(),
+                            coverage='native-undo-hook-observation-only',proofOfCompletion=false}
+                    end)
+                    emit(ok and 'native_undo_move_observed' or 'undo_observation_unavailable',ok and payload or {reason=tostring(payload)})
+                end
             end)
         end
         local events = env.modApi.events
