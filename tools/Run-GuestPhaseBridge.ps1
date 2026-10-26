@@ -6,8 +6,8 @@ if((Get-Item -LiteralPath $Root).Attributes -band [IO.FileAttributes]::ReparsePo
 $config=Get-Content -LiteralPath (Join-Path $Root 'connection.json') -Raw | ConvertFrom-Json
 if($config.host-ne'10.0.2.2' -or $config.peer-notin@('host','guest') -or $config.session-notmatch'^[a-f0-9-]{36}$' -or $config.token-notmatch'^[a-f0-9]{48}$' -or $config.port-lt1 -or $config.port-gt65535){throw 'Invalid private connection configuration'}
 $utf8=[Text.UTF8Encoding]::new($false,$true);$incoming=1;$outgoing=1;$complete=$false
-$frameLimit=if($config.repeatedTurns){2048}else{1024}
-$durationLimit=if($config.repeatedTurns){1810}else{610}
+$frameLimit=if($config.fullMission){4096}elseif($config.repeatedTurns){2048}else{1024}
+$durationLimit=if($config.fullMission){3610}elseif($config.repeatedTurns){1810}else{610}
 function Assert-MailboxSession {
     $active=Get-Content -LiteralPath (Join-Path $Root 'connection.json') -Raw | ConvertFrom-Json
     if($active.session-ne$config.session-or$active.peer-ne$config.peer-or$active.token-ne$config.token){throw 'Mailbox replaced; stale bridge refuses delivery'}

@@ -76,10 +76,10 @@ function M.open(env,json,emit)
         self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=r.kind=='end-turn' and true or nil,confirmDeployment=r.kind=='deployment-confirm' and true or nil})
     end
     function self:tick(s,request,native)
-        assert(now()-self.since<(self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
+        assert(now()-self.since<(self.fullMission and 3600000 or self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
         assert(now()-self.last<10000,'wire-heartbeat-timeout')
         for _=1,4 do
-            assert(self.rx<=(self.repeatedTurns and 2048 or 1024),'wire-input-limit')
+            assert(self.rx<=(self.fullMission and 4096 or self.repeatedTurns and 2048 or 1024),'wire-input-limit')
             local f=env.io.open(self.root..('/in-%04d.txt'):format(self.rx),'rb')
             if not f then break end
             local data=f:read(70001);f:close();self.rx=self.rx+1

@@ -231,7 +231,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
       try{
         buffer+=chunk;if(Buffer.byteLength(buffer)>140000)throw Error('oversized-frame');
         let cut;while((cut=buffer.indexOf('\n'))>=0){
-          if(++count>(repeatedTurns?2048:1024))throw Error('message-limit');
+          if(++count>(fullMission?4096:repeatedTurns?2048:1024))throw Error('message-limit');
           const m=JSON.parse(buffer.slice(0,cut));buffer=buffer.slice(cut+1);
           if(!peer){
             if(m.type!=='hello'||m.session!==session||!Object.hasOwn(tokens,m.peer)||m.token!==tokens[m.peer]||peers[m.peer])throw Error('authentication-failed');
@@ -247,7 +247,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   const timer=setInterval(()=>{
     try{core.tick();if(fixture)fixture(core,record);}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
-    if(started && Date.now()-started>(repeatedTurns?1800000:interactive?600000:180000)){stop('experiment-deadline');return;}
+    if(started && Date.now()-started>(fullMission?3600000:repeatedTurns?1800000:interactive?600000:180000)){stop('experiment-deadline');return;}
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});
   },1000);
   server.on('error',e=>stop(e.message));

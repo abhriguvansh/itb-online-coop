@@ -94,7 +94,7 @@ function mod:init()
     if loaded and os.getenv('ITB_COOP_FRAME_TRACE')=='1' then
         local last,reported,frames,maximum,count=nil,0,0,0,0
         modApi.events.onFrameDrawStart:subscribe(function()
-            if count>=600 then return end
+            if count>=5400 then return end
             local now=modApi:elapsedTime();frames=frames+1
             if last then maximum=math.max(maximum,now-last) end;last=now
             if now-reported<1000 then return end
@@ -103,7 +103,7 @@ function mod:init()
             end)
             count=count+1;reported=now;frames=0;maximum=0
             if not ok then
-                count=600
+                count=5400
                 if self.phaseLab and self.phaseLab.session then self.phaseLab.session:stop('runtime-trace-evidence-failed') end
             end
         end)

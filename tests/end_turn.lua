@@ -64,6 +64,41 @@ test('confirmed transition with no hooks still times out protected without retry
     e.clock=61000;t();t()
     assert(l.fault and n.sessionState==2 and e.clicks==2)
 end)
+
+test('no-dialog transition waits beyond UI deadline for ordered hooks without retry',function()
+    local e,l,t,start,phases,n=fixture();start();e.clock=5000;e.ready=true;t()
+    assert(l.pending and l.pending.stage=='wait-dialog' and not l.fault and n.sessionState==1 and e.clicks==1)
+    phases();t();assert(not l.pending and not l.fault and e.clicks==1)
+end)
+
+test('empty window without phase hooks still times out protected',function()
+    local e,l,t,start,_,n=fixture();start();e.clock=61000;t();t()
+    assert(l.fault and n.sessionState==2 and e.clicks==1)
+end)
+
+test('pending native release retains the short UI timeout even without a dialog',function()
+    local e,l,t,start,_,n=fixture();start();n.pressed=true;e.clock=5000;t()
+    assert(l.fault and n.sessionState==2 and e.clicks==1)
+end)
+
+test('guard loss during no-dialog wait stops without another click',function()
+    local e,l,t,start,_,n=fixture();start();e.clock=5000;n.sessionState=2;t()
+    assert(l.fault and e.clicks==1)
+end)
+
+test('recognized confirmation alignment still times out without retry',function()
+    local e,l,t,start,_,n=fixture();start();e.clock=5000
+    e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60};t()
+    assert(l.pending.stage=='approach-confirm' and not l.fault)
+    e.offset=5;e.clock=9600;t();assert(l.fault and n.sessionState==2 and e.clicks==1)
+end)
+
+test('delayed recognized confirmation has its own bounded alignment window',function()
+    local e,l,t,start=fixture();start();e.clock=5000;t();assert(not l.fault and e.clicks==1)
+    e.sdlext.CurrentWindowRect={x=803,y=683,w=315,h=60}
+    for i=1,10 do t()end
+    assert(not l.fault and e.clicks==2 and l.pending.stage=='wait-transition')
+end)
 test('restored allowances cannot complete while the coordinated spawn batch is pending',function()
     local e,l,t,start,phases=fixture();start();e.ready=true;e.spawnPending=true;phases()
     for i=1,5 do t()end

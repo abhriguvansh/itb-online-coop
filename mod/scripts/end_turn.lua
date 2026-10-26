@@ -106,7 +106,9 @@ function M.new(env,native,emit,capture,phaseSettled)
             -- Slow rendering can delay the first hook past the UI deadline; retain the
             -- overall phase deadline and protection, without sending another click.
             if p.stage=='transition' or p.stage=='wait-transition' then return end
-            assert(env.modApi:elapsedTime()-p.since<4500,'end-turn-ui-timeout')
+            if p.stage~='wait-dialog' or n.pressed then
+                assert(env.modApi:elapsedTime()-(p.dialogSince or p.since)<4500,'end-turn-ui-timeout')
+            end
             if n.pressed then return end
             if p.stage=='wait-dialog' then
                 if not p.releasedFrame then p.releasedFrame=self.frame;return end
@@ -120,8 +122,14 @@ function M.new(env,native,emit,capture,phaseSettled)
                 -- Observed native Active Units subpanel for one, three or four unused units.
                 -- The confirmation buttons retain the same position in these layouts.
                 if r and r.y==683 and r.h==60 and ((r.x==850 and r.w==221) or (r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
-                    p.dialog=rect;emit('end_turn_confirmation_observed',rect)
+                    p.dialog=rect;p.dialogSince=env.modApi:elapsedTime();emit('end_turn_confirmation_observed',rect)
                     aim(p,894,565,'approach-confirm')
+                else
+                    -- Vanilla skips confirmation when all units have acted. An empty
+                    -- window is only permission to wait, never phase completion.
+                    -- Keep the overall 60s deadline and never resubmit End Turn.
+                    local empty=r and r.x==0 and r.y==0 and r.w==0 and r.h==0
+                    assert(empty or env.modApi:elapsedTime()-p.since<4500,'end-turn-ui-timeout')
                 end
                 return
             end
