@@ -63,13 +63,15 @@ function M.exchange(env,path,emit)
     local self={enabled=true};local json=require(path..'json');local native
     local root='C:/ITBCoopProbe/Wire';local session,peer,mode,lastTick
     local function read(name)
+        if env.ITBCoopTransport and name~='session.txt' then return env.ITBCoopTransport:bootstrapFile(name) end
         local f=env.io.open(root..'/'..name,'rb');if not f then return nil end
         local text=f:read(4097);f:close();assert(#text<=4096,'bootstrap-file-size');return text
     end
     local function write(name,value)
         assert(not read(name),'bootstrap-output-already-exists')
-        value.session=session;value.peer=peer;value.probe='0.23.0';value.fixture='tides-fresh-v1'
+        value.session=session;value.peer=peer;value.probe='0.24.0';value.fixture='tides-fresh-v1'
         value.game='1.2.93';value.abi='itb-initial-choices-v1'
+        if env.ITBCoopTransport then env.ITBCoopTransport:send(value);return end
         local target=root..'/'..name;local f=assert(env.io.open(target..'.tmp','wb'),'bootstrap-output-open')
         assert(f:write(json.encode(value)));assert(f:close());assert(env.os.rename(target..'.tmp',target),'bootstrap-output-commit')
     end

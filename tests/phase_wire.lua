@@ -17,7 +17,7 @@ assert(not pcall(wire.decode,dynamic:gsub('|0|3|0|2','|0|3|8|2'),'test-session')
 assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
 local json=dofile('mod/scripts/json.lua')
-local function runtime(phaseRun)
+local function runtime(phaseRun,direct)
     local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='full' and 'full-mission\n' or phaseRun=='deploy' and 'deployment\n' or phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
     local clock,previews,submits=0,0,0
     local env={os={getenv=function()return root end,rename=function(a,b)files[b]=files[a];files[a]=nil;return true end},
@@ -25,12 +25,21 @@ local function runtime(phaseRun)
             if mode=='rb' and not files[p] then return nil end
             return {read=function()return files[p]end,write=function(_,v)files[p]=v;return true end,close=function()return true end}
         end}}
+    local transport=direct and {out={},incoming={},available=true} or nil
+    if transport then
+        function transport:healthy()return self.available end
+        function transport:send(v)self.out[#self.out+1]=v end
+        function transport:receive()return table.remove(self.incoming,1)end
+        env.ITBCoopTransport=transport
+    end
     local w=wire.open(env,json,function()end);local r=wire.decode(dynamic,'test-session').move
     local s={revision=0,phase='player2',previewMove=function()previews=previews+1;return true end,
         submit=function()submits=submits+1;return {status='pending'} end}
     local native={info=function()return {guardActive=true,sessionState=1,releaseFailed=false,armed=false,pressed=false}end}
     w:arm(r)
-    return {w=w,s=s,r=r,native=native,files=files,root=root,add=function(text)files[root..('/in-%04d.txt'):format(w.rx)]=text end,
+    return {w=w,s=s,r=r,native=native,files=files,root=root,transport=transport,add=function(text)
+            if transport then transport.incoming[#transport.incoming+1]=text else files[root..('/in-%04d.txt'):format(w.rx)]=text end
+        end,
         tick=function()return w:tick(s,function()return r end,native)end,
         elapsed=function(ms)clock=clock+ms end,counts=function()return previews,submits end}
 end
@@ -45,6 +54,13 @@ f=runtime();f.native.info=function()return {guardActive=true,sessionState=1,rele
 f=runtime();f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();f.add(dynamic:gsub('EXEC','PREPARE'));assert(not pcall(f.tick));_,n=f.counts();assert(n==0)
 f=runtime();f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();f.s.revision=1;f.add(dynamic);assert(not pcall(f.tick));_,n=f.counts();assert(n==0)
 print('8 runtime prepare/execute contracts passed; in-memory mailbox and game doubles only.')
+f=runtime(nil,true);assert(f.transport.active and f.transport.out[1].type=='armed')
+f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();assert(f.transport.out[2].type=='prepared')
+f.add(dynamic);f.tick();local _,directSubmits=f.counts();assert(directSubmits==1)
+for name in pairs(f.files)do assert(name==f.root..'/session.txt')end
+f=runtime(nil,true);f.transport.available=false;assert(not pcall(f.tick));local _,blocked=f.counts();assert(blocked==0)
+assert(not pcall(function()f.w:arm(f.r)end))
+print('Direct transport shares preparation/execution and health refusal without message files (transport/game doubles).')
 
 local punch=wire.decode('PREPARE|test-session|host|1|player2|attack-host-1|punch|3|3|2|3\n{}','test-session').move
 assert(punch.kind=='lab-punch' and punch.actor=='combat')

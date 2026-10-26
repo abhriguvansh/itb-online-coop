@@ -1,4 +1,4 @@
--- Private, opt-in TCP experiment mailbox. No executable payloads or socket ABI changes.
+-- Private opt-in command framing, shared by file bridge and in-process transport.
 local M={}
 local function ident(s) return type(s)=='string' and #s>0 and #s<=96 and s:match('^[%w_.:-]+$') end
 function M.decode(text,session)
@@ -49,10 +49,13 @@ function M.open(env,json,emit)
     if not session then session,peer=config:match('^([%w-]+)\n(guest)\n$') end
     assert(ident(session) and peer,'wire-config-invalid')
     local self={fullMission=fullMission,session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,deployment=deployment,limit=deployment and 5 or interactive and not phaseRun and 2 or 4}
+    self.transport=env.ITBCoopTransport
+    if env.os.getenv('ITB_COOP_NATIVE_TRANSPORT')=='1' then assert(self.transport,'wire-native-transport-missing') end
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
         assert(self.tx<=192,'wire-output-limit')
         value.session=self.session;value.peer=self.peer
+        if self.transport then self.transport:send(value);self.tx=self.tx+1;return end
         local target=self.root..('/out-%04d.json'):format(self.tx)
         local file=assert(env.io.open(target..'.tmp','wb'),'wire-output-open')
         assert(file:write(json.encode(value)));assert(file:close())
@@ -60,8 +63,9 @@ function M.open(env,json,emit)
         self.tx=self.tx+1
     end
     function self:arm(context)
+        if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.23.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.24.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -76,13 +80,18 @@ function M.open(env,json,emit)
         self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=r.kind=='end-turn' and true or nil,confirmDeployment=r.kind=='deployment-confirm' and true or nil})
     end
     function self:tick(s,request,native)
+        if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable') end
         assert(now()-self.since<(self.fullMission and 3600000 or self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
         assert(now()-self.last<10000,'wire-heartbeat-timeout')
         for _=1,4 do
             assert(self.rx<=(self.fullMission and 4096 or self.repeatedTurns and 2048 or 1024),'wire-input-limit')
-            local f=env.io.open(self.root..('/in-%04d.txt'):format(self.rx),'rb')
-            if not f then break end
-            local data=f:read(70001);f:close();self.rx=self.rx+1
+            local data
+            if self.transport then data=self.transport:receive()
+            else
+                local f=env.io.open(self.root..('/in-%04d.txt'):format(self.rx),'rb')
+                if f then data=f:read(70001);f:close() end
+            end
+            if not data then break end;self.rx=self.rx+1
             local m=M.decode(data,self.session);self.last=now()
             assert(m.kind~='STOP','wire-peer-or-coordinator-stopped')
             if m.kind:sub(1,6)=='RESULT' then

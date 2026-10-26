@@ -114,7 +114,7 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.23.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.24.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -207,20 +207,21 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm'].includes(request.kind)?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
   const peers={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
   const record=value=>fs.appendFileSync(path.join(root,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...value})+'\n');
-  const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(JSON.stringify(value)+'\n');};
+  const encode=value=>nativeTransport?require('./game-frame.cjs').packet(value):JSON.stringify(value)+'\n';
+  const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(encode(value));};
   const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission);
   const bootstrap=liveBootstrap?new (require('./bootstrap-exchange.cjs').BootstrapExchange)(session,send,record):null;
   if(fixedCombatFixture&&(!interactive||!phaseRun||!repeatedTurns||terminalCheckpoint))throw Error('fixture-requires-original-repeated-turn-checkpoint');
   const fixture=fixedCombatFixture?require('./fixed-combat-fixture.cjs').createFixedCombatFixture():null;
   function stop(reason,success=false){
     if(stopped)return;stopped=true;clearInterval(timer);record({type:success?'passed':'stopped',reason});
-    if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(JSON.stringify({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''})+'\n');
+    if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(encode({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''}));
     server.close();setTimeout(()=>{for(const socket of sockets)socket.destroy();process.exitCode=success?0:1;},500);
   }
   const server=net.createServer(socket=>{
@@ -256,11 +257,14 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   },1000);
   server.on('error',e=>stop(e.message));
   server.listen(0,'127.0.0.1',()=>{
-    for(const peer of ['host','guest'])fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap},null,2));
+    for(const peer of ['host','guest']){
+      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport},null,2));
+      if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v1',session,peer,'10.0.2.2',server.address().port,tokens[peer],''].join('\n'));
+    }
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
     if(fixture){record({type:'scripted_combat_fixture',humanSelectionProof:false,humanReadinessProof:false});console.log('Fixed combat fixture: both roles have scripted intent and End Turn consent. Result review remains manual.');}
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
 module.exports={PhaseCoordinator,expected};
-if(require.main===module){try{const raw=process.argv[3],live=raw==='--live-bootstrap',mode=live?'--full-mission':raw,full=mode==='--full-mission';main(process.argv[2],['--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full,full,live);}catch(e){console.error(e.message);process.exitCode=1;}}
+if(require.main===module){try{const raw=process.argv[3],direct=raw==='--native-transport',live=direct||raw==='--live-bootstrap',mode=live?'--full-mission':raw,full=mode==='--full-mission';main(process.argv[2],['--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full,full,live,direct);}catch(e){console.error(e.message);process.exitCode=1;}}

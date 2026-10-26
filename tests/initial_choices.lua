@@ -26,7 +26,7 @@ state.fault=8;assert(not s:healthy());state.fault=0;state.installed=true;assert(
 state.installed=false;state.count=18;assert(not s:healthy());state.count=19;state.overflow=true;assert(not s:healthy())
 print('Initial-choice transcript, disabled mode, seal/admission and fault contracts passed (Lua doubles).')
 
-local function exchange(role)
+local function exchange(role,direct)
     local sid='11111111-1111-1111-1111-111111111111';local files={['session.txt']=sid..'\n'..role..'\nfull-mission\n'}
     local callbacks={};local clock,playing=0,false
     local value={abi='itb-initial-choices-v1',count=0,entries={},fault=0,overflow=false,installed=false,
@@ -52,6 +52,13 @@ local function exchange(role)
     for _,name in ipairs({'onFrameDrawStart','onDeploymentPhaseStart'})do
         local key=name;env.modApi.events[key]={subscribe=function(_,fn)callbacks[key]=fn end}
     end
+    local transport
+    if direct then
+        transport={incoming={},out={}}
+        function transport:bootstrapFile(name)return self.incoming[name]end
+        function transport:send(value)self.out[#self.out+1]=value end
+        env.ITBCoopTransport=transport
+    end
     local old=require;require=function(name)assert(name=='test/json');return json end
     local s=M.install(env,'test/',function(_,p)json.encode(p)end);require=old
     local function tick(time)clock=time or clock+200;callbacks.onFrameDrawStart()end
@@ -64,7 +71,7 @@ local function exchange(role)
         end
         callbacks.onDeploymentPhaseStart()
     end
-    return {s=s,files=files,native=value,env=env,tick=tick,enter=enter,sid=sid}
+    return {s=s,files=files,native=value,env=env,tick=tick,enter=enter,sid=sid,transport=transport}
 end
 do
     local h,g=exchange('host'),exchange('guest')
@@ -84,3 +91,12 @@ do local g=exchange('guest');g.files['bootstrap-agreed.txt']=g.sid..'\n'..text;g
 do local g=exchange('guest');g.files['session.txt']='replaced';g.tick();assert(g.s.error)end
 do local g=exchange('guest');g.tick(600000);assert(g.s.error and not g.native.installed)end
 print('Live Lua bootstrap: fresh host capture, deferred guest install, restored-hook seal/agreement, no historical file read and fail-closed negatives passed (engine/filesystem doubles).')
+do
+    local h,g=exchange('host',true),exchange('guest',true)
+    assert(g.transport.out[1].type=='bootstrap_ready' and not g.files['bootstrap-ready.json'])
+    h.enter();assert(#h.transport.out==2 and h.transport.out[1].type=='bootstrap_offer' and not h.files['bootstrap-offer.json'])
+    g.transport.incoming['bootstrap-offer.txt']=g.sid..'\n'..h.s.text;g.tick();g.enter()
+    for _,f in ipairs({h,g})do f.transport.incoming['bootstrap-agreed.txt']=f.sid..'\n'..h.s.text;f.tick();assert(f.s:healthy())end
+    assert(not h.files['bootstrap-sealed.json'] and not g.files['bootstrap-sealed.json'])
+end
+print('Live bootstrap also uses the in-game transport without message files (engine/transport doubles).')

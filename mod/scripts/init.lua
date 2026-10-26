@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.23.0',
+    version = '0.24.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Experimental co-op research probe for ITB_Coop_Probe; not a playable release.',
@@ -15,6 +15,9 @@ function mod:init()
     self.probe = require(path .. 'probe').new(self, _G, require(path .. 'json'),
         require(path .. 'snapshot'), require(path .. 'settle'))
     self.probe:subscribe()
+    self.transport=require(path..'transport').install(_G,path,require(path..'json'),
+        function(kind,payload)self.probe:record(kind,payload)end,
+        function()return self.phaseLab and self.phaseLab.session end)
     self.initialChoices=require(path..'initial_choices').install(_G,path,
         function(kind,payload)self.probe:record(kind,payload)end)
     self.moveTrace = require(path .. 'move_trace').new(_G,
