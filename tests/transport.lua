@@ -9,7 +9,9 @@ local function fixture(options)
     local native={info=function()return state end,open=function(port)assert(port==12345);state.state=2;return state end,
         poll=function()return table.remove(packets,1)end,send=function(v)sent[#sent+1]=v;return true end,
         close=function()state.state=3 end}
-    local env={os={getenv=function(k)return ({ITB_COOP_NATIVE_TRANSPORT='1',ITB_COOP_LIVE_BOOTSTRAP='1',ITB_COOP_WIRE_DIR='C:/ITBCoopProbe/Wire'})[k]end},
+    local flags={ITB_COOP_NATIVE_TRANSPORT='1',ITB_COOP_LIVE_BOOTSTRAP='1',ITB_COOP_WIRE_DIR='C:/ITBCoopProbe/Wire'}
+    if options.checkpoint then flags.ITB_COOP_LIVE_BOOTSTRAP=nil;flags.ITB_COOP_REPAIR_CHECKPOINT='1';files['session.txt']=sid..'\n'..peer..'\nrepeated-turns\n' end
+    local env={os={getenv=function(k)return flags[k]end},
         package={loadlib=function()return function()return native end end},
         io={open=function(p,mode)assert(mode=='rb','transport must not use per-message files');local v=files[p:match('/([^/]+)$')];
             if v then return {read=function()return v end,close=function()end} end end},
@@ -38,4 +40,5 @@ do local f=fixture();f.packets[1]='EXEC|bad';f.tick();assert(f.t.error and f.sto
 do local f=fixture();assert(not pcall(function()f.t:send({type='ready',session='stale',peer='guest'})end));assert(#f.sent==0)end
 do local f=fixture();f.tick();f.t:send({type='complete',session=f.sid,peer='guest'});f.tick();f.state.state=3;f.tick();assert(f.t.done and not f.t.error and f.stops()==0)end
 do local f=fixture({change=function(files)files['native-connection.txt']='malformed'end});assert(f.t.error and f.stops()==1)end
+do local f=fixture({checkpoint=true});f.tick();assert(f.t:healthy() and not f.t.error)end
 print('In-game transport: ordered hello/messages, bounded pre-arm heartbeats, data framing, replaced config, disconnect/fault/timeout stop and completion passed (socket/engine doubles).')

@@ -105,7 +105,7 @@ Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Nine-file probe upgra
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture | Out-Null
 Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 26) 'Optional bootstrap payload mismatch.'
 $currentMarker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json
-Assert-Condition ($currentMarker.Version-eq'0.24.0') 'Current installer version mismatch.'
+Assert-Condition ($currentMarker.Version-eq'0.25.0') 'Current installer version mismatch.'
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) 'Optional bootstrap uninstall failed.'
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null

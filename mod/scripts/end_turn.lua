@@ -79,7 +79,10 @@ function M.new(env,native,emit,capture,phaseSettled)
         local p=self.pending;if not p or self.fault then return end
         local ok,why=pcall(function()
             context();assert(env.GetCurrentMission()==p.mission,'mission-changed')
-            assert(env.modApi:elapsedTime()-p.since<60000,'phase-timeout')
+            -- Two real checkpoint traces reached player renewal just beyond 60s.
+            -- Repeated-turn execution may wait 90s only after an ordered phase hook;
+            -- this grants no extra input and never resubmits a committed action.
+            assert(env.modApi:elapsedTime()-p.since<(self.repeatedTurns and p.step>0 and 90000 or 60000),'phase-timeout')
             local n=native.info()
             if p.step==7 then
                 assert(env.Game:GetTeamTurn()==env.TEAM_PLAYER and env.Game:GetTurnCount()==p.turn+1,'player-phase-lost')
@@ -119,9 +122,9 @@ function M.new(env,native,emit,capture,phaseSettled)
                 if p.lastRect~=fingerprint then
                     p.lastRect=fingerprint;emit('end_turn_dialog_observation',rect)
                 end
-                -- Observed native Active Units subpanel for one, three or four unused units.
+                -- Observed native Active Units subpanel for one through four unused units.
                 -- The confirmation buttons retain the same position in these layouts.
-                if r and r.y==683 and r.h==60 and ((r.x==850 and r.w==221) or (r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
+                if r and r.y==683 and r.h==60 and ((r.x==850 and r.w==221) or (r.x==826 and r.w==268) or (r.x==803 and r.w==315) or (r.x==779 and r.w==362)) then
                     p.dialog=rect;p.dialogSince=env.modApi:elapsedTime();emit('end_turn_confirmation_observed',rect)
                     aim(p,894,565,'approach-confirm')
                 else

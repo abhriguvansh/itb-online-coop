@@ -15,11 +15,12 @@ function gameFrame(f){
  const header=[f.kind,f.session,f.peer,f.revision,f.phase,f.id];
  if(f.move){
   const m=f.move;assert(['EXEC','PREPARE'].includes(f.kind)&&['combat','cannon','artillery'].includes(m.actor));
-  assert(['move','lab-punch','basic-attack','deploy'].includes(m.kind));
+  assert(['move','lab-punch','basic-attack','deploy','repair'].includes(m.kind));
   assert(m.kind!=='lab-punch'||m.actor==='combat');
   for(const key of ['fromX','fromY','toX','toY'])assert(Number.isInteger(m[key])&&
     (m.kind==='deploy'&&key.startsWith('from')?m[key]===-1:m[key]>=0&&m[key]<=7));
-  const actor=m.kind==='deploy'?'deploy'+m.actor:m.kind==='lab-punch'?'punch':m.kind==='basic-attack'?'attack'+m.actor:m.actor;
+  if(m.kind==='repair')assert(m.fromX===m.toX&&m.fromY===m.toY);
+  const actor=m.kind==='deploy'?'deploy'+m.actor:m.kind==='repair'?'repair'+m.actor:m.kind==='lab-punch'?'punch':m.kind==='basic-attack'?'attack'+m.actor:m.actor;
   header.push(actor,m.fromX,m.fromY,m.toX,m.toY);
  }
  return header.join('|')+'\n'+f.witness;

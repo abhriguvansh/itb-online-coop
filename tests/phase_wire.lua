@@ -16,6 +16,11 @@ assert(not pcall(wire.decode,dynamic:gsub('artillery','enemy'),'test-session'))
 assert(not pcall(wire.decode,dynamic:gsub('|0|3|0|2','|0|3|8|2'),'test-session'))
 assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
+do
+ local r='PREPARE|test-session|guest|3|player3|repair-guest-1|repairartillery|0|3|0|3\n{}'
+ local v=wire.decode(r,'test-session').move;assert(v.kind=='repair' and v.actor=='artillery')
+ assert(not pcall(wire.decode,r:gsub('|0|3|0|3','|0|3|1|3'),'test-session'))
+end
 local json=dofile('mod/scripts/json.lua')
 local function runtime(phaseRun,direct)
     local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='full' and 'full-mission\n' or phaseRun=='deploy' and 'deployment\n' or phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}

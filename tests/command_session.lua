@@ -41,6 +41,25 @@ local function completeMove(e,s)
     s:skillEvent('onSkillStart',e.pawn,'Move');s:skillEvent('onSkillEnd',e.pawn,'Move')
     for i=1,3 do e.clock=e.clock+100;s:update()end
 end
+test('Repair shares ownership, stale, conflicting, duplicate and observed revision gates',function()
+ local e,o=fixture();o.repeatedTurns=true;local calls,finish=0,false
+ o.attack={new=function(_,_,_,emit)
+  local a={arm=function(_,c)assert(c.repair and c.from.x==c.to.x and c.from.y==c.to.y);return true end,disarm=function()end}
+  a.request=function()calls=calls+1;a.pending=true;return true end
+  a.update=function()if a.pending and finish then a.pending=nil;emit('attack_postconditions_observed',{})end end
+  a.skillEvent=function()end;return a
+ end}
+ local s=session.new(o)
+ local r={id='repair-host-1',session='s1',encounter='enc1',phase='player2',revision=0,witness=e.witness,kind='repair',actor='combat',fromX=3,fromY=3,toX=3,toY=3}
+ assert(not s:previewAction('guest',r));assert(s:submit('guest',r).reason=='actor-not-owned')
+ assert(s:previewAction('host',r));assert(s:submit('host',r).status=='pending' and calls==1)
+ assert(s:submit('host',r).status=='duplicate' and calls==1)
+ local changed={};for k,v in pairs(r)do changed[k]=v end;changed.witness='other'
+ assert(s:submit('host',changed).reason=='request-id-conflict');s:update();assert(s.revision==0)
+ finish=true;s:update();assert(s.revision==1)
+ changed.id='repair-host-2';changed.witness=e.witness;assert(s:submit('host',changed).reason=='stale-revision-renew-intent')
+ changed.revision=1;changed.toX=2;assert(s:submit('host',changed).reason=='invalid-envelope' and calls==1)
+end)
 test('deployment uses the common ownership, duplicate, stale and observed revision lifecycle',function()
     local e,o=fixture();e.TEAM_ENEMY=6;e.Game.GetTurnCount=function()return 0 end;e.Game.GetTeamTurn=function()return 6 end;o.phase='deployment'
     local calls=0

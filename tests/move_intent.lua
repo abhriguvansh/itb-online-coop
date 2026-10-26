@@ -33,6 +33,14 @@ ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==
 ui:click(20,610,s);assert(readyCount==1)
 print('2 selected punch/readiness UI contracts passed; fake clicks only.')
 do
+ wire.repeatedTurns=true;wire.peer='host';wire.inputReady=true;wire.readyInput=false;s.revision=3
+ s.previewAction=function(_,peer,r)return peer=='host' and r.kind=='repair' and r.fromX==r.toX and r.fromY==r.toY end
+ ui:update(s,false);ui:click(20,770,s);assert(not ui.draft)
+ ui:click(20,390,s);ui:click(20,770,s);assert(ui.draft and ui.draft.kind=='repair')
+ local before=#sent;ui:click(20,610,s);assert(#sent==before+1 and sent[#sent].kind=='repair')
+ wire.repeatedTurns=false
+end
+do
  wire.deployment=true;wire.fullMission=true;wire.repeatedTurns=true;wire.phaseRun=true;wire.peer='guest';wire.inputReady=true;wire.readyInput=false;s.phase='player1';s.revision=4
  s.previewAction=function(_,peer,r)return peer=='guest' and r.kind=='basic-attack' end
  ui:update(s,false);ui:click(20,430,s);ui:click(20,690,s);ui:click(800,600,s)

@@ -23,12 +23,21 @@ function M.new(env,lab,gate,emit,capture,json)
         assert(not env.Board:IsSmoke(pos),'smoke-blocked')
         assert(not p:IsAbility('Double_Shot') and not p:IsAbility('Post_Move') and not p:IsAbility('Shifty'),'unsupported-pilot')
         assert(p:GetPoweredWeapons()[1]==spec[2],'unsupported-powered-weapon')
-        local skill=env[spec[2]];assert(skill and not skill.TwoClick and (not skill.Limited or skill.Limited==0),'unsupported-skill')
+        local weapon=c.repair and 'Skill_Repair' or spec[2]
+        local maximum
+        if c.repair then
+            maximum=p:GetMaxHealth()
+            assert(maximum==(c.pawnId==2 and 2 or 3),'unsupported-repair-health')
+            assert(c.to.x==pos.x and c.to.y==pos.y,'repair-must-target-self')
+            assert(not p:IsAcid() and not env.Board:IsAcid(pos),'acid-repair-unverified')
+            assert(p:GetHealth()<maximum or p:IsFire() or env.Board:IsFire(pos),'repair-has-no-effect')
+        end
+        local skill=env[weapon];assert(skill and not skill.TwoClick and (not skill.Limited or skill.Limited==0),'unsupported-skill')
         local targets=skill:GetTargetArea(pos);assert(targets:size()<=64,'target-list-size')
         local found=false
         for i=1,targets:size() do local t=targets:index(i);if t.x==c.to.x and t.y==c.to.y then found=true end end
         assert(found and env.Board:IsValid(env.Point(c.to.x,c.to.y)),'illegal-target')
-        return {state=state,weapon=spec[2],health=p:GetHealth(),from={x=pos.x,y=pos.y}}
+        return {state=state,weapon=weapon,health=p:GetHealth(),maximum=maximum,repair=c.repair==true,from={x=pos.x,y=pos.y}}
     end
     function self:arm(c)
         local ok,result=pcall(validate,c);self.armed=ok;self.command=ok and c or nil
@@ -39,9 +48,9 @@ function M.new(env,lab,gate,emit,capture,json)
         assert(self.armed and self.command==c,'not-armed')
         local before=validate(c);self.armed=false
         self.pending={command=c,before=before,since=env.modApi:elapsedTime(),mission=env.GetCurrentMission()}
-        emit('attack_requested',{actorId=c.pawnId,weapon=before.weapon,weaponIndex=1,target=c.to,before=before})
+        emit('attack_requested',{actorId=c.pawnId,weapon=before.weapon,weaponIndex=c.repair and 50 or 1,target=c.to,before=before})
         local ok,result=pcall(function()
-            return self.bridge:start({pawnId=c.pawnId,from=c.from,to=c.to,weapon=before.weapon},function()
+            return self.bridge:start({pawnId=c.pawnId,from=c.from,to=c.to,weapon=before.weapon,weaponIndex=c.repair and 50 or nil},function()
                 local valid,reason=pcall(validate,c,true);return valid,reason
             end)
         end)
@@ -78,6 +87,10 @@ function M.new(env,lab,gate,emit,capture,json)
             end
             if actor:IsActive() or actor:IsUndoPossible() then return end
             local pos=actor:GetSpace();assert(pos.x==p.before.from.x and pos.y==p.before.from.y,'unexpected-actor-displacement')
+            if p.before.repair then
+                assert(actor:GetHealth()==math.min(p.before.health+1,p.before.maximum),'repair-health-mismatch')
+                assert(not actor:IsFire() and not actor:IsAcid() and not env.Board:IsFire(pos),'repair-status-mismatch')
+            end
             emit('attack_postconditions_observed',{actorId=p.command.pawnId,weapon=p.before.weapon,after=state,
                 startObserved=p.started,endObserved=p.ended,laterDraw=true,laterMissionUpdate=true,proofOfGeneralQuiescence=false})
             self.bridge:stop(true);self.pending=nil;self.status='Basic attack observed'

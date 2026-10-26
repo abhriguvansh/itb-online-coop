@@ -38,14 +38,17 @@ function M.install(env,path,json,emit,session)
         return self.bootstrap[name]
     end
     local ok,why=pcall(function()
-        assert(env.os.getenv('ITB_COOP_WIRE_DIR')==root and env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP')=='1','transport-unsupported-mode')
+        assert(env.os.getenv('ITB_COOP_WIRE_DIR')==root,'transport-unsupported-mode')
         config=assert(read('native-connection.txt'),'transport-config-missing')
         local target,number
         sid,peer,target,number,token=config:match('^itb%-transport%-v1\n([a-f0-9%-]+)\n([a-z]+)\n([^\n]+)\n(%d+)\n([a-f0-9]+)\n$')
         port=tonumber(number)
         assert(sid and #sid==36 and (peer=='host' or peer=='guest') and target=='10.0.2.2' and port and port>=1 and port<=65535
             and tostring(port)==number and #token==48,'transport-config-invalid')
-        assert(read('session.txt')==sid..'\n'..peer..'\nfull-mission\n','transport-config-session')
+        local sessionConfig=read('session.txt')
+        assert(sessionConfig==sid..'\n'..peer..'\nfull-mission\n' and env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP')=='1'
+            or sessionConfig==sid..'\n'..peer..'\nrepeated-turns\n' and env.os.getenv('ITB_COOP_REPAIR_CHECKPOINT')=='1'
+                and not env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP') and not env.os.getenv('ITB_COOP_INITIAL_CHOICES'),'transport-config-session')
         local open=assert(env.package.loadlib(path..'../itb_transport.dll','luaopen_itb_transport'))
         native=assert(open());assert(native.info().abi=='itb-transport-v1','transport-abi')
         local n=native.open(port);assert(n.fault==0 and (n.state==1 or n.state==2),'transport-connect-failed')
@@ -55,7 +58,7 @@ function M.install(env,path,json,emit,session)
             local worked,reason=pcall(function()
                 local now=env.modApi:elapsedTime()
                 assert(now-since<3610000,'transport-experiment-deadline')
-                assert(read('native-connection.txt')==config and read('session.txt')==sid..'\n'..peer..'\nfull-mission\n','transport-config-replaced')
+                assert(read('native-connection.txt')==config and read('session.txt')==sessionConfig,'transport-config-replaced')
                 for _=1,4 do
                     local packet=native.poll();local n=native.info();assert(n.fault==0,'transport-native-fault:'..tostring(n.fault))
                     if packet then

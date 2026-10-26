@@ -44,6 +44,11 @@ test('four-unused-unit confirmation uses the separately observed native layout',
     assert(e.clicks==2 and e.lastClick.x==890 and e.lastClick.y==565 and l.pending.stage=='wait-transition' and not l.fault)
 end)
 
+test('two-unused-unit confirmation uses the Repair experiment observed layout',function()
+    local e,l,t,start=fixture();start();e.sdlext.CurrentWindowRect={x=826,y=683,w=268,h=60}
+    for _=1,8 do t()end
+    assert(e.clicks==2 and not l.fault and l.pending.stage=='wait-transition')
+end)
 test('one-unused-unit confirmation uses the paired-game observed layout',function()
     local e,l,t,start=fixture();start();e.sdlext.CurrentWindowRect={x=850,y=683,w=221,h=60}
     for i=1,10 do t()end
@@ -137,6 +142,22 @@ end)
 test('phase timeout does not retry End Turn',function()
     local e,l,t,start,_,n=fixture();start();l:phaseEvent('onPreEnvironment',e.mission);e.clock=61000;t()
     assert(l.fault and n.sessionState==2 and e.clicks==1)
+end)
+test('repeated phase waits beyond 60s only after ordered progress and still needs the full boundary',function()
+    local e,l,t,start,phases=fixture();l.repeatedTurns=true;start();l:phaseEvent('onPreEnvironment',e.mission)
+    e.clock=65000;t();assert(l.pending and not l.fault and e.clicks==1)
+    for _,name in ipairs({'onPostEnvironment','onNextTurn','onVekSpawningEnd','onPreEnvPlanned','onPostEnvPlanned','onNextTurn'})do
+        if name=='onNextTurn' then if e.phase==1 then e.phase=6 else e.phase=1;e.turn=3 end end
+        l:phaseEvent(name,e.mission)
+    end
+    e.ready=true;t();assert(not l.pending and not l.fault and e.clicks==1)
+end)
+test('repeated phase timeout and guard failure remain bounded without retry',function()
+    for _,lost in ipairs({false,true})do
+        local e,l,t,start,_,n=fixture();l.repeatedTurns=true;start();l:phaseEvent('onPreEnvironment',e.mission)
+        e.clock=lost and 65000 or 90001;if lost then n.sessionState=2 end;t()
+        assert(l.fault and n.sessionState==2 and e.clicks==1)
+    end
 end)
 test('click uncertainty does not retry',function()
     local e,l,t,_,_,n=fixture();e.rejectClick=true;assert(l:arm());l:request();for i=1,20 do t()end

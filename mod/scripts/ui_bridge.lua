@@ -97,6 +97,10 @@ function bridge.new(env, native, emit)
         -- Pinned loader modapi/pawn.lua maps weapon index 0 to the Move skill.
         assert(not selected or selected:GetArmedWeaponId()==-1 or selected:GetArmedWeaponId()==0,'weapon-armed')
         self.command,self.validate=command,validate
+        self.weaponIndex=command.weaponIndex or (command.weapon and 1 or 0)
+        assert(self.weaponIndex==0 or self.weaponIndex==1 or self.weaponIndex==50 and command.weapon=='Skill_Repair'
+            and same(command.from,command.to),'unsupported-ui-weapon')
+        self.weaponPoint={x=self.weaponIndex==50 and 220 or 330,y=920}
         self.from,self.to=center(command.from),center(command.to)
         emit('ui_bridge_layout',{width=env.screen:w(),height=env.screen:h(),scale=env.GetBoardScale(),
             fromPixel=self.from,toPixel=self.to})
@@ -112,7 +116,7 @@ function bridge.new(env, native, emit)
             native=native.info(),proofOfInputAuthorization=false})
         if not selected or selected:GetId()~=command.pawnId then
             aim(self.from,'aim-selection')
-        elseif command.weapon then aim({x=330,y=920},'aim-weapon')
+        elseif command.weapon then aim(self.weaponPoint,'aim-weapon')
         else aim(self.to,'aim-destination') end
     end
     function self:update()
@@ -135,12 +139,12 @@ function bridge.new(env, native, emit)
                 local armed=pawn:GetArmedWeaponId()
                 assert(armed==0 or (self.command.weapon and armed==-1),'movement-not-armed-after-selection')
                 emit('ui_bridge_actor_selected',{pawnId=pawn:GetId(),armedWeaponId=pawn:GetArmedWeaponId()})
-                if self.command.weapon then aim({x=330,y=920},'aim-weapon') else aim(self.to,'aim-destination') end
+                if self.command.weapon then aim(self.weaponPoint,'aim-weapon') else aim(self.to,'aim-destination') end
             end
             return
         end
         if self.phase=='arming-weapon' then
-            if pawn and pawn:GetId()==self.command.pawnId and pawn:GetArmedWeaponId()==1 then
+            if pawn and pawn:GetId()==self.command.pawnId and pawn:GetArmedWeaponId()==self.weaponIndex then
                 emit('ui_bridge_weapon_selected',{pawnId=pawn:GetId(),weapon=self.command.weapon,undoPossible=pawn:IsUndoPossible()})
                 aim(self.to,'aim-destination')
             end
@@ -180,7 +184,7 @@ function bridge.new(env, native, emit)
             assert(sent,'selection-queue-failed')
         elseif self.phase=='aim-destination' then
             assert(pawn and pawn:GetId()==self.command.pawnId,'selection-changed')
-            assert(pawn:GetArmedWeaponId()==(self.command.weapon and 1 or 0),'wrong-armed-weapon')
+            assert(pawn:GetArmedWeaponId()==self.weaponIndex,'wrong-armed-weapon')
             local preview=self.preview
             if not preview then return end -- Bounded outer timeout; no destination press.
             assert(preview.pawnId==self.command.pawnId and same(preview.from,self.command.from)

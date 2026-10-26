@@ -24,9 +24,9 @@ local function envelope(r)
         return id(r.actor) and r.confirmUnused==nil and r.fromX==-1 and r.fromY==-1
             and integer(r.toX) and r.toX<=7 and integer(r.toY) and r.toY<=7
     end
-    if (r.kind ~= 'move' and r.kind ~= 'lab-punch' and r.kind ~= 'basic-attack') or not id(r.actor) or r.confirmUnused~=nil then return false end
+    if (r.kind ~= 'move' and r.kind ~= 'lab-punch' and r.kind ~= 'basic-attack' and r.kind~='repair') or not id(r.actor) or r.confirmUnused~=nil then return false end
     for _,k in ipairs({'fromX','fromY','toX','toY'}) do if not integer(r[k]) or r[k] > 7 then return false end end
-    return true
+    return r.kind~='repair' or r.fromX==r.toX and r.fromY==r.toY
 end
 local function same(a,b) for _,k in ipairs(fields) do if a[k] ~= b[k] then return false end end; return true end
 
@@ -154,13 +154,13 @@ function M.new(o)
                 end
             end
         end
-        if r.kind=='basic-attack' and not o.repeatedTurns then return reject('basic-attack-unavailable') end
+        if (r.kind=='basic-attack' or r.kind=='repair') and not o.repeatedTurns then return reject('basic-attack-unavailable') end
         -- Retain the exact fixed punch, including actor/target. This is not an arbitrary attack API.
         if r.kind == 'lab-punch' and (entity.pawnId ~= 0 or r.fromX ~= 3 or r.fromY ~= 3 or r.toX ~= 2 or r.toY ~= 3) then
             return reject('unsupported-punch-scenario')
         end
         local lab = (r.kind=='deploy' or r.kind=='deployment-confirm') and deployment or r.kind == 'move' and move or r.kind=='end-turn' and ending or attack
-        local command=r.kind=='deployment-confirm' and {launch=true} or entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn}
+        local command=r.kind=='deployment-confirm' and {launch=true} or entity and {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn}
         local ok,armed = pcall(function() return lab:arm(command) end)
         if not ok then self:stop('validation-exception'); return reject(self.reason) end
         if not armed then return reject('diagnostic-validation:'..tostring(lab.status)) end
@@ -235,13 +235,13 @@ function M.new(o)
         else
             local entity=registry[r.actor]
             if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
-            if r.kind=='basic-attack' then
+            if r.kind=='basic-attack' or r.kind=='repair' then
                 if not o.repeatedTurns then return false,'basic-attack-unavailable' end
             elseif entity.pawnId~=0 or r.fromX~=3 or r.fromY~=3 or r.toX~=2 or r.toY~=3 then return false,'unsupported-punch-scenario' end
             lab=attack
         end
         local entity=registry[r.actor]
-        local command=entity and {pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn,mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery'}
+        local command=entity and {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn,mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery'}
         local ok,armed=pcall(function()return lab:arm(command)end)
         local reason=lab.status
         if lab==attack then attack:disarm() else lab.armed=false end

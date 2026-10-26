@@ -41,7 +41,7 @@ function M.new(o)
             local actor=y>=380 and y<416 and 'combat' or y>=420 and y<456 and 'cannon'
                 or y>=460 and y<496 and 'artillery'
             if actor then
-                self.actor=nil;self.draft=nil
+                self.actor=nil;self.draft=nil;self.repairing=false
                 if actors[actor].owner~=o.wire.peer then reject('That mech belongs to your teammate');return end
                 if o.wire.phaseRun and not o.wire.repeatedTurns and not o.wire.deployment and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
                     reject('Unsupported actor for this phase test');return
@@ -49,7 +49,16 @@ function M.new(o)
                 self.actor=actor;self.status=not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
                 o.emit('move_intent_selected',{actor=actor,peer=o.wire.peer});return
             end
-            if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.draft=nil;self.status=self.attacking and 'Basic weapon selected' or 'Movement selected';return end
+            if o.wire.repeatedTurns and y>=760 and y<796 and not self.placing then
+                if not self.actor then reject('Choose your mech before Repair');return end
+                local pawn=o.env.Board:GetPawn(actors[self.actor].id);if not pawn then reject('Mech unavailable');return end
+                local p=pawn:GetSpace();self.counter=self.counter+1;assert(self.counter<=999,'intent-limit')
+                local r=o.request('repair','repair-'..o.wire.peer..'-'..self.counter,self.actor,p.x,p.y,p.x,p.y)
+                local ok,reason=preview(s,r);if not ok then reject(reason);return end
+                self.draft=r;self.attacking=false;self.repairing=true;self.status='Repair '..actors[self.actor].label..' - Confirm repair'
+                o.emit('move_intent_draft',{request=r,peer=o.wire.peer});return
+            end
+            if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.repairing=false;self.draft=nil;self.status=self.attacking and 'Basic weapon selected' or 'Movement selected';return end
             if y>=640 and y<676 then self.actor=nil;self.draft=nil;self.status='Move canceled; choose a mech';return end
             if y>=600 and y<636 then
                 if not self.draft then reject('Choose a mech and destination first');return end
@@ -62,6 +71,7 @@ function M.new(o)
         end
         if not self.actor then reject('Choose your mech first');return end
         if x<350 or x>1580 or y<150 or y>975 then reject('Click a board tile');return end
+        self.repairing=false
         local to=o.env.screenPointToTile({x=x,y=y},false)
         if not to or to.x<0 or to.x>7 or to.y<0 or to.y>7 then reject('Click a board tile');return end
         local pawn=o.env.Board:GetPawn(actors[self.actor].id)
@@ -82,7 +92,7 @@ function M.new(o)
         local n=o.native.info()
         assert(type(n.intentSerial)=='number','intent-capable-native-bridge-required')
         if self.revision~=s.revision then
-            self.revision=s.revision;self.actor=nil;self.draft=nil;self.attacking=false;self.status='Choose your mech, then a board tile'
+            self.revision=s.revision;self.actor=nil;self.draft=nil;self.attacking=false;self.repairing=false;self.status='Choose your mech, then a board tile'
         end
         if n.intentSerial~=self.serial then
             local contiguous=n.intentSerial==self.serial+1;self.serial=n.intentSerial
@@ -107,13 +117,13 @@ function M.new(o)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
-            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)') end
+            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech') end
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
         self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'
-            or self.placing and 'Confirm placement' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
+            or self.placing and 'Confirm placement' or self.draft and self.draft.kind=='repair' and 'Confirm repair' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
         if o.inspection then o.inspection:draw(root,visible) end
     end
     return self

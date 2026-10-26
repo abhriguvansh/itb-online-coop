@@ -84,4 +84,32 @@ test('late allowance consumption waits without replaying native attack',function
  a:draw();a:missionUpdate();a:update();assert(a.pending and not a.fault and e.calls==1)
  e.actor.active=false;a:update();assert(not a.pending and not a.fault and e.calls==1)
 end)
-print('Basic weapon contracts: '..passed..' passed (engine doubles only).')
+local function repairFixture()
+ local e,l,g,a=fixture();local c=command();c.repair=true;c.to={x=3,y=3};e.actor.hp=2
+ e.actor.GetMaxHealth=function()return 3 end
+ e.actor.IsFire=function()return e.fire==true end;e.Board.IsFire=function()return e.tileFire==true end
+ e.Skill_Repair={GetTargetArea=function()return list({{x=3,y=3}})end}
+ a.bridge.start=function(_,v,validate)assert(validate());assert(v.weapon=='Skill_Repair' and v.weaponIndex==50 and v.to.x==v.from.x);e.calls=e.calls+1;return true end
+ return e,a,c
+end
+test('repair heals and clears fire only after native execution plus later engine observations',function()
+ local e,a,c=repairFixture();e.fire=true;e.tileFire=true;assert(a:arm(c));assert(a:request(c))
+ a:update();assert(a.pending);a:skillEvent('onSkillStart',e.actor,'Skill_Repair');e.actor.hp=3;e.actor.active=false;e.fire=false;e.tileFire=false
+ a:skillEvent('onSkillEnd',e.actor,'Skill_Repair');a:update();assert(a.pending);a:draw();a:missionUpdate();a:update()
+ assert(not a.pending and not a.fault and e.calls==1 and not a:arm(c))
+end)
+test('repair refuses another target, no effect, acid and modified maximum',function()
+ for _,bad in ipairs({'target','full','acid','maximum'})do
+  local e,a,c=repairFixture()
+  if bad=='target' then c.to.x=2 elseif bad=='full' then e.actor.hp=3 elseif bad=='acid' then e.actor.IsAcid=function()return true end else e.actor.GetMaxHealth=function()return 4 end end
+  assert(not a:arm(c) and e.calls==0)
+ end
+end)
+test('repair mismatch or missing execution faults without retry',function()
+ for _,missing in ipairs({false,true})do
+  local e,a,c=repairFixture();a:arm(c);a:request(c)
+  if missing then e.clock=15001 else a:skillEvent('onSkillStart',e.actor,'Skill_Repair');e.actor.active=false;a:skillEvent('onSkillEnd',e.actor,'Skill_Repair');a:draw();a:missionUpdate() end
+  a:update();assert(a.fault and e.calls==1 and not a:arm(c))
+ end
+end)
+print('Basic weapon and stock Repair contracts: '..passed..' passed (engine doubles only).')

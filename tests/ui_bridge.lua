@@ -198,3 +198,11 @@ test('older native bridge cannot silently use movement allowance for an attack',
  assert(not pcall(function()b:start(c,v)end) and n.begins==0 and #n.calls==0)
 end)
 print('UI bridge contracts: '..passed..' passed.')
+do
+ local e,n,b,c,v=fixture();c.weapon='Skill_Repair';c.weaponIndex=50;c.to=c.from;e.pawn.IsUndoPossible=function()return false end
+ b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();assert(#n.calls==1)
+ e.selected=e.pawn;b:update();e.clock=300;b:update();e.clock=400;b:update();assert(n.calls[2].x==220 and n.calls[2].y==920)
+ e.pawn.GetArmedWeaponId=function()return 50 end;b:update();e.clock=500;b:update();e.clock=600;b:update();assert(#n.calls==2)
+ b:observePreview(e.pawn,'Skill_Repair',c.from,c.to);b:update();assert(#n.calls==3 and b.phase=='submitted');b:update();assert(#n.calls==3)
+end
+print('Repair uses native index 50, observed selection and a fresh self preview before one target click (UI doubles).')

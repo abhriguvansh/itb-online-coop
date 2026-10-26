@@ -79,7 +79,7 @@ if ($Mode -eq 'Install') {
         if ($hash -ne (Get-FileHash -LiteralPath $destination).Hash) { throw "Copy mismatch: $relative" }
         $installed += [pscustomobject]@{RelativePath=$relative;Sha256=$hash}
     }
-    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.24.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
+    [pscustomobject]@{Id='aman_itb_coop_probe';Version='0.25.0';Files=$installed} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $markerPath -Encoding utf8
     Write-Output 'Probe installed. The game has not been launched.'
     return
 }
@@ -103,7 +103,7 @@ elseif ($marker.Version -in @('0.21.0','0.22.0','0.23.0')) {
     $files=@($deploymentFiles)+@('scripts\initial_choices.lua')
     if('itb_initial_choices.dll'-in$marker.Files.RelativePath){$files+=@('itb_initial_choices.dll')}
 }
-elseif ($marker.Version -eq '0.24.0') {
+elseif ($marker.Version -in @('0.24.0','0.25.0')) {
     $files=@($deploymentFiles)+@('scripts\initial_choices.lua','scripts\transport.lua')
     if('itb_initial_choices.dll'-in$marker.Files.RelativePath){$files+=@('itb_initial_choices.dll')}
     if('itb_transport.dll'-in$marker.Files.RelativePath){$files+=@('itb_transport.dll')}
