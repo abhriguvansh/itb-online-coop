@@ -118,7 +118,7 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.27.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.28.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
@@ -167,8 +167,8 @@ class PhaseCoordinator{
         this.require(this.deployment&&(!this.fullMission||this.stage<4)?(this.stage<3?r.kind==='deploy':r.kind==='move'):r.kind==='move'||r.kind==='lab-punch'||(this.repeatedTurns&&['basic-attack','repair','undo-move'].includes(r.kind)),'unsupported-action');
         this.require(r.kind!=='repair'||r.fromX===r.toX&&r.fromY===r.toY,'repair-must-target-self');
         if(r.kind==='undo-move'){
-          const p=this.lastMove;
-          this.require(p&&p.peer===peer&&p.revision===this.stage&&p.request.actor===r.actor&&p.request.phase===r.phase&&
+          const p=this.undoMoves?.at(-1);
+          this.require(p&&p.peer===peer&&p.revision<=this.stage&&p.request.actor===r.actor&&p.request.phase===r.phase&&
             p.request.toX===r.fromX&&p.request.toY===r.fromY&&p.request.fromX===r.toX&&p.request.fromY===r.toY,'no-current-owned-move-to-undo');
         }
         const state=this.states.host,shape={session:this.session,encounter:'artillery-checkpoint',phase:state.phase,revision:this.stage,witness:state.witness,id:r.id,kind:this.deployment&&(!this.fullMission||this.stage<4)?(this.stage<3?'deploy':'move'):this.repeatedTurns?r.kind:this.phaseRun&&this.stage===1?'lab-punch':'move',actor:r.actor,fromX:r.fromX,fromY:r.fromY,toX:r.toX,toY:r.toY};
@@ -206,7 +206,11 @@ class PhaseCoordinator{
         for(const p of ['host','guest'])this.states[p]={phase:this.receipts[p].phase,witness:this.receipts[p].witness};
         if(this.pendingKind==='deployment-confirm')this.turn=1;
         if(this.repeatedTurns&&this.pendingKind==='end-turn')this.turn++;
-        if(this.interactive&&this.pendingKind==='move')this.lastMove={peer:this.proposal.peer,request:this.proposal.request,revision:this.stage+1};
+        if(this.interactive&&this.pendingKind==='move'){
+          this.undoMoves??=[];
+          this.undoMoves.push({peer:this.proposal.peer,request:this.proposal.request,revision:this.stage+1});
+        }else if(this.pendingKind==='undo-move')this.undoMoves.pop();
+        else this.undoMoves=[];
         if(this.pendingKind==='end-turn'||this.pendingKind==='deployment-confirm')this.resetBaseWitness=this.states.host.witness;
         this.stage++;this.advance();
       }return;
@@ -232,7 +236,6 @@ class PhaseCoordinator{
     this.both({...this.frame('PREPARE',peer,request.id),...(['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{}:{move:request})});
   }
   dispatch(peer,request){
-    this.lastMove=null;
     this.resetConsents=null;
     if(request.kind==='reset-turn')this.resetUsed=true;
     this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request});

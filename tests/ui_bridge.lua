@@ -13,7 +13,7 @@ local function fixture()
         local o=e.getScreenRefs();local dx=(p.x-o.x)/(28*e.scale);local dy=(p.y-o.y)/(21*e.scale)
         return {x=math.floor((dy+dx)/2),y=math.floor((dy-dx)/2)}
     end
-    e.Board={GetSelectedPawn=function()return e.selected end}
+    e.Board={GetSelectedPawn=function()return e.selected end,GetPawn=function()return e.pawn end}
     e.sdl={events={mousebuttonup=1026},eventHook=function(fn)e.releaseHook=fn;return fn end}
     e.release=function(button)e.releaseHook({type=function()return 1026 end,mousebutton=function()return button or 1 end})end
     e.pawn={GetId=function()return 2 end,GetArmedWeaponId=function()return 0 end}
@@ -52,13 +52,13 @@ end)
 test('already selected actor needs only destination click',function()
     local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);assert(#n.calls==0);e.clock=100;b:update();assert(#n.calls==0);e.preview();e.clock=200;b:update();assert(#n.calls==1)
 end)
-test('Undo selects its actor then submits the observed button once with SDL release evidence',function()
+test('Undo uses the global button without actor selection and waits for actual SDL release',function()
     local e,n,b,c,v=fixture();c.undo=true;e.pawn.IsUndoPossible=function()return true end
-    b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();assert(#n.calls==1)
-    e.selected=e.pawn;b:update();e.clock=300;b:update();e.delayRelease=true;e.clock=400;b:update()
-    assert(#n.calls==2 and n.calls[2].x==347 and n.calls[2].y==180 and b.phase=='submitted')
+    e.selected={GetId=function()return 0 end,GetArmedWeaponId=function()return 0 end}
+    b:start(c,v);e.clock=100;b:update();assert(#n.calls==0);e.delayRelease=true;e.clock=200;b:update()
+    assert(#n.calls==1 and n.calls[1].x==347 and n.calls[1].y==180 and b.phase=='submitted')
     assert(not b:submissionReleased());e.release();b:update();assert(b:submissionReleased())
-    b:update();assert(#n.calls==2)
+    b:update();assert(#n.calls==1)
 end)
 test('Undo rejects lost native availability before its one button click',function()
     local e,n,b,c,v=fixture();c.undo=true;e.selected=e.pawn;e.pawn.IsUndoPossible=function()return false end

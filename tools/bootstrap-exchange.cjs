@@ -16,7 +16,7 @@ class BootstrapExchange{
   receive(peer,m){
     assert(!this.complete,'bootstrap-after-agreement');
     assert.equal(m.session,this.session,'bootstrap-session');assert.equal(m.peer,peer,'bootstrap-role');
-    assert.equal(m.probe,'0.27.0','bootstrap-version');assert.equal(m.fixture,'tides-fresh-v1','bootstrap-fixture');
+    assert.equal(m.probe,'0.28.0','bootstrap-version');assert.equal(m.fixture,'tides-fresh-v1','bootstrap-fixture');
     assert.equal(m.game,'1.2.93','bootstrap-game');assert.equal(m.abi,'itb-initial-choices-v1','bootstrap-abi');
     if(m.type==='bootstrap_ready'){
       assert.equal(peer,'guest');assert(!this.guestReady,'duplicate-bootstrap-ready');this.guestReady=true;

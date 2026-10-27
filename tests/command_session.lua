@@ -64,13 +64,47 @@ test('Undo binds the last owned move and shares duplicate stale conflict and nex
  bad.id='stale';bad.toY=3;assert(s:submit('guest',bad).reason=='stale-revision-renew-intent')
  local nextMove=r('move','after-undo');nextMove.revision=2;assert(s:submit('guest',nextMove).status=='pending' and e.moveCalls==2)
 end)
-test('another admitted action invalidates Undo and unsolicited Undo stops protected',function()
+test('pending actions block Undo and unsolicited Undo stops protected',function()
  local e,o,r=fixture();o.repeatedTurns=true
  o.undoMove={new=function()return {update=function()end,skillEvent=function()end}end}
  local s=session.new(o);assert(s:submit('guest',r()).status=='pending');completeMove(e,s);assert(s:undoTarget('guest','artillery'))
  local attack=r('lab-punch','attack-after-move');attack.revision=1
  assert(s:submit('host',attack).status=='pending');assert(not s:undoTarget('guest','artillery'))
  s:undoEvent(e.mission,e.pawn,{x=1,y=2});assert(s.stopped)
+end)
+
+test('reverse native move order survives newer move Undo without reviving stale requests',function()
+ local e,o=fixture();o.repeatedTurns=true;e.witness='original';e.undoEligible=true
+ local emitMove,emitUndo,moving,undoing,undoCalls
+ o.movement={new=function(_,emit)
+  emitMove=emit;moving={usedPawns={},arm=function()return true end,validate=function()return true end}
+  moving.request=function(self)self.pending=true;return true end;moving.update=function()end;return moving
+ end}
+ o.undoMove={new=function(_,_,_,emit)
+  emitUndo=emit;undoing={arm=function(_,c)return e.undoEligible and c.restoreWitness==e.expectedRestore end,disarm=function()end}
+  undoing.request=function(self,c)undoCalls=(undoCalls or 0)+1;self.pending=c;return true end;undoing.update=function()end;return undoing
+ end}
+ local s=session.new(o)
+ local function r(kind,actor,id,fromX,fromY,toX,toY)
+  return {session='s1',encounter='enc1',phase=s.phase,revision=s.revision,witness=e.witness,kind=kind,actor=actor,id=id,fromX=fromX,fromY=fromY,toX=toX,toY=toY}
+ end
+ local function finishMove(value)moving.pending=nil;e.witness=value;emitMove('move_postconditions_observed',{});s:update()end
+ local function finishUndo(value)undoing.pending=nil;e.witness=value;emitUndo('undo_move_postconditions_observed',{});s:update()end
+ assert(s:submit('guest',r('move','artillery','first',1,3,1,2)).status=='pending');finishMove('artillery-moved')
+ local old=r('undo-move','artillery','old-undo',1,2,1,3)
+ assert(s:submit('host',r('move','combat','second',3,3,2,4)).status=='pending');finishMove('both-moved')
+ assert(not s:undoTarget('guest','artillery'))
+ assert(s:submit('guest',r('undo-move','artillery','skip-newer',1,2,1,3)).reason=='no-current-owned-move-to-undo')
+ e.expectedRestore='artillery-moved'
+ local hostUndo=r('undo-move','combat','undo-second',2,4,3,3)
+ assert(s:previewAction('host',hostUndo));assert(s:submit('host',hostUndo).status=='pending');finishUndo('artillery-moved')
+ assert(s.revision==3 and s:undoTarget('guest','artillery'))
+ assert(s:submit('guest',old).reason=='stale-revision-renew-intent')
+ local fresh=r('undo-move','artillery','fresh-undo',1,2,1,3);e.expectedRestore='original';e.undoEligible=false
+ assert(not s:previewAction('guest',fresh) and undoCalls==1)
+ e.undoEligible=true;assert(s:previewAction('guest',fresh));assert(s:submit('guest',fresh).status=='pending');finishUndo('original')
+ assert(s.revision==4 and undoCalls==2 and not s:undoTarget('guest','artillery'))
+ assert(s:submit('host',hostUndo).status=='duplicate' and undoCalls==2)
 end)
 test('Repair shares ownership, stale, conflicting, duplicate and observed revision gates',function()
  local e,o=fixture();o.repeatedTurns=true;local calls,finish=0,false
@@ -118,6 +152,15 @@ local function completeAttack(e,s)
     s:skillEvent('onSkillEnd',e.actor,'Prime_Punchmech')
     for i=1,3 do e.clock=e.clock+100;s:update()end
 end
+test('completed stock attack clears the remaining native move history',function()
+ local e,o,r=fixture();o.repeatedTurns=true
+ o.undoMove={new=function()return {update=function()end,skillEvent=function()end}end}
+ local s=session.new(o);assert(s:submit('guest',r()).status=='pending');completeMove(e,s)
+ assert(s:undoTarget('guest','artillery'))
+ local attack=r('lab-punch','commit-moves');attack.revision=1
+ assert(s:submit('host',attack).status=='pending');completeAttack(e,s)
+ assert(s.revision==2 and not s.stopped and not s:undoTarget('guest','artillery'))
+end)
 local function endFixture()
     local e,o,r=fixture();e.endCalls=0
     o.endTurn={new=function(_,_,emit)

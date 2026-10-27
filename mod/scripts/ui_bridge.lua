@@ -115,9 +115,12 @@ function bridge.new(env, native, emit)
         local ok,detail=begin();assert(ok,detail)
         emit('ui_bridge_started',{command=command,fromPixel=self.from,toPixel=self.to,
             native=native.info(),proofOfInputAuthorization=false})
-        if not selected or selected:GetId()~=command.pawnId then
+        -- Native Undo is a global reverse-order button. Selecting a moved
+        -- actor first is unnecessary; the session has already bound the top
+        -- recorded move to its owner and validate rechecks the native pawn.
+        if command.undo then aim({x=347,y=180},'aim-undo')
+        elseif not selected or selected:GetId()~=command.pawnId then
             aim(self.from,'aim-selection')
-        elseif command.undo then aim({x=347,y=180},'aim-undo')
         elseif command.weapon then aim(self.weaponPoint,'aim-weapon')
         else aim(self.to,'aim-destination') end
     end
@@ -178,11 +181,11 @@ function bridge.new(env, native, emit)
             emit('ui_bridge_weapon_queued',{accepted=sent,events=count,pawnId=pawn:GetId()});assert(sent,'weapon-queue-failed');return
         end
         if self.phase=='aim-undo' then
-            assert(pawn and pawn:GetId()==self.command.pawnId and pawn:GetArmedWeaponId()<=0
-                and pawn:IsUndoPossible(),'undo-selection-changed')
+            local actor=env.Board:GetPawn(self.command.pawnId)
+            assert(actor and actor:IsUndoPossible() and (not pawn or pawn:GetArmedWeaponId()<=0),'undo-availability-changed')
             self.phase='submitted';self.releaseExpected=self.releasesSeen+1
             local sent,count=native.click(self.aimPoint.x,self.aimPoint.y)
-            emit('ui_bridge_undo_queued',{accepted=sent,events=count,pawnId=pawn:GetId(),native=native.info()})
+            emit('ui_bridge_undo_queued',{accepted=sent,events=count,pawnId=self.command.pawnId,native=native.info()})
             assert(sent,'undo-queue-uncertain');return
         end
         assert(same(env.screenPointToTile({x=input.mouseX,y=input.mouseY},false),aimedTile),

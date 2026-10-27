@@ -66,8 +66,8 @@ function M.new(o)
             end
             if o.wire.repeatedTurns and y>=880 and y<916 and not self.placing then
                 if not self.actor then reject('Choose your mech before Undo');return end
-                local target=s:undoTarget(o.wire.peer,self.actor)
-                if not target then reject('Only your immediately preceding move can be undone');return end
+                local target,reason=s:undoTarget(o.wire.peer,self.actor)
+                if not target then reject(reason or 'No eligible native move to undo');return end
                 self.counter=self.counter+1;assert(self.counter<=999,'intent-limit')
                 local r=o.request('undo-move','undo-'..o.wire.peer..'-'..self.counter,self.actor,target.fromX,target.fromY,target.toX,target.toY)
                 local ok,reason=preview(s,r);if not ok then reject(reason);return end
@@ -133,7 +133,7 @@ function M.new(o)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
-            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech');label('undo',880,'Prepare Undo of last owned move');label('reset',960,'Request Reset (both must agree)') end
+            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech');label('undo',880,'Prepare Undo for selected mech');label('reset',960,'Request Reset (both must agree)') end
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end

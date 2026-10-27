@@ -8,7 +8,7 @@ function fixture(full=false){
   pawns:[0,1,2].map(localId=>({localId,position:{x:-1,y:-1},active:true}))};
  const ctx=revision=>({revision,phase:revision>=4?'player'+state.turn:'deployment',witness:JSON.stringify(state)});
  const send=(peer,m)=>c.receive(peer,{session:s,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.27.0',interactive:true,phaseRun:true,deployment:true,...(full?{repeatedTurns:true,fullMission:true}:{}),...ctx(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.28.0',interactive:true,phaseRun:true,deployment:true,...(full?{repeatedTurns:true,fullMission:true}:{}),...ctx(0)});
  const request=i=>({session:s,encounter:'artillery-checkpoint',...ctx(i),id:'move-'+(i?'guest':'host')+'-'+(i+1),kind:'deploy',actor:['combat','cannon','artillery'][i],fromX:-1,fromY:-1,toX:1,toY:4+i});
  return {c,send,sent,events,state,ctx,request,elapse:()=>{time=3000}};
 }

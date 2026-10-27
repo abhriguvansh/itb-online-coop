@@ -50,6 +50,9 @@ function M.new(o)
     local records, count, pending, observed = {}, 0, nil, false
     local move, attack, ending, deployment, undo, reset
     local ready={}
+    -- The observed native button undoes moves in reverse execution order,
+    -- regardless of the selected pawn. Never skip another actor's latest move.
+    local undoMoves={}
     local function protectStop() if o.stopProtection then pcall(o.stopProtection) end end
     local function emit(kind,data)
         local ok = pcall(o.emit,kind,data)
@@ -119,8 +122,8 @@ function M.new(o)
         return value
     end
     local function undoMatch(peer,r)
-        local m=self.lastMove
-        return undo and m and m.peer==peer and m.actor==r.actor and m.revision==self.revision
+        local m=undoMoves[#undoMoves]
+        return undo and m and m.peer==peer and m.actor==r.actor and m.revision<=self.revision
             and m.phase==self.phase and m.turn==self.turn and r.fromX==m.toX and r.fromY==m.toY
             and r.toX==m.fromX and r.toY==m.fromY
     end
@@ -130,12 +133,13 @@ function M.new(o)
         if not entity then return nil end
         return {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
             mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn,
-            restoreWitness=r.kind=='undo-move' and self.lastMove and self.lastMove.witness or nil}
+            restoreWitness=r.kind=='undo-move' and undoMoves[#undoMoves] and undoMoves[#undoMoves].witness or nil}
     end
     function self:undoTarget(peer,actor)
-        local m=self.lastMove
-        if not undo or not m or m.peer~=peer or m.actor~=actor or m.revision~=self.revision
-            or m.phase~=self.phase or m.turn~=self.turn or pending or self.stopped then return nil end
+        local m=undoMoves[#undoMoves]
+        if not undo or pending or self.stopped then return nil,'Undo unavailable while a command is active or stopped' end
+        if not m or m.phase~=self.phase or m.turn~=self.turn then return nil,'No recorded native move to undo; attacks clear Undo' end
+        if m.peer~=peer or m.actor~=actor then return nil,'Native Undo reverses the newest move; that mech must undo first' end
         return {fromX=m.toX,fromY=m.toY,toX=m.fromX,toY=m.fromY}
     end
     function self:setReady(peer,phase,revision,value,confirmUnused,kind)
@@ -216,7 +220,7 @@ function M.new(o)
             if lab==deployment or lab==reset then lab.armed=false elseif r.kind == 'move' then move.armed=false elseif r.kind=='end-turn' then ending.armed=false else lab:disarm() end
             return reject(self.reason or 'stale-observation-renew-intent')
         end
-        pending=rec; observed=false; rec.status='pending';rec.peer=peer;ready={};self.lastMove=nil
+        pending=rec; observed=false; rec.status='pending';rec.peer=peer;ready={}
         emit('command_admitted',{id=r.id,peer=peer,kind=r.kind,actor=r.actor,revision=self.revision})
         if self.stopped then rec.status='uncertain'; rec.reason=self.reason; return result(rec) end
         local called,accepted=pcall(function() return lab:request(command) end)
@@ -323,10 +327,15 @@ function M.new(o)
             self.revision=self.revision+1
             if pending.request.kind=='move' then
                 local r=pending.request
-                self.lastMove={peer=pending.peer,actor=r.actor,revision=self.revision,phase=self.phase,turn=self.turn,
+                undoMoves[#undoMoves+1]={peer=pending.peer,actor=r.actor,revision=self.revision,phase=self.phase,turn=self.turn,
                     fromX=r.fromX,fromY=r.fromY,toX=r.toX,toY=r.toY,witness=r.witness}
             elseif pending.request.kind=='undo-move' then
+                table.remove(undoMoves)
                 move.usedPawns[registry[pending.request.actor].pawnId]=nil
+            else
+                -- Normal stock attacks/Repair commit preceding moves. Phase
+                -- transitions and Reset also start a new native Undo history.
+                undoMoves={}
             end
             pending.status='observed'; pending.revision=self.revision
             emit('command_observed',{id=pending.request.id,revision=self.revision,proofOfQuiescence=false,proofOfPeerAgreement=false})

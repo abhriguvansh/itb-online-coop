@@ -1,4 +1,4 @@
--- One native Undo for the immediately preceding authorized ordinary move.
+-- One native Undo for the newest remaining authorized ordinary move.
 -- The loader hook is inferred; completion also needs later runtime observations.
 local M={}
 local types={[0]='PunchMech',[1]='TankMech',[2]='ArtiMech'}
