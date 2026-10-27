@@ -81,9 +81,10 @@ static int __cdecl special_draw(void){return draw(3,100);}
 static int __cdecl ai_draw(void){return draw(0,32768);}
 __attribute__((used,noinline)) static int __cdecl pod_draw(int limit){return draw(1,limit);}
 __attribute__((naked)) static int __cdecl pod_hook(void){__asm__ volatile("pushl %edi\n\tcalll _pod_draw\n\taddl $4,%esp\n\tretl");}
-static int valid_choice(size_t i,int kind,int vt,int lt,lua_Number v,lua_Number limit){
-    return i<19 && kind==(i<17?0:i==17?2:1) && vt==LUA_TNUMBER && lt==LUA_TNUMBER
-        && v>=0 && v<=32767 && (int)v==v && limit==(i<17?32768:i==17?3:9);
+static int valid_choice(size_t n,size_t i,int kind,int vt,int lt,lua_Number v,lua_Number limit){
+    int special=n==20 && i==18;
+    return (n==19||n==20) && i<n && kind==(i<17?0:i==17?2:special?3:1) && vt==LUA_TNUMBER && lt==LUA_TNUMBER
+        && v>=0 && v<=32767 && (int)v==v && limit==(i<17?32768:i==17?3:special?100:9);
 }
 static void restore_hooks(void){
     for(unsigned i=0;i<4;i++)if(live_mask&(1u<<i))if(!patch(i,patched[i],saved[i],0))fault=7;
@@ -105,14 +106,14 @@ static int install(lua_State *L) {
     if(nopt>=16 || (wcscmp(opt,L"capture")&&wcscmp(opt,L"replay")) ||
         ((p_lua_type(L,1)==LUA_TTABLE)!=(wcscmp(opt,L"replay")==0))){fault=11;return info(L);}
     if(p_lua_type(L,1)==LUA_TTABLE){
-        size_t n=p_lua_objlen(L,1);if(n!=19){fault=9;return info(L);}
+        size_t n=p_lua_objlen(L,1);if(n!=19&&n!=20){fault=9;return info(L);}
         for(size_t i=0;i<n;i++){
             p_lua_rawgeti(L,1,(int)i+1);if(p_lua_type(L,-1)!=LUA_TTABLE){fault=9;return info(L);}
             p_lua_getfield(L,-1,"kind");const char *k=p_lua_tolstring(L,-1,NULL);
-            int kind=k&&!strcmp(k,"ai-constructor")?0:k&&!strcmp(k,"pod-select")?1:k&&!strcmp(k,"pod-delivery")?2:-1;p_lua_settop(L,-2);
+            int kind=k&&!strcmp(k,"ai-constructor")?0:k&&!strcmp(k,"pod-select")?1:k&&!strcmp(k,"pod-delivery")?2:k&&!strcmp(k,"pod-special")?3:-1;p_lua_settop(L,-2);
             p_lua_getfield(L,-1,"value");lua_Number v=p_lua_tonumber(L,-1);int vt=p_lua_type(L,-1);p_lua_settop(L,-2);
             p_lua_getfield(L,-1,"limit");lua_Number limit=p_lua_tonumber(L,-1);int lt=p_lua_type(L,-1);p_lua_settop(L,-2);
-            if(!valid_choice(i,kind,vt,lt,v,limit)){fault=9;return info(L);}
+            if(!valid_choice(n,i,kind,vt,lt,v,limit)){fault=9;return info(L);}
             choices[i]=(struct choice){kind,(int)v,(int)limit};p_lua_settop(L,-2);
         }
         expected_count=(int)n;replaying=1;

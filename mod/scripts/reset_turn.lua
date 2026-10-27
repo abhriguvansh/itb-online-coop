@@ -1,7 +1,7 @@
 -- Restricted native Reset: one normal shared allowance, fresh unanimous consent.
 -- Session history remains in process memory while the engine reloads its turn save.
 local M={}
--- Normal native Reset rehydrates non-damageable road HP differently. Keep raw
+-- Normal native Reset rehydrates road and unfrozen water HP differently. Keep raw
 -- peer witnesses intact; only turn-restoration comparison excludes this field.
 function M.comparable(state,json)
     local copy={};for k,v in pairs(state)do copy[k]=v end
@@ -9,7 +9,7 @@ function M.comparable(state,json)
         copy.tiles=json.array()
         for _,tile in ipairs(state.tiles)do
             local t={};for k,v in pairs(tile)do t[k]=v end
-            if t.terrain==0 and t.building==false then t.health=nil end
+            if t.building==false and (t.terrain==0 or (t.terrain==3 and t.frozen==false)) then t.health=nil end
             copy.tiles[#copy.tiles+1]=t
         end
     end
@@ -125,7 +125,10 @@ function M.new(env,native,emit,capture,json)
                 if n.pressed or self.releases<p.startRelease+2 then return end
                 local state,idle=capture();assert(#state.unavailable==0,'incomplete-reset-observation')
                 if not idle or env.Board:GetBusyState()~=0 or (env.modApi.runLaterQueue and next(env.modApi.runLaterQueue)) then return end
-                assert(M.comparable(state,json)==p.command.restoreWitness,'reset-restored-observation-mismatch')
+                if M.comparable(state,json)~=p.command.restoreWitness then
+                    emit('reset_turn_restoration_mismatch',{state=state,expected=p.command.restoreWitness})
+                    error('reset-restored-observation-mismatch')
+                end
                 if env.modApi:elapsedTime()<(p.readAt or 0) then return end
                 p.readAt=env.modApi:elapsedTime()+250
                 local available,saved=pcall(M.saved,env,p.saved.region)
@@ -134,7 +137,7 @@ function M.new(env,native,emit,capture,json)
                     and saved.remaining==p.saved.remaining-1,'reset-committed-allowance-mismatch')
                 emit('reset_turn_postconditions_observed',{turn=p.command.turn,state=state,remaining=saved.remaining,
                     reloadHooks=4,missionChanged=true,laterDraw=true,laterMissionUpdate=true,releaseObserved=true,
-                    savedAllowanceObserved=true,restorationExcludes='non-building-road-tile-health',proofOfGeneralQuiescence=false})
+                    savedAllowanceObserved=true,restorationExcludes='non-building-road-and-unfrozen-water-tile-health',proofOfGeneralQuiescence=false})
                 native.finish();self.pending=nil;self.command=nil;self.status='Reset observed';return
             end
             context(p.command);assert(env.GetCurrentMission()==p.mission,'reset-context-changed-before-confirmation')

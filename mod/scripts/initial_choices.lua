@@ -7,12 +7,16 @@ function M.parse(text,json)
     for line in text:gmatch('([^\n]+)\n') do
         local kind,limit,value=line:match('^([a-z%-]+)|(%d+)|(%d+)$')
         local n=#rows+1;local v,l=tonumber(value),tonumber(limit)
-        assert(n<=19 and kind==(n<18 and 'ai-constructor' or n==18 and 'pod-delivery' or 'pod-select')
-            and l==(n<18 and 32768 or n==18 and 3 or 9) and v and v>=0 and v<=32767
-            and tostring(v)==value and tostring(l)==limit,'initial-choice-transcript-shape')
+        assert(n<=20 and v and v>=0 and v<=32767 and tostring(v)==value and tostring(l)==limit,'initial-choice-transcript-shape')
         rows[n]={kind=kind,limit=l,value=v};consumed=consumed+#line+1
     end
-    assert(#rows==19 and consumed==#text,'initial-choice-transcript-count')
+    local count=#rows
+    assert((count==19 or count==20) and consumed==#text,'initial-choice-transcript-count')
+    for i,row in ipairs(rows)do
+        local special=count==20 and i==19
+        assert(row.kind==(i<18 and 'ai-constructor' or i==18 and 'pod-delivery' or special and 'pod-special' or 'pod-select')
+            and row.limit==(i<18 and 32768 or i==18 and 3 or special and 100 or 9),'initial-choice-transcript-shape')
+    end
     return rows
 end
 function M.install(env,path,emit)
@@ -53,12 +57,12 @@ function M.install(env,path,emit)
         if self.error or not native or mode~='replay' then return false end
         local v=native.info()
         return v.abi=='itb-initial-choices-v1' and v.sealed and not v.installed
-            and v.fault==0 and not v.overflow and v.count==19 and v.expectedCount==19
+            and v.fault==0 and not v.overflow and self.choices and v.count==#self.choices and v.expectedCount==#self.choices
     end
     return self
 end
 -- Live host capture -> authenticated bridge -> guest pre-entry replay.
--- The existing native DLL and exact 19-choice fixture checks remain unchanged.
+-- Only the two observed 19/20-choice Tides initialization shapes are accepted.
 function M.exchange(env,path,emit)
     local self={enabled=true};local json=require(path..'json');local native
     local root='C:/ITBCoopProbe/Wire';local session,peer,mode,lastTick
@@ -69,7 +73,7 @@ function M.exchange(env,path,emit)
     end
     local function write(name,value)
         assert(not read(name),'bootstrap-output-already-exists')
-        value.session=session;value.peer=peer;value.probe='0.28.0';value.fixture='tides-fresh-v1'
+        value.session=session;value.peer=peer;value.probe='0.29.0';value.fixture='tides-fresh-v1'
         value.game='1.2.93';value.abi='itb-initial-choices-v1'
         if env.ITBCoopTransport then env.ITBCoopTransport:send(value);return end
         local target=root..'/'..name;local f=assert(env.io.open(target..'.tmp','wb'),'bootstrap-output-open')
@@ -92,7 +96,7 @@ function M.exchange(env,path,emit)
         return v
     end
     local function transcript(v)
-        assert(v.count==19 and #v.entries==19,'bootstrap-native-count')
+        assert((v.count==19 or v.count==20) and #v.entries==v.count,'bootstrap-native-count')
         local rows={}
         for i,e in ipairs(v.entries)do
             assert(type(e.applied)=='number' and e.applied%1==0,'bootstrap-applied-value')
@@ -130,14 +134,14 @@ function M.exchange(env,path,emit)
                     if offered then
                         assert(not env.sdlext.isGame() and not env.Board,'bootstrap-guest-entered-too-early')
                         self.choices=M.parse(offered,json);self.text=offered
-                        native.install(self.choices);local v=info();assert(v.installed and v.expectedCount==19,'bootstrap-guest-install-failed')
-                        self.installed=true;emit('initial_choice_live_installed',{peer=peer,count=19,native=v})
+                        native.install(self.choices);local v=info();assert(v.installed and v.expectedCount==#self.choices,'bootstrap-guest-install-failed')
+                        self.installed=true;emit('initial_choice_live_installed',{peer=peer,count=#self.choices,native=v})
                     end
                 end
                 local agreed=body('bootstrap-agreed.txt')
                 if agreed then
                     assert(self.sealed and agreed==self.text,'bootstrap-agreement-before-seal')
-                    self.agreed=true;emit('initial_choice_live_agreed',{peer=peer,count=19})
+                    self.agreed=true;emit('initial_choice_live_agreed',{peer=peer,count=#self.choices})
                 end
             end)
         end)
@@ -155,15 +159,15 @@ function M.exchange(env,path,emit)
                 self.sealed=true
                 write('bootstrap-sealed.json',{type='bootstrap_sealed',witness=text,native=v,
                     mission=env.GetCurrentMission().ID,profile=env.Profile.visible_name})
-                emit('initial_choice_live_sealed',{peer=peer,count=19,native=v})
+                emit('initial_choice_live_sealed',{peer=peer,count=#self.choices,native=v})
             end)
         end)
     end)
     function self:healthy()
         if self.error or not self.agreed or not self.sealed then return false end
         local v=native.info()
-        return v.fault==0 and not v.overflow and not v.installed and v.count==19
-            and v.passThrough==(peer=='host') and (peer=='host' or v.sealed and v.expectedCount==19)
+        return v.fault==0 and not v.overflow and not v.installed and self.choices and v.count==#self.choices
+            and v.passThrough==(peer=='host') and (peer=='host' or v.sealed and v.expectedCount==#self.choices)
     end
     return self
 end

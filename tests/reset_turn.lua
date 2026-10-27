@@ -42,6 +42,17 @@ test('restoration excludes only non-building road health without mutating the ob
  assert(module.comparable(state(4,2,false),json)~=module.comparable(state(4,1,false),json))
  assert(module.comparable(state(0,2,true),json)~=module.comparable(state(0,1,true),json))
 end)
+test('normal flooded-water restoration excludes HP only while unfrozen and non-building',function()
+ local function state(hp,frozen,building,terrain)return {tiles=json.array({{terrain=terrain or 3,health=hp,building=building,frozen=frozen,x=4,y=1}})}end
+ local a=state(4,false,false)
+ assert(module.comparable(a,json)==module.comparable(state(2,false,false),json) and a.tiles[1].health==4)
+ for _,v in ipairs({{true,false},{false,true}})do
+  assert(module.comparable(state(4,v[1],v[2]),json)~=module.comparable(state(2,v[1],v[2]),json))
+ end
+ assert(module.comparable(state(4,nil,false),json)~=module.comparable(state(2,nil,false),json),'unknown frozen state stays compared')
+ assert(module.comparable(state(4,false,false),json)~=module.comparable(state(4,false,false,0),json),'terrain stays compared')
+end)
+
 test('normal dialog and ordered reload wait for later observations and consumed saved allowance',function()
  local e,n,u=make();e.submit();e.reload();u:update();assert(u.pending)
  e.tick();assert(u.pending and not u.fault);e.saved=true;e.modApi.runLaterQueue={pending=true};e.tick(300);assert(u.pending)

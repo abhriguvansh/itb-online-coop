@@ -1,5 +1,8 @@
 local M=dofile('mod/scripts/initial_choices.lua');local json=dofile('mod/scripts/json.lua')
 local text=string.rep('ai-constructor|32768|42\n',17)..'pod-delivery|3|123\n'..'pod-select|9|123\n'
+local podText=text:gsub('pod%-select|9|123','pod-special|100|8055\npod-select|9|20506')
+local podRows=M.parse(podText,json);assert(#podRows==20 and podRows[19].kind=='pod-special' and podRows[20].value==20506)
+for _,bad in ipairs({podText:gsub('pod%-special|100','pod-special|99'),podText:gsub('pod%-special','pod-select'),podText..'pod-select|9|1\n'})do assert(not pcall(M.parse,bad,json))end
 local rows=M.parse(text,json);assert(#rows==19 and rows[19].value==123)
 assert(json.encode(rows):sub(1,1)=='[')
 for _,bad in ipairs({text..'\n',text:sub(1,-2),text:gsub('pod%-select|9','pod-select|8'),
@@ -33,7 +36,7 @@ local function exchange(role,direct)
         passThrough=role=='host',expectedCount=role=='host' and 0 or 19,sealed=false}
     local chosen
     local native={info=function()return value end,install=function(rows)
-        assert(not value.installed);chosen=rows;value.installed=true;return value
+        assert(not value.installed);chosen=rows;if rows then value.expectedCount=#rows end;value.installed=true;return value
     end,restore=function()value.installed=false;value.sealed=role=='guest';return value end}
     local env={os={getenv=function(key)
         if key=='ITB_COOP_LIVE_BOOTSTRAP' then return '1' end
@@ -65,8 +68,8 @@ local function exchange(role,direct)
     local function enter(count)
         playing=true;env.Board={};value.count=count or 19;value.entries={}
         for i=1,value.count do
-            local kind=i<18 and 'ai-constructor' or i==18 and 'pod-delivery' or 'pod-select'
-            value.entries[i]={kind=kind,limit=i<18 and 32768 or i==18 and 3 or 9,
+            local kind=i<18 and 'ai-constructor' or i==18 and 'pod-delivery' or value.count==20 and i==19 and 'pod-special' or 'pod-select'
+            value.entries[i]={kind=kind,limit=i<18 and 32768 or i==18 and 3 or value.count==20 and i==19 and 100 or 9,
                 value=role=='host' and i+123 or i+456,applied=chosen and chosen[i].value or i+123}
         end
         callbacks.onDeploymentPhaseStart()
@@ -100,3 +103,12 @@ do
     assert(not h.files['bootstrap-sealed.json'] and not g.files['bootstrap-sealed.json'])
 end
 print('Live bootstrap also uses the in-game transport without message files (engine/transport doubles).')
+
+do
+ local h,g=exchange('host',true),exchange('guest',true)
+ h.enter(20);assert(h.s.sealed and #h.s.choices==20 and not h.s.error)
+ g.transport.incoming['bootstrap-offer.txt']=g.sid..'\n'..h.s.text;g.tick();g.enter(20)
+ for _,f in ipairs({h,g})do f.transport.incoming['bootstrap-agreed.txt']=f.sid..'\n'..h.s.text;f.tick();assert(f.s:healthy())end
+ assert(g.native.expectedCount==20 and g.native.count==20 and not g.native.installed)
+end
+print('Observed 20-choice pod-arrival path seals only after matching native count/order and both live agreements (doubles).')
