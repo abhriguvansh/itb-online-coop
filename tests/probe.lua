@@ -168,7 +168,8 @@ test('phase rejection diagnostic never captures a transitional spawn witness',fu
         'onMissionDismissed','onDeploymentPhaseStart','onPawnSelectedForDeployment','onPawnUnselectedForDeployment',
         'onPawnDeployed','onPawnUndeployed','onLandingPhaseStart','onPawnLanding','onPawnLanded','onDeploymentPhaseEnd','onWindowShown'}
     local events={};for _,name in ipairs(names)do events[name]={subscribe=function(self,fn)self.listener=fn end}end
-    local env={modApi={events=events},modapiext={events={onSkillStart={subscribe=function()end},onSkillEnd={subscribe=function()end}}}}
+    local env={modApi={events=events},modapiext={events={onSkillStart={subscribe=function()end},onSkillEnd={subscribe=function()end},
+        onPawnUndoMove={subscribe=function()end},onResetTurn={subscribe=function()end}}}}
     local prefix='phase-rejection-fixture/'
     package.loaded[prefix..'json']=json
     package.loaded[prefix..'deployment']={}

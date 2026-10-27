@@ -17,14 +17,15 @@ function M.decode(text,session)
     assert(#witness<=65536 and not witness:find('\r') and (spawn or not witness:find('\n')),'wire-witness')
     local deploying=base and (actor=='deploycombat' or actor=='deploycannon' or actor=='deployartillery')
     local repairing=base and (actor=='repaircombat' or actor=='repaircannon' or actor=='repairartillery')
+    local undoing=base and (actor=='undocombat' or actor=='undocannon' or actor=='undoartillery')
     if base then
-        assert((kind=='EXEC' or kind=='PREPARE') and (deploying or repairing or actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move')
+        assert((kind=='EXEC' or kind=='PREPARE') and (deploying or repairing or undoing or actor=='combat' or actor=='cannon' or actor=='artillery' or actor=='punch' or actor=='attackcombat' or actor=='attackcannon' or actor=='attackartillery'),'wire-move')
         assert(deploying and fx=='-1' and fy=='-1' or not deploying and fx:match('^[0-7]$') and fy:match('^[0-7]$'),'wire-origin')
         assert(not repairing or fx==tx and fy==ty,'wire-repair-target')
     end
     return {kind=kind,peer=peer,revision=rev,phase=phase,id=id,witness=witness,move=base and {
         session=session,encounter='artillery-checkpoint',phase=phase,revision=rev,witness=witness,
-        id=id,kind=deploying and 'deploy' or repairing and 'repair' or actor=='punch' and 'lab-punch' or actor:sub(1,6)=='attack' and 'basic-attack' or 'move',actor=(deploying or repairing) and actor:sub(7) or actor=='punch' and 'combat' or actor:sub(1,6)=='attack' and actor:sub(7) or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
+        id=id,kind=deploying and 'deploy' or repairing and 'repair' or undoing and 'undo-move' or actor=='punch' and 'lab-punch' or actor:sub(1,6)=='attack' and 'basic-attack' or 'move',actor=undoing and actor:sub(5) or (deploying or repairing) and actor:sub(7) or actor=='punch' and 'combat' or actor:sub(1,6)=='attack' and actor:sub(7) or actor,fromX=tonumber(fx),fromY=tonumber(fy),toX=tonumber(tx),toY=tonumber(ty)} or nil}
 end
 function M.open(env,json,emit)
     local root=env.os.getenv('ITB_COOP_WIRE_DIR')
@@ -67,7 +68,7 @@ function M.open(env,json,emit)
     function self:arm(context)
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.25.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.26.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')

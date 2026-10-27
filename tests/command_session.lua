@@ -41,6 +41,37 @@ local function completeMove(e,s)
     s:skillEvent('onSkillStart',e.pawn,'Move');s:skillEvent('onSkillEnd',e.pawn,'Move')
     for i=1,3 do e.clock=e.clock+100;s:update()end
 end
+test('Undo binds the last owned move and shares duplicate stale conflict and next-move gates',function()
+ local e,o,r=fixture();o.repeatedTurns=true;local calls,finished=0,false
+ o.undoMove={new=function(_,_,_,emit)
+  local u={arm=function(_,c)return c.restoreWitness=='partial-board:0' end,disarm=function()end,draw=function()end,missionUpdate=function()end,skillEvent=function()end}
+  u.request=function(self,c)calls=calls+1;self.pending=c;return true end
+  u.update=function(self)if self.pending and finished then self.pending=nil;emit('undo_move_postconditions_observed',{})end end
+  u.event=function()end;return u
+ end}
+ local s=session.new(o);assert(not s:undoTarget('guest','artillery'))
+ assert(s:submit('guest',r()).status=='pending');completeMove(e,s);assert(s.revision==1)
+ local target=s:undoTarget('guest','artillery');assert(target.fromY==2 and target.toY==3)
+ assert(not s:undoTarget('host','artillery'));target.toY=7;assert(s:undoTarget('guest','artillery').toY==3)
+ local undo={id='undo-guest-1',session='s1',encounter='enc1',phase='player2',revision=1,witness=e.witness,kind='undo-move',actor='artillery',fromX=1,fromY=2,toX=1,toY=3}
+ assert(not s:previewAction('host',undo));assert(s:submit('host',undo).reason=='actor-not-owned')
+ local bad={};for k,v in pairs(undo)do bad[k]=v end;bad.id='wrong';bad.toY=4
+ assert(s:submit('guest',bad).reason=='no-current-owned-move-to-undo' and calls==0)
+ assert(s:previewAction('guest',undo));assert(s:submit('guest',undo).status=='pending' and calls==1)
+ assert(not s:undoTarget('guest','artillery'));assert(s:submit('guest',undo).status=='duplicate' and calls==1)
+ bad.id=undo.id;assert(s:submit('guest',bad).reason=='request-id-conflict')
+ s:update();assert(s.revision==1);finished=true;e.pawn.position={x=1,y=3};e.pawn.spent=false;s:update();assert(s.revision==2)
+ bad.id='stale';bad.toY=3;assert(s:submit('guest',bad).reason=='stale-revision-renew-intent')
+ local nextMove=r('move','after-undo');nextMove.revision=2;assert(s:submit('guest',nextMove).status=='pending' and e.moveCalls==2)
+end)
+test('another admitted action invalidates Undo and unsolicited Undo stops protected',function()
+ local e,o,r=fixture();o.repeatedTurns=true
+ o.undoMove={new=function()return {update=function()end,skillEvent=function()end}end}
+ local s=session.new(o);assert(s:submit('guest',r()).status=='pending');completeMove(e,s);assert(s:undoTarget('guest','artillery'))
+ local attack=r('lab-punch','attack-after-move');attack.revision=1
+ assert(s:submit('host',attack).status=='pending');assert(not s:undoTarget('guest','artillery'))
+ s:undoEvent(e.mission,e.pawn,{x=1,y=2});assert(s.stopped)
+end)
 test('Repair shares ownership, stale, conflicting, duplicate and observed revision gates',function()
  local e,o=fixture();o.repeatedTurns=true;local calls,finish=0,false
  o.attack={new=function(_,_,_,emit)

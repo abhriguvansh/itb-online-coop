@@ -52,6 +52,18 @@ end)
 test('already selected actor needs only destination click',function()
     local e,n,b,c,v=fixture();e.selected=e.pawn;b:start(c,v);assert(#n.calls==0);e.clock=100;b:update();assert(#n.calls==0);e.preview();e.clock=200;b:update();assert(#n.calls==1)
 end)
+test('Undo selects its actor then submits the observed button once with SDL release evidence',function()
+    local e,n,b,c,v=fixture();c.undo=true;e.pawn.IsUndoPossible=function()return true end
+    b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();assert(#n.calls==1)
+    e.selected=e.pawn;b:update();e.clock=300;b:update();e.delayRelease=true;e.clock=400;b:update()
+    assert(#n.calls==2 and n.calls[2].x==347 and n.calls[2].y==180 and b.phase=='submitted')
+    assert(not b:submissionReleased());e.release();b:update();assert(b:submissionReleased())
+    b:update();assert(#n.calls==2)
+end)
+test('Undo rejects lost native availability before its one button click',function()
+    local e,n,b,c,v=fixture();c.undo=true;e.selected=e.pawn;e.pawn.IsUndoPossible=function()return false end
+    b:start(c,v);e.clock=100;b:update();e.clock=200;assert(not pcall(function()b:update()end) and #n.calls==0)
+end)
 for _,change in ipairs({'valid','roundtrip','width','scale','weapon'}) do
     test('reject changed '..change..' before destination',function()
         local e,n,b,c,v=fixture();b:start(c,v);e.clock=100;b:update();e.clock=200;b:update();e.selected=e.pawn;b:update();e.clock=300;b:update();e.clock=400

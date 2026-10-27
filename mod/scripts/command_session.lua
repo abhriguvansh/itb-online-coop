@@ -24,7 +24,7 @@ local function envelope(r)
         return id(r.actor) and r.confirmUnused==nil and r.fromX==-1 and r.fromY==-1
             and integer(r.toX) and r.toX<=7 and integer(r.toY) and r.toY<=7
     end
-    if (r.kind ~= 'move' and r.kind ~= 'lab-punch' and r.kind ~= 'basic-attack' and r.kind~='repair') or not id(r.actor) or r.confirmUnused~=nil then return false end
+    if (r.kind ~= 'move' and r.kind ~= 'undo-move' and r.kind ~= 'lab-punch' and r.kind ~= 'basic-attack' and r.kind~='repair') or not id(r.actor) or r.confirmUnused~=nil then return false end
     for _,k in ipairs({'fromX','fromY','toX','toY'}) do if not integer(r[k]) or r[k] > 7 then return false end end
     return r.kind~='repair' or r.fromX==r.toX and r.fromY==r.toY
 end
@@ -43,7 +43,7 @@ function M.new(o)
     end
     local self = {revision=0, stopped=false,phase=o.phase,turn=o.env.Game:GetTurnCount()}
     local records, count, pending, observed = {}, 0, nil, false
-    local move, attack, ending, deployment
+    local move, attack, ending, deployment, undo
     local ready={}
     local function protectStop() if o.stopProtection then pcall(o.stopProtection) end end
     local function emit(kind,data)
@@ -73,7 +73,7 @@ function M.new(o)
             for i=1,pawns:size() do assert(localIds[pawns:index(i)], 'unmapped-friendly') end
         end)
         if not inventoryOk then self:stop('friendly-inventory-changed'); return false end
-        if move.fault or attack.fault or (ending and ending.fault) or (deployment and deployment.fault) then self:stop('diagnostic-fault'); return false end
+        if move.fault or attack.fault or (undo and undo.fault) or (ending and ending.fault) or (deployment and deployment.fault) then self:stop('diagnostic-fault'); return false end
         return not self.stopped
     end
     local function labEvent(kind,data)
@@ -83,9 +83,9 @@ function M.new(o)
         if self.stopped then error(self.reason) end
         if pending then
             local expected = pending.request.kind=='deployment-confirm' and 'deployment_launch_observed' or pending.request.kind=='deploy' and 'deployment_postconditions_observed' or pending.request.kind == 'move' and 'move_postconditions_observed'
-                or pending.request.kind=='end-turn' and 'end_turn_postconditions_observed' or 'attack_postconditions_observed'
+                or pending.request.kind=='undo-move' and 'undo_move_postconditions_observed' or pending.request.kind=='end-turn' and 'end_turn_postconditions_observed' or 'attack_postconditions_observed'
             if kind == expected then observed=true end
-            if kind == 'move_failed' or kind == 'attack_failed' or kind == 'attack_outcome_timeout' or kind=='end_turn_failed' or kind=='deployment_failed' then
+            if kind == 'move_failed' or kind == 'undo_move_failed' or kind == 'attack_failed' or kind == 'attack_outcome_timeout' or kind=='end_turn_failed' or kind=='deployment_failed' then
                 self:stop(kind)
             end
         end
@@ -95,6 +95,7 @@ function M.new(o)
     move.bridge = o.bridge
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
     attack.bridge=o.bridge
+    if o.undoMove and o.repeatedTurns then undo=o.undoMove.new(o.env,move,o.gate,labEvent,o.capture,o.json);undo.bridge=o.bridge end
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture,o.phaseSettled) end
     if o.deployment then deployment=o.deployment.new(o.env,o.native,labEvent,o.capture,o.json,o.phaseSettled) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
@@ -109,6 +110,25 @@ function M.new(o)
             self:stop('observation-unavailable'); return nil
         end
         return value
+    end
+    local function undoMatch(peer,r)
+        local m=self.lastMove
+        return undo and m and m.peer==peer and m.actor==r.actor and m.revision==self.revision
+            and m.phase==self.phase and m.turn==self.turn and r.fromX==m.toX and r.fromY==m.toY
+            and r.toX==m.fromX and r.toY==m.fromY
+    end
+    local function commandFor(r,entity)
+        if r.kind=='deployment-confirm' then return {launch=true} end
+        if not entity then return nil end
+        return {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
+            mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn,
+            restoreWitness=r.kind=='undo-move' and self.lastMove and self.lastMove.witness or nil}
+    end
+    function self:undoTarget(peer,actor)
+        local m=self.lastMove
+        if not undo or not m or m.peer~=peer or m.actor~=actor or m.revision~=self.revision
+            or m.phase~=self.phase or m.turn~=self.turn or pending or self.stopped then return nil end
+        return {fromX=m.toX,fromY=m.toY,toX=m.fromX,toY=m.fromY}
     end
     function self:setReady(peer,phase,revision,value,confirmUnused)
         if self.terminal then return false end
@@ -145,6 +165,7 @@ function M.new(o)
         local current=witness()
         if self.stopped then return reject(self.reason) end
         if r.witness ~= current then return reject('stale-observation-renew-intent') end
+        if r.kind=='undo-move' and not undoMatch(peer,r) then return reject('no-current-owned-move-to-undo') end
         if r.kind=='end-turn' or r.kind=='deployment-confirm' then
             if r.kind=='end-turn' and not ending then return reject('end-turn-unavailable') end
             for player in pairs(players) do
@@ -159,8 +180,8 @@ function M.new(o)
         if r.kind == 'lab-punch' and (entity.pawnId ~= 0 or r.fromX ~= 3 or r.fromY ~= 3 or r.toX ~= 2 or r.toY ~= 3) then
             return reject('unsupported-punch-scenario')
         end
-        local lab = (r.kind=='deploy' or r.kind=='deployment-confirm') and deployment or r.kind == 'move' and move or r.kind=='end-turn' and ending or attack
-        local command=r.kind=='deployment-confirm' and {launch=true} or entity and {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn}
+        local lab = (r.kind=='deploy' or r.kind=='deployment-confirm') and deployment or r.kind == 'move' and move or r.kind=='undo-move' and undo or r.kind=='end-turn' and ending or attack
+        local command=commandFor(r,entity)
         local ok,armed = pcall(function() return lab:arm(command) end)
         if not ok then self:stop('validation-exception'); return reject(self.reason) end
         if not armed then return reject('diagnostic-validation:'..tostring(lab.status)) end
@@ -170,10 +191,10 @@ function M.new(o)
         end
         -- Arm and validation can call engine getters. Recheck before reserving execution.
         if not health() or r.witness ~= witness() then
-            if lab==deployment then deployment.armed=false elseif r.kind == 'move' then move.armed=false elseif r.kind=='end-turn' then ending.armed=false else attack:disarm() end
+            if lab==deployment then deployment.armed=false elseif r.kind == 'move' then move.armed=false elseif r.kind=='end-turn' then ending.armed=false else lab:disarm() end
             return reject(self.reason or 'stale-observation-renew-intent')
         end
-        pending=rec; observed=false; rec.status='pending';ready={}
+        pending=rec; observed=false; rec.status='pending';rec.peer=peer;ready={};self.lastMove=nil
         emit('command_admitted',{id=r.id,peer=peer,kind=r.kind,actor=r.actor,revision=self.revision})
         if self.stopped then rec.status='uncertain'; rec.reason=self.reason; return result(rec) end
         local called,accepted=pcall(function() return lab:request(command) end)
@@ -235,16 +256,18 @@ function M.new(o)
         else
             local entity=registry[r.actor]
             if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
-            if r.kind=='basic-attack' or r.kind=='repair' then
+            if r.kind=='undo-move' then
+                if not undoMatch(peer,r) then return false,'no-current-owned-move-to-undo' end
+            elseif r.kind=='basic-attack' or r.kind=='repair' then
                 if not o.repeatedTurns then return false,'basic-attack-unavailable' end
             elseif entity.pawnId~=0 or r.fromX~=3 or r.fromY~=3 or r.toX~=2 or r.toY~=3 then return false,'unsupported-punch-scenario' end
-            lab=attack
+            lab=r.kind=='undo-move' and undo or attack
         end
         local entity=registry[r.actor]
-        local command=entity and {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},turn=self.turn,mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery'}
+        local command=commandFor(r,entity)
         local ok,armed=pcall(function()return lab:arm(command)end)
         local reason=lab.status
-        if lab==attack then attack:disarm() else lab.armed=false end
+        if lab==attack or lab==undo then lab:disarm() else lab.armed=false end
         if not ok then self:stop('validation-exception');return false,self.reason end
         if not armed then return false,reason end
         if not health() or r.witness~=witness() then return false,self.reason or 'stale-draft-renew-intent' end
@@ -257,10 +280,10 @@ function M.new(o)
             return
         end
         if not health() then return end
-        local ok = pcall(function() move:update(); attack:update();if ending then ending:update() end;if deployment then deployment:update() end end)
+        local ok = pcall(function() move:update(); attack:update();if undo then undo:update() end;if ending then ending:update() end;if deployment then deployment:update() end end)
         if not ok then self:stop('update-exception'); return end
         if not health() then return end
-        if pending and observed and not move.pending and not attack.pending and not (ending and ending.pending) and not (deployment and deployment.pending) then
+        if pending and observed and not move.pending and not attack.pending and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
             if pending.request.kind=='deployment-confirm' then self.turn=1;self.phase='player1'
             elseif pending.request.kind=='end-turn' then
                 self.turn=self.turn+1;self.phase='player'..self.turn
@@ -269,10 +292,17 @@ function M.new(o)
                 if o.repeatedTurns then move.usedPawns={} end
             end
             self.revision=self.revision+1
+            if pending.request.kind=='move' then
+                local r=pending.request
+                self.lastMove={peer=pending.peer,actor=r.actor,revision=self.revision,phase=self.phase,turn=self.turn,
+                    fromX=r.fromX,fromY=r.fromY,toX=r.toX,toY=r.toY,witness=r.witness}
+            elseif pending.request.kind=='undo-move' then
+                move.usedPawns[registry[pending.request.actor].pawnId]=nil
+            end
             pending.status='observed'; pending.revision=self.revision
             emit('command_observed',{id=pending.request.id,revision=self.revision,proofOfQuiescence=false,proofOfPeerAgreement=false})
             pending=nil; observed=false; move.armed=false
-        elseif pending and not move.pending and not attack.pending and not (ending and ending.pending) and not (deployment and deployment.pending) then
+        elseif pending and not move.pending and not attack.pending and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
             self:stop('missing-completion-evidence')
         end
     end
@@ -301,8 +331,8 @@ function M.new(o)
         emit('command_observed',{id=pending.request.id,revision=self.revision,terminal=true,proofOfPeerAgreement=false})
         pending=nil;self.terminal.completed=true
     end
-    function self:draw() if self.terminal then return end;if attack.draw then attack:draw() end;if ending then ending:draw() end;if deployment then deployment:draw() end end
-    function self:missionUpdate() if self.terminal then return end;if attack.missionUpdate then attack:missionUpdate() end;if ending then ending:missionUpdate() end;if deployment then deployment:missionUpdate() end end
+    function self:draw() if self.terminal then return end;if attack.draw then attack:draw() end;if undo then undo:draw() end;if ending then ending:draw() end;if deployment then deployment:draw() end end
+    function self:missionUpdate() if self.terminal then return end;if attack.missionUpdate then attack:missionUpdate() end;if undo then undo:missionUpdate() end;if ending then ending:missionUpdate() end;if deployment then deployment:missionUpdate() end end
     function self:deploymentEvent(name,id)
         if not deployment or self.stopped then return end
         if not pending or (pending.request.kind~='deploy' and pending.request.kind~='deployment-confirm') then self:stop('unrequested-deployment-transition');return end
@@ -312,8 +342,16 @@ function M.new(o)
     function self:setBlocked(value) move.blocked=value;if ending then ending.blocked=value end end
     function self:skillEvent(kind,pawn,weapon)
         if self.stopped then return end
-        local ok=pcall(function() move:skillEvent(kind,pawn,weapon); attack:skillEvent(kind,pawn,weapon) end)
+        local ok=pcall(function() move:skillEvent(kind,pawn,weapon); attack:skillEvent(kind,pawn,weapon);if undo then undo:skillEvent() end end)
         if not ok then self:stop('hook-exception') end
+    end
+    function self:undoEvent(mission,pawn,previous)
+        if self.stopped then return end
+        local ok,why=pcall(function()
+            assert(undo and pending and pending.request.kind=='undo-move','unrequested-undo')
+            undo:event(mission,pawn,previous)
+        end)
+        if not ok then self:stop('undo-hook:'..tostring(why)) end
     end
     -- Persistence boundary intentionally has no restore operation in this non-resumable experiment.
     function self:checkpoint() return nil,'unsupported-non-resumable-experiment' end

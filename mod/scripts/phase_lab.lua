@@ -119,7 +119,7 @@ function M.install(env,mod,native,path)
             phase=deploying and 'deployment' or finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
-            attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
+            attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),undoMove=require(path..'undo_move'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
             deployment=deploying and deploymentModule or nil,fullMission=wire and wire.fullMission,
             phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
@@ -241,6 +241,12 @@ function M.install(env,mod,native,path)
         local event=name
         env.modapiext.events[event]:subscribe(function(_,pawn,weapon) if self.session then self.session:skillEvent(event,pawn,weapon) end end)
     end
+    env.modapiext.events.onPawnUndoMove:subscribe(function(mission,pawn,previous)
+        if self.session then self.session:undoEvent(mission,pawn,previous) end
+    end)
+    env.modapiext.events.onResetTurn:subscribe(function()
+        if self.session then self.session:stop('unsupported-reset-turn') end
+    end)
     env.modApi.events.onMissionDismissed:subscribe(function(mission) if self.result then self.result:dismissed(mission) end end)
     for _,name in ipairs({'onDeploymentPhaseStart','onPawnSelectedForDeployment','onPawnUnselectedForDeployment','onPawnDeployed','onPawnUndeployed','onLandingPhaseStart','onPawnLanding','onPawnLanded','onDeploymentPhaseEnd'}) do
         local event=name

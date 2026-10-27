@@ -6,7 +6,7 @@ for(const actor of ['combat','cannon','artillery']){
  assert(gameFrame(m).includes('|repair'+actor+'|1|5|1|5\n'));
  assert.throws(()=>gameFrame({...m,move:{...m.move,toX:2}}));
 }
-for(const actor of ['combat','cannon','artillery'])for(const kind of ['move','basic-attack','deploy']){
+for(const actor of ['combat','cannon','artillery'])for(const kind of ['move','undo-move','basic-attack','deploy']){
  const m={...base,kind:'EXEC',peer:'guest',move:{actor,kind,fromX:kind==='deploy'?-1:1,fromY:kind==='deploy'?-1:5,toX:2,toY:5}};
  const p=packet(m),cut=p.indexOf(10);assert.equal(Number(p.subarray(0,cut).toString()),p.length-cut-1);
  assert(p.toString().includes(kind==='deploy'?'deploy'+actor:kind==='basic-attack'?'attack'+actor:actor));

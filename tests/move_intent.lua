@@ -33,6 +33,15 @@ ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==
 ui:click(20,610,s);assert(readyCount==1)
 print('2 selected punch/readiness UI contracts passed; fake clicks only.')
 do
+ wire.repeatedTurns=true;wire.peer='guest';wire.inputReady=true;wire.readyInput=false;s.revision=3
+ s.undoTarget=function(_,peer,actor)if peer=='guest' and actor=='artillery' then return {fromX=1,fromY=2,toX=0,toY=3}end end
+ s.previewAction=function(_,peer,r)return peer=='guest' and r.kind=='undo-move' end
+ ui:update(s,false);ui:click(20,890,s);assert(not ui.draft)
+ ui:click(20,470,s);ui:click(20,890,s);assert(ui.draft and ui.draft.kind=='undo-move' and ui.draft.toX==0)
+ local before=#sent;ui:click(20,610,s);assert(#sent==before+1 and sent[#sent].kind=='undo-move')
+ wire.repeatedTurns=false
+end
+do
  wire.repeatedTurns=true;wire.peer='host';wire.inputReady=true;wire.readyInput=false;s.revision=3
  s.previewAction=function(_,peer,r)return peer=='host' and r.kind=='repair' and r.fromX==r.toX and r.fromY==r.toY end
  ui:update(s,false);ui:click(20,770,s);assert(not ui.draft)

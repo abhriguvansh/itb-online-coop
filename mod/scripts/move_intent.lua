@@ -58,6 +58,16 @@ function M.new(o)
                 self.draft=r;self.attacking=false;self.repairing=true;self.status='Repair '..actors[self.actor].label..' - Confirm repair'
                 o.emit('move_intent_draft',{request=r,peer=o.wire.peer});return
             end
+            if o.wire.repeatedTurns and y>=880 and y<916 and not self.placing then
+                if not self.actor then reject('Choose your mech before Undo');return end
+                local target=s:undoTarget(o.wire.peer,self.actor)
+                if not target then reject('Only your immediately preceding move can be undone');return end
+                self.counter=self.counter+1;assert(self.counter<=999,'intent-limit')
+                local r=o.request('undo-move','undo-'..o.wire.peer..'-'..self.counter,self.actor,target.fromX,target.fromY,target.toX,target.toY)
+                local ok,reason=preview(s,r);if not ok then reject(reason);return end
+                self.draft=r;self.attacking=false;self.repairing=false;self.status='Undo '..actors[self.actor].label..' - Confirm undo'
+                o.emit('move_intent_draft',{request=r,peer=o.wire.peer});return
+            end
             if o.wire.repeatedTurns and y>=680 and y<716 then self.attacking=not self.attacking;self.repairing=false;self.draft=nil;self.status=self.attacking and 'Basic weapon selected' or 'Movement selected';return end
             if y>=640 and y<676 then self.actor=nil;self.draft=nil;self.status='Move canceled; choose a mech';return end
             if y>=600 and y<636 then
@@ -117,13 +127,13 @@ function M.new(o)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
-            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech') end
+            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech');label('undo',880,'Prepare Undo of last owned move') end
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
         self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'
-            or self.placing and 'Confirm placement' or self.draft and self.draft.kind=='repair' and 'Confirm repair' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
+            or self.placing and 'Confirm placement' or self.draft and self.draft.kind=='undo-move' and 'Confirm undo' or self.draft and self.draft.kind=='repair' and 'Confirm repair' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
         if o.inspection then o.inspection:draw(root,visible) end
     end
     return self

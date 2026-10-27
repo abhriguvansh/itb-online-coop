@@ -94,6 +94,7 @@ function bridge.new(env, native, emit)
         assert(native and native.info().abi=='itb-win32-click-v3','native-bridge-unavailable')
         local valid,reason=validate();assert(valid,reason)
         local selected=env.Board:GetSelectedPawn()
+        assert(not command.undo or not command.weapon,'undo-weapon-conflict')
         -- Pinned loader modapi/pawn.lua maps weapon index 0 to the Move skill.
         assert(not selected or selected:GetArmedWeaponId()==-1 or selected:GetArmedWeaponId()==0,'weapon-armed')
         self.command,self.validate=command,validate
@@ -116,6 +117,7 @@ function bridge.new(env, native, emit)
             native=native.info(),proofOfInputAuthorization=false})
         if not selected or selected:GetId()~=command.pawnId then
             aim(self.from,'aim-selection')
+        elseif command.undo then aim({x=347,y=180},'aim-undo')
         elseif command.weapon then aim(self.weaponPoint,'aim-weapon')
         else aim(self.to,'aim-destination') end
     end
@@ -137,9 +139,10 @@ function bridge.new(env, native, emit)
         if self.phase=='selecting' then
             if pawn and pawn:GetId()==self.command.pawnId then
                 local armed=pawn:GetArmedWeaponId()
-                assert(armed==0 or (self.command.weapon and armed==-1),'movement-not-armed-after-selection')
+                assert(armed==0 or ((self.command.weapon or self.command.undo) and armed==-1),'movement-not-armed-after-selection')
                 emit('ui_bridge_actor_selected',{pawnId=pawn:GetId(),armedWeaponId=pawn:GetArmedWeaponId()})
-                if self.command.weapon then aim(self.weaponPoint,'aim-weapon') else aim(self.to,'aim-destination') end
+                if self.command.undo then aim({x=347,y=180},'aim-undo')
+                elseif self.command.weapon then aim(self.weaponPoint,'aim-weapon') else aim(self.to,'aim-destination') end
             end
             return
         end
@@ -174,6 +177,14 @@ function bridge.new(env, native, emit)
             local sent,count=native.click(self.aimPoint.x,self.aimPoint.y)
             emit('ui_bridge_weapon_queued',{accepted=sent,events=count,pawnId=pawn:GetId()});assert(sent,'weapon-queue-failed');return
         end
+        if self.phase=='aim-undo' then
+            assert(pawn and pawn:GetId()==self.command.pawnId and pawn:GetArmedWeaponId()<=0
+                and pawn:IsUndoPossible(),'undo-selection-changed')
+            self.phase='submitted';self.releaseExpected=self.releasesSeen+1
+            local sent,count=native.click(self.aimPoint.x,self.aimPoint.y)
+            emit('ui_bridge_undo_queued',{accepted=sent,events=count,pawnId=pawn:GetId(),native=native.info()})
+            assert(sent,'undo-queue-uncertain');return
+        end
         assert(same(env.screenPointToTile({x=input.mouseX,y=input.mouseY},false),aimedTile),
             'delivered-cursor-wrong-tile')
         if self.phase=='aim-selection' then
@@ -195,6 +206,10 @@ function bridge.new(env, native, emit)
             emit('ui_bridge_destination_queued',{accepted=sent,events=count,pawnId=pawn:GetId(),native=native.info()})
             assert(sent,'destination-queue-failed')
         end
+    end
+    function self:submissionReleased()
+        local n=native.info()
+        return self.phase=='submitted' and not self.releaseExpected and not n.pressed and not n.releaseFailed
     end
     return self
 end
