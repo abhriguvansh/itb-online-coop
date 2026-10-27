@@ -48,6 +48,7 @@ function M.install(env,mod,native,path)
         if event=='onMissionChanged' or event=='onGameExited' or event=='onProfileChanged' then self.freshDeployment=false end
         if event=='onMissionEnd' and mod.movement:profileAllowed() then self.resultTrace:begin(mission,detail) end
         if not self.session then return false end
+        if self.session:resetContext(event,mission,detail) then return true end
         local ok,handled=pcall(function()
             if self.result and event=='onMissionEnd' and self.session:beginTerminal(mission) then
                 self.result:start(mission,detail);return true
@@ -69,7 +70,7 @@ function M.install(env,mod,native,path)
         return {session=self.identity,encounter='artillery-checkpoint',phase=self.session.phase,
             revision=self.session.revision,witness=rejectionProbe and 'unadmittable-phase-rejection-probe' or witness(),id=id,kind=kind,actor=actor,
             fromX=fx,fromY=fy,toX=tx,toY=ty,confirmUnused=kind=='end-turn' and true or nil,
-            confirmDeployment=kind=='deployment-confirm' and true or nil}
+            confirmDeployment=kind=='deployment-confirm' and true or nil,confirmReset=kind=='reset-turn' and true or nil}
     end
     local function planned()
         local n=self.session.revision
@@ -119,7 +120,7 @@ function M.install(env,mod,native,path)
             phase=deploying and 'deployment' or finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
-            attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),undoMove=require(path..'undo_move'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
+            attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),undoMove=require(path..'undo_move'),resetTurn=require(path..'reset_turn'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
             deployment=deploying and deploymentModule or nil,fullMission=wire and wire.fullMission,
             phaseSettled=self.spawns and function(turn) return self.spawns:settled(turn) end or nil,
@@ -244,9 +245,11 @@ function M.install(env,mod,native,path)
     env.modapiext.events.onPawnUndoMove:subscribe(function(mission,pawn,previous)
         if self.session then self.session:undoEvent(mission,pawn,previous) end
     end)
-    env.modapiext.events.onResetTurn:subscribe(function()
-        if self.session then self.session:stop('unsupported-reset-turn') end
+    env.modapiext.events.onResetTurn:subscribe(function(mission)
+        if self.session then self.session:resetEvent(mission) end
     end)
+    env.modApi.events.onPreLoadGame:subscribe(function()if self.session then self.session:resetLoadEvent('pre-load') end end)
+    env.modApi.events.onPostLoadGame:subscribe(function()if self.session then self.session:resetLoadEvent('post-load') end end)
     env.modApi.events.onMissionDismissed:subscribe(function(mission) if self.result then self.result:dismissed(mission) end end)
     for _,name in ipairs({'onDeploymentPhaseStart','onPawnSelectedForDeployment','onPawnUnselectedForDeployment','onPawnDeployed','onPawnUndeployed','onLandingPhaseStart','onPawnLanding','onPawnLanded','onDeploymentPhaseEnd'}) do
         local event=name

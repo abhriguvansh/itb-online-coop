@@ -1,6 +1,6 @@
 // The existing game decoder's text format over a length-prefixed TCP stream.
 const assert=require('node:assert/strict');
-const kinds=['PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE'];
+const kinds=['PING','STOP','PROPOSE','READY','CONSENT','RESETREADY','RESETCONSENT','RESETCANCEL','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE'];
 function gameFrame(f){
  assert(typeof f.session==='string'&&/^[a-f0-9-]{36}$/.test(f.session));
  assert(typeof f.witness==='string');

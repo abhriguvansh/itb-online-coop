@@ -69,7 +69,7 @@ function M.exchange(env,path,emit)
     end
     local function write(name,value)
         assert(not read(name),'bootstrap-output-already-exists')
-        value.session=session;value.peer=peer;value.probe='0.26.0';value.fixture='tides-fresh-v1'
+        value.session=session;value.peer=peer;value.probe='0.27.0';value.fixture='tides-fresh-v1'
         value.game='1.2.93';value.abi='itb-initial-choices-v1'
         if env.ITBCoopTransport then env.ITBCoopTransport:send(value);return end
         local target=root..'/'..name;local f=assert(env.io.open(target..'.tmp','wb'),'bootstrap-output-open')

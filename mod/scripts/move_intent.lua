@@ -27,6 +27,12 @@ function M.new(o)
         if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=720 and y<756 and not s.stopped then
             o.wire:ready(s,o.request('end-turn','end-turn-'..s.revision));self.actor=nil;self.draft=nil;return
         end
+        if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=960 and y<996 and not s.stopped then
+            if o.wire.resetSent then reject('Reset approval already recorded; another action cancels it');return end
+            local r=o.request('reset-turn','reset-turn-'..s.revision)
+            local ok,why=s:canReset(o.wire.peer,r.phase,r.revision,r.witness);if not ok then reject(why);return end
+            o.wire:resetReady(s,r);self.actor=nil;self.draft=nil;self.status='Reset approved; waiting for teammate';return
+        end
         if o.wire.phaseRun and o.wire.readyInput and not s.stopped then
             if x>=8 and x<298 and y>=600 and y<636 then
                 local r=o.request('end-turn',o.wire.repeatedTurns and 'end-turn-'..s.revision or 'end-turn')
@@ -127,11 +133,12 @@ function M.new(o)
             for i,actor in ipairs({'combat','cannon','artillery'}) do
                 label(actor,340+i*40,actors[actor].label..' ('..actors[actor].owner..')')
             end
-            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech');label('undo',880,'Prepare Undo of last owned move') end
+            if o.wire.repeatedTurns then label('attack',680,'Toggle move / basic weapon');label('endTurn',720,'Ready End Turn (unused units OK)');label('repair',760,'Prepare Repair for selected mech');label('undo',880,'Prepare Undo of last owned move');label('reset',960,'Request Reset (both must agree)') end
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end
         self.controls.status:caption(self.status)
+        if self.controls.reset then self.controls.reset:caption(o.wire.resetPending and (o.wire.resetSent and 'Reset approved; action cancels vote' or 'Approve teammate Reset request') or 'Request Reset (both must agree)') end
         self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'
             or self.placing and 'Confirm placement' or self.draft and self.draft.kind=='undo-move' and 'Confirm undo' or self.draft and self.draft.kind=='repair' and 'Confirm repair' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')
         if o.inspection then o.inspection:draw(root,visible) end

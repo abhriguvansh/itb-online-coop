@@ -1,7 +1,7 @@
 local mod = {
     id = 'aman_itb_coop_probe',
     name = 'ITB Co-op Capability Probe',
-    version = '0.26.0',
+    version = '0.27.0',
     modApiVersion = '2.9.6',
     gameVersion = '1.2.93',
     description = 'Experimental co-op research probe for ITB_Coop_Probe; not a playable release.',
@@ -114,6 +114,9 @@ function mod:init()
 end
 
 function mod:load()
+    if self.phaseLab and self.phaseLab.session and self.phaseLab.session:resetModLoad() then
+        self.probe:load();self.moveTrace:reset();return
+    end
     if self.phaseLab and self.phaseLab.session then self.phaseLab.session:stop('mod-load') end
     self.attack:reset('mod-load')
     self.inputGate:stop('mod-load', true)

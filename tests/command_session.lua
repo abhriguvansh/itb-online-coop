@@ -349,4 +349,47 @@ test('deployment launch needs both exact consents and only observed launch admit
  e.launchObserved=true;s:update();assert(s.phase=='player1' and s.turn==1 and s.revision==1)
  local stale=request('stale');assert(s:submit('host',stale).reason=='wrong-context' and calls==1)
 end)
+test('Reset requires a fresh completed phase and distinct unanimous consent without rewinding history',function()
+ local e,o,_,ending,_,make=endFixture();o.repeatedTurns=true
+ o.attack={new=function(_,_,_,emit)
+  local a={arm=function()return true end,disarm=function()end,skillEvent=function()end}
+  a.request=function()a.pending=true;return true end
+  a.update=function()if a.pending and not e.actor.active then a.pending=nil;emit('attack_postconditions_observed',{})end end
+  return a
+ end}
+ local reset,calls,finished=nil,0,false
+ o.resetTurn={new=function(_,_,emit)
+  reset={arm=function(self,c)self.armed=true;self.command=c;return c.actionObserved and c.restoreWitness=='turn-start' end,loading=function(self)return self.loadingNow end}
+  reset.request=function(self,c)assert(c.restoreWitness=='turn-start');calls=calls+1;self.pending=c;return true end
+  reset.update=function(self)if self.pending and finished then self.pending=nil;emit('reset_turn_postconditions_observed',{remaining=0})end end
+  reset.modLoad=function()return true end;reset.loadEvent=function()end;reset.event=function()end;reset.skillEvent=function()end
+  return reset
+ end}
+ local s=session.new(o)
+ assert(not s:canReset('guest',s.phase,s.revision,e.witness))
+ assert(s:setReady('host',s.phase,0,e.witness,true));assert(s:setReady('guest',s.phase,0,e.witness,true))
+ assert(s:submit('host',ending).status=='pending');e.phaseComplete=true;e.turn=3;e.witness='turn-start';s:update();e.phaseComplete=false
+ assert(s.resetBase.witness=='turn-start' and s.revision==1 and s.phase=='player3')
+ local moved=make('move','before-reset');moved.phase=s.phase;moved.revision=1
+ assert(s:submit('guest',moved).status=='pending');completeMove(e,s);e.witness='moved'
+ assert(s.revision==2);assert(not s:canReset('guest',s.phase,2,e.witness),'movement alone must not enable Reset')
+ local attack=make('lab-punch','action-before-reset');attack.phase=s.phase;attack.revision=2
+ assert(s:submit('host',attack).status=='pending');completeAttack(e,s);e.witness='acted'
+ assert(s.revision==3 and s:canReset('guest',s.phase,3,e.witness))
+ local function request(id)return {session='s1',encounter='enc1',phase=s.phase,revision=s.revision,witness=e.witness,id=id,kind='reset-turn',confirmReset=true}end
+ assert(s:setReady('host',s.phase,3,e.witness,true));assert(s:setReady('guest',s.phase,3,e.witness,true))
+ assert(s:submit('host',request('wrong-consents')).reason=='both-players-must-be-ready')
+ assert(s:setReady('host',s.phase,3,e.witness,true,'reset-turn'))
+ assert(not s:previewAction('host',request('one-vote')) and calls==0)
+ assert(s:setReady('guest',s.phase,3,e.witness,true,'reset-turn'))
+ local r=request('reset-current');assert(s:previewAction('host',r));assert(s:submit('host',r).status=='pending' and calls==1)
+ assert(s:resetModLoad());reset.loadingNow=true;local board=e.Board;e.Board=nil;s:update();assert(not s.stopped and s.revision==3)
+ assert(s:submit('host',r).status=='duplicate' and calls==1)
+ e.Board=board;e.witness='turn-start';finished=true;s:update()
+ assert(not s.stopped and s.revision==4 and s.turn==3 and s.resetRemaining==0 and not s.resetAction)
+ assert(s:submit('guest',moved).status=='duplicate' and e.moveCalls==1)
+ e.pawn.position={x=1,y=3};e.pawn.spent=false
+ local after=make('move','after-reset');after.phase=s.phase;after.revision=4
+ assert(s:submit('guest',after).status=='pending' and e.moveCalls==2)
+end)
 print('Shared command session contracts: '..passed..' passed (real Lua diagnostics, mocked game/guard).')

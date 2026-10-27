@@ -24,7 +24,7 @@ function Write-Frame($frame){
     }
     if($script:incoming-gt$frameLimit){throw 'Incoming frame limit'}
     $spawnFrame=$frame.kind-in@('SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE')
-    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'\r' -or (-not$spawnFrame-and$frame.witness-match'\n')){throw 'Invalid coordinator frame'}
+    if($frame.session-ne$config.session -or $frame.kind-notin@('PING','STOP','PROPOSE','READY','CONSENT','RESETREADY','RESETCONSENT','RESETCANCEL','EXEC','DONE','INPUT','PREPARE','SPAWNSELECT','SPAWNAPPLY','SPAWNRELEASE','RESULTCONTINUE','RESULTDONE') -or $frame.peer-notin@('host','guest','-') -or $frame.revision-lt0 -or $frame.revision-gt32 -or $frame.phase-notmatch'^[\w.:-]{1,96}$' -or $frame.id-notmatch'^[\w.:-]{1,96}$' -or $frame.witness.Length-gt65536 -or $frame.witness-match'\r' -or (-not$spawnFrame-and$frame.witness-match'\n')){throw 'Invalid coordinator frame'}
     $header=@($frame.kind,$frame.session,$frame.peer,$frame.revision,$frame.phase,$frame.id)
     if($null-ne$frame.move){
         if($frame.kind-notin@('EXEC','PREPARE') -or $frame.move.actor-notin@('combat','cannon','artillery') -or $frame.move.kind-notin@('move','lab-punch','basic-attack','deploy','repair','undo-move') -or ($frame.move.kind-eq'lab-punch'-and$frame.move.actor-ne'combat')){throw 'Invalid move payload'}

@@ -97,6 +97,10 @@ class PhaseCoordinator{
     return {kind,session:this.session,peer,revision:this.stage,phase:state.phase,id,witness:state.witness};
   }
   both(frame){for(const peer of ['host','guest'])this.send(peer,frame);}
+  cancelReset(){
+    if(this.resetConsents){this.record({type:'reset_cancelled',revision:this.stage});this.both(this.frame('RESETCANCEL','-','reset-turn-'+this.stage));this.resetConsents=null;}
+    if(this.mode==='reset-readiness')this.mode='proposal';
+  }
   advance(){
     this.require(this.states.host.witness===this.states.guest.witness,'observed-state-divergence');
     this.record({type:'barrier',revision:this.stage,witness:this.states.host.witness,fullStateProof:false});
@@ -114,11 +118,24 @@ class PhaseCoordinator{
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.26.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.27.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       if(this.states.host && this.states.guest)this.advance();return;
     }
+    if(m.type==='reset_ready'){
+      this.require(this.interactive&&this.repeatedTurns&&!this.resetUsed&&(this.mode==='proposal'||this.mode==='reset-readiness')&&this.resetBaseWitness&&m.confirmReset===true,'reset-unavailable');
+      this.context(m,this.stage);this.require(m.witness===this.states[peer].witness&&m.witness!==this.resetBaseWitness,'stale-or-empty-reset');
+      if(this.mode==='proposal'){this.resetConsents={};this.mode='reset-readiness';this.both(this.frame('RESETREADY','-','reset-turn-'+this.stage));}
+      this.require(!this.resetConsents[peer],'duplicate-reset-readiness');this.resetConsents[peer]=true;
+      this.record({type:'reset_ready',peer,revision:this.stage});
+      if(this.resetConsents.host&&this.resetConsents.guest){
+        const id='reset-turn-'+this.stage;
+        for(const origin of ['host','guest'])this.both(this.frame('RESETCONSENT',origin,id));
+        this.prepare('host',{session:this.session,encounter:'artillery-checkpoint',phase:this.states.host.phase,revision:this.stage,witness:this.states.host.witness,id,kind:'reset-turn',confirmReset:true});
+      }return;
+    }
     if(m.type==='ready'){
+      if(this.mode==='reset-readiness')this.cancelReset();
       if(this.deployment&&this.stage<4){
         this.require(this.stage===3&&m.confirmDeployment===true&&m.confirmUnused===undefined,'unexpected-deployment-readiness');
         if(this.mode==='proposal'){this.mode='readiness';this.both(this.frame('READY','-','deployment-confirm-3'));}
@@ -139,6 +156,7 @@ class PhaseCoordinator{
       }return;
     }
     if(m.type==='proposal'){
+      if(this.mode==='reset-readiness')this.cancelReset();
       this.require(this.mode==='proposal' && (this.interactive || owners[this.stage]===peer),'unexpected-proposal');
       if(this.interactive){
         const r=m.request,entities={combat:{peer:'host',id:0},cannon:{peer:'guest',id:1},artillery:{peer:'guest',id:2}};
@@ -179,12 +197,17 @@ class PhaseCoordinator{
       this.require(this.mode==='executing' && !this.receipts[peer] && m.id===this.pendingId,'unexpected-outcome');
       this.context(m,this.stage+1);
       this.require(m.native?.guardActive===true && m.native?.sessionState===1 && m.native?.releaseFailed===false,'protection-lost');
+      if(this.pendingKind==='reset-turn'){
+        const comparable=value=>{const s=JSON.parse(value);for(const t of s.tiles||[])if(t.terrain===0&&t.building===false)delete t.health;return canonical(s);};
+        this.require(m.resetRemaining===0&&comparable(m.witness)===comparable(this.resetBaseWitness),'reset-outcome-or-allowance-mismatch');
+      }
       this.receipts[peer]=m;
       if(this.receipts.host && this.receipts.guest){
         for(const p of ['host','guest'])this.states[p]={phase:this.receipts[p].phase,witness:this.receipts[p].witness};
         if(this.pendingKind==='deployment-confirm')this.turn=1;
         if(this.repeatedTurns&&this.pendingKind==='end-turn')this.turn++;
         if(this.interactive&&this.pendingKind==='move')this.lastMove={peer:this.proposal.peer,request:this.proposal.request,revision:this.stage+1};
+        if(this.pendingKind==='end-turn'||this.pendingKind==='deployment-confirm')this.resetBaseWitness=this.states.host.witness;
         this.stage++;this.advance();
       }return;
     }
@@ -206,13 +229,15 @@ class PhaseCoordinator{
   prepare(peer,request){
     this.mode='preparing';this.prepared={};this.prepareDeadline=this.now()+3000;this.proposal={peer,request};
     this.record({type:'prepare',origin:peer,request});
-    this.both({...this.frame('PREPARE',peer,request.id),...(['end-turn','deployment-confirm'].includes(request.kind)?{}:{move:request})});
+    this.both({...this.frame('PREPARE',peer,request.id),...(['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{}:{move:request})});
   }
   dispatch(peer,request){
     this.lastMove=null;
+    this.resetConsents=null;
+    if(request.kind==='reset-turn')this.resetUsed=true;
     this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request});
     this.pendingId=request.id;this.pendingKind=request.kind;
-    this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm'].includes(request.kind)?{move:request}:{})});
+    this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{move:request}:{})});
   }
 }
 function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false){

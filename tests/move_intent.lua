@@ -33,6 +33,17 @@ ui:click(800,600,s);assert(readyCount==0);ui:click(20,610,s);assert(readyCount==
 ui:click(20,610,s);assert(readyCount==1)
 print('2 selected punch/readiness UI contracts passed; fake clicks only.')
 do
+ wire.repeatedTurns=true;wire.inputReady=true;wire.readyInput=false;wire.resetSent=false;s.phase='player3'
+ local votes=0;s.canReset=function()return false,'fresh-turn-start-required' end
+ wire.resetReady=function()votes=votes+1;wire.resetSent=true end
+ ui:click(20,970,s);assert(votes==0 and ui.status=='fresh-turn-start-required')
+ s.canReset=function()return true end;ui.actor='combat';ui.draft={}
+ ui:click(20,970,s);assert(votes==1 and not ui.actor and not ui.draft)
+ ui:click(20,970,s);assert(votes==1)
+ wire.resetSent=false;wire.inputReady=false;ui:click(20,970,s);assert(votes==1)
+ wire.repeatedTurns=false
+end
+do
  wire.repeatedTurns=true;wire.peer='guest';wire.inputReady=true;wire.readyInput=false;s.revision=3
  s.undoTarget=function(_,peer,actor)if peer=='guest' and actor=='artillery' then return {fromX=1,fromY=2,toX=0,toY=3}end end
  s.previewAction=function(_,peer,r)return peer=='guest' and r.kind=='undo-move' end

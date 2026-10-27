@@ -18,6 +18,25 @@ function probe.new(mod, env, json, snapshot, settle)
             and env.Profile.visible_name == 'ITB_Coop_Probe'
     end
     function self:record(kind, payload) emit(kind, payload) end
+    function self:resetTrace(stage,mission)
+        if not env.os or env.os.getenv('ITB_COOP_RESET_TRACE')~='1' or not allowed() then return end
+        local ok,payload=pcall(function()
+            local current=env.GetCurrentMission()
+            local saved,data=pcall(env.ReadSaveData)
+            local index=env.RegionData and env.RegionData.iBattleRegion
+            local region=saved and index and data.RegionData['region'..index]
+            local p=region and region.player
+            local result={stage=stage,elapsed=env.modApi:elapsedTime(),boardPresent=env.Board~=nil,
+                mission=current and current.ID,hookMission=mission and mission.ID,sameMission=mission==current,
+                turn=env.Game and env.Game:GetTurnCount(),team=env.Game and env.Game:GetTeamTurn(),
+                savedRegion=index,savedTurn=p and p.iCurrentTurn,savedTeam=p and p.iTeamTurn,savedUndoTurn=p and p.iUndoTurn,
+                savedActions=p and p.actions,savedPresent=saved,savedUnavailable=not saved and tostring(data) or nil,
+                coverage='reset-observation-only',proofOfCompletion=false}
+            return result
+        end)
+        emit(ok and 'reset_lifecycle_observed' or 'reset_observation_unavailable',ok and payload or {stage=stage,reason=tostring(payload)})
+        return ok and payload.savedPresent
+    end
     local function clear()
         self.epoch = self.epoch + 1
         self.observer:reset()
@@ -39,6 +58,7 @@ function probe.new(mod, env, json, snapshot, settle)
             game = env.modApi:getGameVersion(), mode = 'observer-with-opt-in-movement-lab',
             testProfileSelected = allowed(), requiredProfile = 'ITB_Coop_Probe',
             runtimeVerified = false })
+        self:resetTrace('mod-load')
     end
     function self:subscribe()
         if self.subscribed then return end
@@ -68,6 +88,7 @@ function probe.new(mod, env, json, snapshot, settle)
             subscribe(extEvents, eventName, function(mission,pawn,previous)
                 clear()
                 if allowed() then emit('unsupported_action_observed', { source = eventName, blocked = false }) end
+                if eventName=='onResetTurn' then self:resetTrace('reset-hook',mission);self.resetLater=true;self.resetRetryUntil=env.modApi:elapsedTime()+10000;self.resetRetryAt=0 end
                 if eventName=='onPawnUndoMove' and allowed() and pawn and env.Board and not env.Board:IsTipImage() then
                     local ok,payload=pcall(function()
                         local p=pawn:GetSpace()
@@ -82,6 +103,19 @@ function probe.new(mod, env, json, snapshot, settle)
             end)
         end
         local events = env.modApi.events
+        subscribe(events,'onFrameDrawStart',function()
+            if not env.os or env.os.getenv('ITB_COOP_RESET_TRACE')~='1' or not allowed() then return end
+            local r=env.sdlext.CurrentWindowRect
+            local fingerprint=r and table.concat({r.x,r.y,r.w,r.h},':') or 'none'
+            if fingerprint~=self.resetRect then
+                self.resetRect=fingerprint
+                emit('reset_window_observed',{elapsed=env.modApi:elapsedTime(),rect=r and {x=r.x,y=r.y,w=r.w,h=r.h}})
+            end
+        end)
+        for _,name in ipairs({'onPreLoadGame','onPostLoadGame','onWindowShown','onWindowHidden'})do
+            local stage=name
+            subscribe(events,stage,function()self:resetTrace(stage,env.GetCurrentMission())end)
+        end
         for _, name in ipairs({ 'onMissionStart', 'onNextTurn', 'onPreEnvironment', 'onPostEnvironment',
                 'onPreEnvPlanned', 'onPostEnvPlanned', 'onVekSpawnAdded', 'onVekSpawnRemoved', 'onVekSpawningEnd' }) do
             local eventName = name
@@ -99,6 +133,11 @@ function probe.new(mod, env, json, snapshot, settle)
             end)
         end
         subscribe(events, 'onMissionUpdate', function(mission)
+            if self.resetLater and env.modApi:elapsedTime()>=(self.resetRetryAt or 0) then
+                local available=self:resetTrace('later-mission-update',mission)
+                self.resetRetryAt=env.modApi:elapsedTime()+250
+                if available or env.modApi:elapsedTime()>self.resetRetryUntil then self.resetLater=nil end
+            end
             if not allowed() or not env.Board or env.Board:IsTipImage() then
                 self.observer:reset()
                 return

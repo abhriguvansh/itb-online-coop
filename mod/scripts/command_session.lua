@@ -6,13 +6,18 @@ local function id(v)
 end
 local function integer(v) return type(v) == 'number' and v >= 0 and v <= 1000000 and v == math.floor(v) end
 local function copy(t) local c = {}; for k,v in pairs(t) do c[k] = v end; return c end
-local fields = {'id','session','encounter','phase','revision','witness','kind','actor','fromX','fromY','toX','toY','confirmUnused','confirmDeployment'}
+local fields = {'id','session','encounter','phase','revision','witness','kind','actor','fromX','fromY','toX','toY','confirmUnused','confirmDeployment','confirmReset'}
 local allowed = {}; for _,k in ipairs(fields) do allowed[k] = true end
 local function envelope(r)
     if type(r) ~= 'table' or getmetatable(r) then return false end
     for k in pairs(r) do if not allowed[k] then return false end end
     for _,k in ipairs({'id','session','encounter','phase'}) do if not id(r[k]) then return false end end
     if not integer(r.revision) or type(r.witness) ~= 'string' or #r.witness == 0 or #r.witness > 65536 then return false end
+    if r.kind=='reset-turn' then
+        return r.confirmReset==true and r.confirmUnused==nil and r.confirmDeployment==nil and r.actor==nil
+            and r.fromX==nil and r.fromY==nil and r.toX==nil and r.toY==nil
+    end
+    if r.confirmReset~=nil then return false end
     if r.kind=='deployment-confirm' then
         return r.confirmDeployment==true and r.confirmUnused==nil and r.actor==nil and r.fromX==nil and r.fromY==nil and r.toX==nil and r.toY==nil
     end
@@ -43,7 +48,7 @@ function M.new(o)
     end
     local self = {revision=0, stopped=false,phase=o.phase,turn=o.env.Game:GetTurnCount()}
     local records, count, pending, observed = {}, 0, nil, false
-    local move, attack, ending, deployment, undo
+    local move, attack, ending, deployment, undo, reset
     local ready={}
     local function protectStop() if o.stopProtection then pcall(o.stopProtection) end end
     local function emit(kind,data)
@@ -68,12 +73,13 @@ function M.new(o)
         local ok,healthy = pcall(o.guardHealthy)
         if not ok or healthy ~= true then self:stop('protection-unavailable'); return false end
         local inventoryOk = pcall(function()
+            if pending and pending.request.kind=='reset-turn' and reset and reset:loading() then return end
             local pawns = o.env.Board:GetPawns(o.env.TEAM_PLAYER)
             assert(pawns:size() <= 64)
             for i=1,pawns:size() do assert(localIds[pawns:index(i)], 'unmapped-friendly') end
         end)
         if not inventoryOk then self:stop('friendly-inventory-changed'); return false end
-        if move.fault or attack.fault or (undo and undo.fault) or (ending and ending.fault) or (deployment and deployment.fault) then self:stop('diagnostic-fault'); return false end
+        if move.fault or attack.fault or (reset and reset.fault) or (undo and undo.fault) or (ending and ending.fault) or (deployment and deployment.fault) then self:stop('diagnostic-fault'); return false end
         return not self.stopped
     end
     local function labEvent(kind,data)
@@ -83,9 +89,9 @@ function M.new(o)
         if self.stopped then error(self.reason) end
         if pending then
             local expected = pending.request.kind=='deployment-confirm' and 'deployment_launch_observed' or pending.request.kind=='deploy' and 'deployment_postconditions_observed' or pending.request.kind == 'move' and 'move_postconditions_observed'
-                or pending.request.kind=='undo-move' and 'undo_move_postconditions_observed' or pending.request.kind=='end-turn' and 'end_turn_postconditions_observed' or 'attack_postconditions_observed'
-            if kind == expected then observed=true end
-            if kind == 'move_failed' or kind == 'undo_move_failed' or kind == 'attack_failed' or kind == 'attack_outcome_timeout' or kind=='end_turn_failed' or kind=='deployment_failed' then
+                or pending.request.kind=='reset-turn' and 'reset_turn_postconditions_observed' or pending.request.kind=='undo-move' and 'undo_move_postconditions_observed' or pending.request.kind=='end-turn' and 'end_turn_postconditions_observed' or 'attack_postconditions_observed'
+            if kind == expected then observed=true;if pending.request.kind=='reset-turn' then self.resetRemaining=data.remaining end end
+            if kind == 'move_failed' or kind == 'reset_turn_failed' or kind == 'undo_move_failed' or kind == 'attack_failed' or kind == 'attack_outcome_timeout' or kind=='end_turn_failed' or kind=='deployment_failed' then
                 self:stop(kind)
             end
         end
@@ -96,6 +102,7 @@ function M.new(o)
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
     attack.bridge=o.bridge
     if o.undoMove and o.repeatedTurns then undo=o.undoMove.new(o.env,move,o.gate,labEvent,o.capture,o.json);undo.bridge=o.bridge end
+    if o.resetTurn and o.repeatedTurns then reset=o.resetTurn.new(o.env,o.native,labEvent,o.capture,o.json);reset.fullMission=o.fullMission end
     if o.endTurn then ending=o.endTurn.new(o.env,o.native,labEvent,o.capture,o.phaseSettled) end
     if o.deployment then deployment=o.deployment.new(o.env,o.native,labEvent,o.capture,o.json,o.phaseSettled) end
     if o.repeatedTurns and ending then ending.repeatedTurns=true end
@@ -119,6 +126,7 @@ function M.new(o)
     end
     local function commandFor(r,entity)
         if r.kind=='deployment-confirm' then return {launch=true} end
+        if r.kind=='reset-turn' then return {turn=self.turn,restoreWitness=self.resetBase and self.resetBase.restoreWitness,actionObserved=self.resetAction==true} end
         if not entity then return nil end
         return {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
             mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn,
@@ -130,14 +138,27 @@ function M.new(o)
             or m.phase~=self.phase or m.turn~=self.turn or pending or self.stopped then return nil end
         return {fromX=m.toX,fromY=m.toY,toX=m.fromX,toY=m.fromY}
     end
-    function self:setReady(peer,phase,revision,value,confirmUnused)
+    function self:setReady(peer,phase,revision,value,confirmUnused,kind)
         if self.terminal then return false end
         if not players[peer] then return false end
         ready[peer]=nil
         if not health() or pending or self.phase~=phase or self.revision~=revision or confirmUnused~=true
             or o.env.Game:GetTeamTurn()~=(self.phase=='deployment' and o.env.TEAM_ENEMY or o.env.TEAM_PLAYER) or o.env.Game:GetTurnCount()~=self.turn then return false end
         if value~=witness() or self.stopped then return false end
-        ready[peer]={phase=phase,revision=revision,witness=value};return true
+        kind=kind or (self.phase=='deployment' and 'deployment-confirm' or 'end-turn')
+        if kind~='end-turn' and kind~='deployment-confirm' and not (kind=='reset-turn' and reset) then return false end
+        ready[peer]={phase=phase,revision=revision,witness=value,kind=kind};return true
+    end
+    function self:clearResetReady()for peer,v in pairs(ready)do if v.kind=='reset-turn' then ready[peer]=nil end end end
+    function self:canReset(peer,phase,revision,value)
+        if not reset or not players[peer] or self.terminal or not health() or pending or self.phase=='deployment'
+            or self.phase~=phase or self.revision~=revision or value~=witness() then return false,'reset-context-unavailable' end
+        if not self.resetBase or self.resetBase.turn~=self.turn or self.resetBase.phase~=self.phase then return false,'fresh-turn-start-required' end
+        if not self.resetAction then return false,'native-action-required-before-reset' end
+        local ok,armed=pcall(function()return reset:arm({turn=self.turn,restoreWitness=self.resetBase.restoreWitness,actionObserved=true})end)
+        reset.armed=false;reset.command=nil
+        if not ok then self:stop('reset-validation-exception');return false,self.reason end
+        return armed,reset.status
     end
     function self:submit(peer,r)
         if not players[peer] then return {status='rejected',reason='unknown-peer'} end
@@ -161,16 +182,17 @@ function M.new(o)
         end
         if r.revision ~= self.revision then return reject('stale-revision-renew-intent') end
         local entity=registry[r.actor]
-        if r.kind~='end-turn' and r.kind~='deployment-confirm' and (not entity or not entity.commandable or entity.owner ~= peer) then return reject('actor-not-owned') end
+        if r.kind~='end-turn' and r.kind~='deployment-confirm' and r.kind~='reset-turn' and (not entity or not entity.commandable or entity.owner ~= peer) then return reject('actor-not-owned') end
         local current=witness()
         if self.stopped then return reject(self.reason) end
         if r.witness ~= current then return reject('stale-observation-renew-intent') end
         if r.kind=='undo-move' and not undoMatch(peer,r) then return reject('no-current-owned-move-to-undo') end
-        if r.kind=='end-turn' or r.kind=='deployment-confirm' then
+        if r.kind=='end-turn' or r.kind=='deployment-confirm' or r.kind=='reset-turn' then
             if r.kind=='end-turn' and not ending then return reject('end-turn-unavailable') end
+            if r.kind=='reset-turn' and (not reset or not self.resetBase or self.resetBase.turn~=self.turn) then return reject('fresh-turn-start-required') end
             for player in pairs(players) do
                 local consent=ready[player]
-                if not consent or consent.phase~=r.phase or consent.revision~=r.revision or consent.witness~=r.witness then
+                if not consent or consent.kind~=r.kind or consent.phase~=r.phase or consent.revision~=r.revision or consent.witness~=r.witness then
                     return reject('both-players-must-be-ready')
                 end
             end
@@ -180,7 +202,7 @@ function M.new(o)
         if r.kind == 'lab-punch' and (entity.pawnId ~= 0 or r.fromX ~= 3 or r.fromY ~= 3 or r.toX ~= 2 or r.toY ~= 3) then
             return reject('unsupported-punch-scenario')
         end
-        local lab = (r.kind=='deploy' or r.kind=='deployment-confirm') and deployment or r.kind == 'move' and move or r.kind=='undo-move' and undo or r.kind=='end-turn' and ending or attack
+        local lab = (r.kind=='deploy' or r.kind=='deployment-confirm') and deployment or r.kind == 'move' and move or r.kind=='reset-turn' and reset or r.kind=='undo-move' and undo or r.kind=='end-turn' and ending or attack
         local command=commandFor(r,entity)
         local ok,armed = pcall(function() return lab:arm(command) end)
         if not ok then self:stop('validation-exception'); return reject(self.reason) end
@@ -191,7 +213,7 @@ function M.new(o)
         end
         -- Arm and validation can call engine getters. Recheck before reserving execution.
         if not health() or r.witness ~= witness() then
-            if lab==deployment then deployment.armed=false elseif r.kind == 'move' then move.armed=false elseif r.kind=='end-turn' then ending.armed=false else lab:disarm() end
+            if lab==deployment or lab==reset then lab.armed=false elseif r.kind == 'move' then move.armed=false elseif r.kind=='end-turn' then ending.armed=false else lab:disarm() end
             return reject(self.reason or 'stale-observation-renew-intent')
         end
         pending=rec; observed=false; rec.status='pending';rec.peer=peer;ready={};self.lastMove=nil
@@ -244,15 +266,16 @@ function M.new(o)
             return false,'stale-draft-renew-intent'
         end
         local lab
-        if r.kind=='end-turn' then
+        if r.kind=='end-turn' or r.kind=='reset-turn' then
+            if r.kind=='reset-turn' and (not reset or not self.resetBase or self.resetBase.turn~=self.turn) then return false,'fresh-turn-start-required' end
             if not ending then return false,'end-turn-unavailable' end
             for player in pairs(players) do
                 local consent=ready[player]
-                if not consent or consent.phase~=r.phase or consent.revision~=r.revision or consent.witness~=r.witness then
+                if not consent or consent.kind~=r.kind or consent.phase~=r.phase or consent.revision~=r.revision or consent.witness~=r.witness then
                     return false,'both-players-must-be-ready'
                 end
             end
-            lab=ending
+            lab=r.kind=='reset-turn' and reset or ending
         else
             local entity=registry[r.actor]
             if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
@@ -280,10 +303,10 @@ function M.new(o)
             return
         end
         if not health() then return end
-        local ok = pcall(function() move:update(); attack:update();if undo then undo:update() end;if ending then ending:update() end;if deployment then deployment:update() end end)
+        local ok = pcall(function() move:update(); attack:update();if undo then undo:update() end;if reset then reset:update() end;if ending then ending:update() end;if deployment then deployment:update() end end)
         if not ok then self:stop('update-exception'); return end
         if not health() then return end
-        if pending and observed and not move.pending and not attack.pending and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
+        if pending and observed and not move.pending and not attack.pending and not (reset and reset.pending) and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
             if pending.request.kind=='deployment-confirm' then self.turn=1;self.phase='player1'
             elseif pending.request.kind=='end-turn' then
                 self.turn=self.turn+1;self.phase='player'..self.turn
@@ -291,6 +314,12 @@ function M.new(o)
                 -- Engine allowances, protection, hooks and session replay records still gate every action.
                 if o.repeatedTurns then move.usedPawns={} end
             end
+            if pending.request.kind=='end-turn' or pending.request.kind=='deployment-confirm' then
+                local base=witness();if self.stopped then return end
+                local restored=o.resetTurn and o.resetTurn.comparable and o.resetTurn.comparable(o.capture(),o.json) or base
+                self.resetBase={turn=self.turn,phase=self.phase,witness=base,restoreWitness=restored};self.resetAction=false
+            elseif pending.request.kind=='reset-turn' then move.usedPawns={};self.resetAction=false
+            elseif pending.request.kind=='lab-punch' or pending.request.kind=='basic-attack' or pending.request.kind=='repair' then self.resetAction=true end
             self.revision=self.revision+1
             if pending.request.kind=='move' then
                 local r=pending.request
@@ -302,7 +331,7 @@ function M.new(o)
             pending.status='observed'; pending.revision=self.revision
             emit('command_observed',{id=pending.request.id,revision=self.revision,proofOfQuiescence=false,proofOfPeerAgreement=false})
             pending=nil; observed=false; move.armed=false
-        elseif pending and not move.pending and not attack.pending and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
+        elseif pending and not move.pending and not attack.pending and not (reset and reset.pending) and not (undo and undo.pending) and not (ending and ending.pending) and not (deployment and deployment.pending) then
             self:stop('missing-completion-evidence')
         end
     end
@@ -331,18 +360,18 @@ function M.new(o)
         emit('command_observed',{id=pending.request.id,revision=self.revision,terminal=true,proofOfPeerAgreement=false})
         pending=nil;self.terminal.completed=true
     end
-    function self:draw() if self.terminal then return end;if attack.draw then attack:draw() end;if undo then undo:draw() end;if ending then ending:draw() end;if deployment then deployment:draw() end end
-    function self:missionUpdate() if self.terminal then return end;if attack.missionUpdate then attack:missionUpdate() end;if undo then undo:missionUpdate() end;if ending then ending:missionUpdate() end;if deployment then deployment:missionUpdate() end end
+    function self:draw() if self.terminal then return end;if attack.draw then attack:draw() end;if reset then reset:draw() end;if undo then undo:draw() end;if ending then ending:draw() end;if deployment then deployment:draw() end end
+    function self:missionUpdate() if self.terminal then return end;if attack.missionUpdate then attack:missionUpdate() end;if reset then reset:missionUpdate() end;if undo then undo:missionUpdate() end;if ending then ending:missionUpdate() end;if deployment then deployment:missionUpdate() end end
     function self:deploymentEvent(name,id)
         if not deployment or self.stopped then return end
         if not pending or (pending.request.kind~='deploy' and pending.request.kind~='deployment-confirm') then self:stop('unrequested-deployment-transition');return end
         local ok,why=pcall(function()deployment:event(name,id)end)
         if not ok then self:stop('deployment-hook:'..tostring(why)) end
     end
-    function self:setBlocked(value) move.blocked=value;if ending then ending.blocked=value end end
+    function self:setBlocked(value) move.blocked=value;if reset then reset.blocked=value end;if ending then ending.blocked=value end end
     function self:skillEvent(kind,pawn,weapon)
         if self.stopped then return end
-        local ok=pcall(function() move:skillEvent(kind,pawn,weapon); attack:skillEvent(kind,pawn,weapon);if undo then undo:skillEvent() end end)
+        local ok=pcall(function() move:skillEvent(kind,pawn,weapon); attack:skillEvent(kind,pawn,weapon);if undo then undo:skillEvent() end;if reset then reset:skillEvent() end end)
         if not ok then self:stop('hook-exception') end
     end
     function self:undoEvent(mission,pawn,previous)
@@ -352,6 +381,31 @@ function M.new(o)
             undo:event(mission,pawn,previous)
         end)
         if not ok then self:stop('undo-hook:'..tostring(why)) end
+    end
+    function self:resetModLoad()
+        if self.stopped or not reset or not pending or pending.request.kind~='reset-turn' then return false end
+        local ok,why=pcall(function()return reset:modLoad()end)
+        if not ok then self:stop('reset-mod-load:'..tostring(why));return false end
+        return true
+    end
+    function self:resetLoadEvent(stage)
+        if not pending or pending.request.kind~='reset-turn' or self.stopped then return end
+        local ok,why=pcall(function()reset:loadEvent(stage)end)
+        if not ok then self:stop('reset-load-event:'..tostring(why)) end
+    end
+    function self:resetEvent(mission)
+        if self.stopped then return end
+        local ok,why=pcall(function()
+            assert(reset and pending and pending.request.kind=='reset-turn','unrequested-reset')
+            reset:event(mission)
+        end)
+        if not ok then self:stop('reset-hook:'..tostring(why)) end
+    end
+    function self:resetContext(event,mission,old)
+        if not reset or not pending or pending.request.kind~='reset-turn' or self.stopped then return false end
+        local ok,handled=pcall(function()return reset:context(event,mission,old)end)
+        if not ok then self:stop('reset-context:'..tostring(handled));return false end
+        return handled
     end
     -- Persistence boundary intentionally has no restore operation in this non-resumable experiment.
     function self:checkpoint() return nil,'unsupported-non-resumable-experiment' end

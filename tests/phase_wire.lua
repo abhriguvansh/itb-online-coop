@@ -95,6 +95,21 @@ f.add('READY|test-session|-|5|player3|end-turn-5\n{}');f.tick();assert(not f.w.r
 assert(not pcall(function()f.w:ready(f.s,f.r)end))
 f.add('CONSENT|test-session|host|5|player3|end-turn-5\n{}');f.tick();assert(readiness==2)
 print('Repeated-turn mailbox config and fresh readiness passed (in-memory doubles).')
+f=runtime('repeat');f.s.canReset=function()return true end
+local resetVotes={};f.s.setReady=function(_,peer,phase,revision,witness,confirm,kind)assert(confirm and kind=='reset-turn');resetVotes[peer]=true;return true end
+f.s.clearResetReady=function()resetVotes={}end
+f.s.previewAction=function()return resetVotes.host and resetVotes.guest end
+f.add('INPUT|test-session|-|0|player2|-\n{}');f.tick()
+local reset={id='reset-turn-0',kind='reset-turn',revision=0,phase='player2',witness='{}',confirmReset=true}
+f.w:resetReady(f.s,reset);assert(f.w.resetSent and resetVotes.guest)
+assert(not pcall(function()f.w:resetReady(f.s,reset)end))
+f.add('RESETREADY|test-session|-|0|player2|reset-turn-0\n{}');f.tick();assert(f.w.resetPending)
+f.add('RESETCANCEL|test-session|-|0|player2|reset-turn-0\n{}');f.tick();assert(not f.w.resetPending and not f.w.resetSent and not resetVotes.guest)
+f.w:resetReady(f.s,reset);f.add('RESETREADY|test-session|-|0|player2|reset-turn-0\n{}');f.tick()
+for _,peer in ipairs({'host','guest'})do f.add('RESETCONSENT|test-session|'..peer..'|0|player2|reset-turn-0\n{}');f.tick()end
+f.add('PREPARE|test-session|host|0|player2|reset-turn-0\n{}');f.tick();assert(f.w.prepared and not f.w.inputReady)
+f.add('EXEC|test-session|host|0|player2|reset-turn-0\n{}');f.tick();local _,resetSubmits=f.counts();assert(resetSubmits==1 and f.w.pendingKind=='reset-turn')
+print('Typed Reset consent, cancellation and the existing fresh prepare/execute path passed (transport doubles).')
 f=runtime('repeat');f.s.revision=4;f.s.phase='player4';f.r.revision=4;f.r.phase='player4'
 f.add('DONE|test-session|-|4|player4|-\n{}')
 assert(not pcall(f.tick),'repeated run must not claim mission completion at player4')

@@ -10,7 +10,7 @@ function M.decode(text,session)
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
     local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
-    assert(spawn or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    assert(spawn or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
@@ -68,7 +68,7 @@ function M.open(env,json,emit)
     function self:arm(context)
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.26.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.27.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -81,6 +81,13 @@ function M.open(env,json,emit)
         assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true),'wire-local-readiness-rejected')
         self.readySent=true;self.readyInput=false;self.inputReady=false
         self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=r.kind=='end-turn' and true or nil,confirmDeployment=r.kind=='deployment-confirm' and true or nil})
+    end
+    function self:resetReady(s,r)
+        assert(self.repeatedTurns and self.inputReady and not self.resetSent and r.kind=='reset-turn','wire-reset-unavailable')
+        local ok,why=s:canReset(self.peer,r.phase,r.revision,r.witness);assert(ok,why)
+        assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true,'reset-turn'),'wire-reset-readiness-rejected')
+        self.resetSent=true
+        self:send({type='reset_ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmReset=true})
     end
     function self:tick(s,request,native)
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable') end
@@ -106,9 +113,20 @@ function M.open(env,json,emit)
                 assert(not s.terminal,'wire-gameplay-after-mission-end')
                 local r=request()
                 assert(m.revision==s.revision and m.phase==s.phase and m.witness==r.witness,'wire-stale-context')
+                if m.id=='reset-turn-'..s.revision then
+                    assert(self.repeatedTurns,'wire-reset-mode');r.kind='reset-turn';r.id=m.id;r.confirmUnused=nil;r.confirmReset=true
+                end
                 if m.kind=='INPUT' then
                     assert(self.interactive and not self.pending,'wire-input-context')
-                    self.readySent=false;self.readyInput=false;self.inputReady=true;self.inspectionReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
+                    self.readySent=false;self.readyInput=false;self.resetSent=false;self.resetPending=false;self.inputReady=true;self.inspectionReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
+                elseif m.kind=='RESETREADY' then
+                    assert(self.repeatedTurns and not self.pending and r.kind=='reset-turn','wire-reset-ready-context')
+                    self.resetPending=true;self.inputReady=true;self.readyInput=false;self.inspectionReady=true
+                elseif m.kind=='RESETCANCEL' then
+                    self.resetSent=false;self.resetPending=false;s:clearResetReady()
+                elseif m.kind=='RESETCONSENT' then
+                    assert(self.resetPending and r.kind=='reset-turn' and (m.peer~=self.peer or self.resetSent),'wire-reset-consent-context')
+                    assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true,'reset-turn'),'wire-reset-consent-rejected')
                 elseif m.kind=='PROPOSE' then
                     assert(m.peer==self.peer and m.id==r.id,'wire-proposal-owner')
                     self:send({type='proposal',request=r})
@@ -120,7 +138,7 @@ function M.open(env,json,emit)
                     assert((self.repeatedTurns or (self.deployment and s.revision==3) or (not self.deployment and s.revision==2)) and m.id==r.id,'wire-consent-context')
                     assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true),'wire-consent-rejected')
                 elseif m.kind=='PREPARE' then
-                    assert(self.interactive and (m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm'))) and not self.pending and not self.prepared,'wire-prepare-context')
+                    assert(self.interactive and (m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm' or r.kind=='reset-turn'))) and not self.pending and not self.prepared,'wire-prepare-context')
                     local preparedRequest=m.move or r
                     self.inputReady=false;self.inspectionReady=false
                     local ok,reason
@@ -133,7 +151,7 @@ function M.open(env,json,emit)
                     emit('network_command_prepared',{peer=m.peer,id=m.id,revision=s.revision})
                 elseif m.kind=='EXEC' then
                     if self.interactive then
-                        assert(m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm')),'wire-command-missing');r=m.move or r;self.inputReady=false;self.inspectionReady=false
+                        assert(m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm' or r.kind=='reset-turn')),'wire-command-missing');r=m.move or r;self.inputReady=false;self.inspectionReady=false
                         local p=self.prepared
                         assert(p and p.peer==m.peer and p.request==json.encode(r) and now()-p.at<5000,'wire-exec-not-prepared')
                         self.prepared=nil
@@ -160,7 +178,7 @@ function M.open(env,json,emit)
         if self.spawn then self.spawn:tick() end
         if self.pending and s.revision==self.observed+1 then
             local r=request();self.observed=s.revision
-            self:send({type='observed',id=self.pending,revision=s.revision,phase=s.phase,witness=r.witness,native=native.info()})
+            self:send({type='observed',id=self.pending,revision=s.revision,phase=s.phase,witness=r.witness,native=native.info(),resetRemaining=self.pendingKind=='reset-turn' and s.resetRemaining or nil})
             self.pending=nil
             self.pendingKind=nil
         end
