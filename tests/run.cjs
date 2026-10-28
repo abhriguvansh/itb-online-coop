@@ -28,6 +28,7 @@ if (!process.exitCode) {
   require('./bootstrap-exchange.cjs');
   require('./game-frame.cjs');
   require('./fixed-combat.cjs');
+  require('./integrated-mission.cjs');
   console.log('Contract tests use Fengari (Lua 5.3) and engine doubles. No in-game result is implied.');
 }
 lua.lua_close(L);

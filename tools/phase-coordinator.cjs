@@ -259,8 +259,9 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false,integratedFixture=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
+  if(integratedFixture&&(!interactive||!phaseRun||!repeatedTurns||!deployment||!fullMission||!liveBootstrap||!nativeTransport||terminalCheckpoint||fixedCombatFixture))throw Error('integrated-fixture-requires-fresh-native-full-mission');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
   const peers={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
@@ -270,7 +271,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission);
   const bootstrap=liveBootstrap?new (require('./bootstrap-exchange.cjs').BootstrapExchange)(session,send,record):null;
   if(fixedCombatFixture&&(!interactive||!phaseRun||!repeatedTurns||terminalCheckpoint))throw Error('fixture-requires-original-repeated-turn-checkpoint');
-  const fixture=fixedCombatFixture?require('./fixed-combat-fixture.cjs').createFixedCombatFixture():null;
+  const fixture=integratedFixture?require('./integrated-mission-fixture.cjs').createIntegratedMissionFixture():fixedCombatFixture?require('./fixed-combat-fixture.cjs').createFixedCombatFixture():null;
   function stop(reason,success=false){
     if(stopped)return;stopped=true;clearInterval(timer);record({type:success?'passed':'stopped',reason});
     if(!success)for(const socket of sockets)if(!socket.destroyed)socket.write(encode({kind:'STOP',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''}));
@@ -314,12 +315,13 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
       if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v1',session,peer,'10.0.2.2',server.address().port,tokens[peer],''].join('\n'));
     }
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
-    if(fixture){record({type:'scripted_combat_fixture',humanSelectionProof:false,humanReadinessProof:false});console.log('Fixed combat fixture: both roles have scripted intent and End Turn consent. Result review remains manual.');}
+    if(integratedFixture){record({type:'scripted_integrated_fixture',humanSelectionProof:false,humanReadinessProof:false,localResetRequired:true});console.log('Diagnostic fixture: scripted tactical intent, launch and End Turn consent. Game entry, arming, both local Reset approvals and result reviews remain manual.');}
+    else if(fixedCombatFixture){record({type:'scripted_combat_fixture',humanSelectionProof:false,humanReadinessProof:false});console.log('Fixed combat fixture: both roles have scripted intent and End Turn consent. Result review remains manual.');}
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
 module.exports={PhaseCoordinator,expected};
 if(require.main===module){try{
- const raw=process.argv[3],xp=raw==='--native-xp-result-checkpoint',repair=raw==='--native-repair',direct=xp||repair||raw==='--native-transport',live=!xp&&!repair&&(direct||raw==='--live-bootstrap'),mode=xp?'--xp-result-checkpoint':repair?'--repeated-turns':live?'--full-mission':raw,full=mode==='--full-mission'||xp;
- main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct);
+ const raw=process.argv[3],integrated=raw==='--native-integrated-fixture',xp=raw==='--native-xp-result-checkpoint',repair=raw==='--native-repair',direct=integrated||xp||repair||raw==='--native-transport',live=!xp&&!repair&&(direct||raw==='--live-bootstrap'),mode=xp?'--xp-result-checkpoint':repair?'--repeated-turns':live?'--full-mission':raw,full=mode==='--full-mission'||xp;
+ main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct,integrated);
 }catch(e){console.error(e.message);process.exitCode=1;}}

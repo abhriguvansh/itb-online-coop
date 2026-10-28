@@ -111,6 +111,16 @@ for _,peer in ipairs({'host','guest'})do f.add('RESETCONSENT|test-session|'..pee
 f.add('PREPARE|test-session|host|0|player2|reset-turn-0\n{}');f.tick();assert(f.w.prepared and not f.w.inputReady)
 f.add('EXEC|test-session|host|0|player2|reset-turn-0\n{}');f.tick();local _,resetSubmits=f.counts();assert(resetSubmits==1 and f.w.pendingKind=='reset-turn')
 print('Typed Reset consent, cancellation and the existing fresh prepare/execute path passed (transport doubles).')
+do
+    local blocked=runtime('repeat')
+    blocked.s.setReady=function()error('coordinator must not create missing local Reset consent')end
+    blocked.add('INPUT|test-session|-|0|player2|-\n{}');blocked.tick()
+    blocked.add('RESETREADY|test-session|-|0|player2|reset-turn-0\n{}');blocked.tick()
+    blocked.add('RESETCONSENT|test-session|guest|0|player2|reset-turn-0\n{}')
+    local ok,why=pcall(blocked.tick);local _,submitted=blocked.counts()
+    assert(not ok and tostring(why):find('wire%-reset%-consent%-context') and submitted==0 and not blocked.w.prepared)
+end
+print('Coordinator Reset consent cannot replace the runtime own local Reset approval; zero submissions (transport doubles).')
 f=runtime('repeat');f.s.revision=4;f.s.phase='player4';f.r.revision=4;f.r.phase='player4'
 f.add('DONE|test-session|-|4|player4|-\n{}')
 assert(not pcall(f.tick),'repeated run must not claim mission completion at player4')
