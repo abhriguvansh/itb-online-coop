@@ -1,7 +1,8 @@
 // Real loopback sockets, fake game peers: writes must not conceal a silent runtime.
 const fs=require('node:fs'),path=require('node:path'),net=require('node:net'),assert=require('node:assert/strict'),{spawn}=require('node:child_process');
 (async()=>{
- const root=path.resolve('.local','heartbeat-test-'+Date.now()+'-'+process.pid);
+ const root=path.resolve('.local','heartbeat-test-'+Date.now()+'-'+process.pid,'session');
+ fs.mkdirSync(path.dirname(root),{recursive:true});
  const child=spawn(process.execPath,['tools/phase-coordinator.cjs',root,'--native-primary-choice','--private-address','127.0.0.1'],{stdio:['ignore','pipe','pipe'],windowsHide:true});
  let output='',ended=false;const sockets=[],counts={host:0,guest:0};
  child.stdout.on('data',v=>output+=v);child.stderr.on('data',v=>output+=v);
