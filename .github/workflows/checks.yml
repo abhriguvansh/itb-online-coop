@@ -19,6 +19,8 @@ jobs:
         shell: pwsh
       - run: ./tests/bridge-mailbox.ps1
         shell: pwsh
+      - run: ./tests/launcher.ps1
+        shell: pwsh
       - run: npm run check:tracked
   native-contracts:
     runs-on: windows-latest

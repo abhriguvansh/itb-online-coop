@@ -17,6 +17,10 @@ function expected(session,revision,state){
 class PhaseCoordinator{
   constructor(session,send,record,interactive=false,now=()=>performance.now(),phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,deployment=false,fullMission=false){this.fullMission=fullMission;this.deployment=deployment;this.terminalCheckpoint=terminalCheckpoint;this.repeatedTurns=repeatedTurns;this.turn=deployment?0:terminalCheckpoint?(fullMission?3:4):2;this.phaseRun=phaseRun;this.now=now;this.interactive=interactive;this.limit=deployment?5:interactive&&!phaseRun?2:4;this.used=new Set();this.session=session;this.send=send;this.record=record;this.stage=0;this.mode='arming';this.states={};this.receipts={};this.consents={};this.complete={};}
   require(ok,reason){if(!ok)throw Error(reason);}
+  checkAlphaEncounter(state){
+    if(!this.primarySetup)return;
+    this.require(Array.isArray(state.tiles)&&state.tiles.length===64&&state.tiles.every(t=>t.pod===false),'alpha-unsupported-pod-encounter');
+  }
   checkSharedXp(v){
     if(!this.fullMission)return;
     const r=this.proposal?.request;
@@ -41,6 +45,7 @@ class PhaseCoordinator{
       if(!this.result){this.result={before:{},after:{},xp:{},deadline:this.now()+90000};this.mode='result-preparing';}
       this.require(!this.result.before[peer],'result-duplicate-preparation');
       this.require(state.schema==='itb-observation-v1'&&state.unavailable?.length===0&&Array.isArray(state.pawns)&&state.pawns.every(p=>p.team!==6||p.dead),'result-retreat-incomplete');
+      this.checkAlphaEncounter(state);
       this.result.before[peer]=m.witness;
       this.result.xp[peer]=m.sharedXp;
       if(this.result.before.host&&this.result.before.guest){
@@ -56,6 +61,7 @@ class PhaseCoordinator{
     this.require(state.schema==='itb-mission-result-v1'&&state.coverage==='partial-result-only'&&state.region===(this.fullMission?1:2)&&state.regionState===2&&state.mission===''&&Number.isInteger(state.grid)&&state.grid>0&&Number.isInteger(state.reputation)&&state.reputation>=0,'result-uncommitted-state');
     this.require(Array.isArray(state.pilots)&&state.pilots.length===3&&state.pilots.every((p,i)=>p.slot===i&&typeof p.id==='string'&&Number.isInteger(p.experience)&&p.experience>=0&&Number.isInteger(p.level)&&p.level>=0&&Number.isInteger(p.skill1)&&p.skill1>=0&&Number.isInteger(p.skill2)&&p.skill2>=0),'result-incomplete-pilots');
     const pod=state.objectives?.[2];
+    this.require(!this.primarySetup||state.objectives?.length===2,'alpha-unsupported-pod-result');
     const observedPodFailure=this.fullMission&&state.objectives?.length===3&&pod?.slot===2&&pod.text==='Pod_Failed'&&pod.category===3&&pod.param1===''&&pod.param2===''&&pod.value===0&&pod.potential===1;
     this.require(Array.isArray(state.objectives)&&(state.objectives.length===2||observedPodFailure)&&state.objectives.every((v,i)=>v.slot===i&&typeof v.text==='string'&&v.text.length>0&&Number.isInteger(v.value)&&v.value>=0&&Number.isInteger(v.potential)&&v.potential>=v.value)&&(this.fullMission||state.objectives.every(v=>v.value===1&&v.potential===1)&&state.objectives[0].text==='Mission_Artillery_Obj'&&state.objectives[1].text==='Bonus_Simple_Asset'),'result-incomplete-objectives');
     this.result.after[peer]=m.witness;
@@ -72,6 +78,7 @@ class PhaseCoordinator{
     this.require(typeof m.witness==='string'&&Buffer.byteLength(m.witness)<=65536&&!/[\r\n]/.test(m.witness),'spawn-invalid-witness');
     const state=JSON.parse(m.witness);
     this.require(state.board?.schema==='itb-observation-v1'&&state.board.unavailable?.length===0&&typeof state.spawner==='string','spawn-incomplete-state');
+    this.checkAlphaEncounter(state.board);
     const frame=(kind,witness)=>({...this.frame(kind,'host','spawn-'+m.index),witness});
     if(m.type==='spawn_prepare'){
       if(!this.spawn)this.spawn={mode:'prepare',before:{},deadline:this.now()+20000};
@@ -109,6 +116,7 @@ class PhaseCoordinator{
     this.require(typeof m.witness==='string' && m.witness.length>0 && Buffer.byteLength(m.witness)<=65536,'invalid-witness');
     const state=JSON.parse(m.witness);
     this.require(state.schema==='itb-observation-v1' && Array.isArray(state.unavailable) && state.unavailable.length===0,'incomplete-state');
+    this.checkAlphaEncounter(state);
     if(this.deployment){
       this.require(state.mission==='Mission_Tides'&&state.turn===(revision<4?0:this.fullMission?Number(m.phase.slice(6)):1)&&state.team===(revision>=4?1:6)&&state.deployment?.inProgress===(revision<4)&&state.deployment.phase===(revision>=4?2:0)&&state.deployment.mechs?.length===3,'incomplete-deployment-state');
       this.require(Array.isArray(state.initialChoices),'incomplete-initial-choices');
@@ -336,7 +344,8 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   server.listen(0,privateAddress||'127.0.0.1',()=>{
     const target=privateAddress||'10.0.2.2';
     for(const peer of ['host','guest']){
-      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:target,port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport,primarySetup},null,2));
+      const launch=primarySetup?{...require('./launcher-compatibility.cjs').compatibility(),expiresAt:new Date(created+600000).toISOString()}:undefined;
+      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:target,port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport,primarySetup,launch},null,2));
       if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v2',session,peer,target,server.address().port,tokens[peer],''].join('\n'));
     }
     record({type:'listening',session,address:server.address().address,target,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');

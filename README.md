@@ -4,6 +4,8 @@
 
 An incremental investigation into two players running their own Windows copies of Into the Breach and cooperating on one three-mech squad against the game's AI.
 
+**Interactive mission verification:** a fresh two-VM 0.33.0 run completed deployment through matching saved results using only locally selected actions and approvals, with no tactical driver: 22 commands, 22 input boundaries, 69 matching ordered execution/phase records, both objectives achieved and all mechs alive. One operator controlled both games. Minimal PowerShell host/guest startup is now implemented and host-tested; execution in the guests remains blocked by their script policy pending approval. This is not yet a two-human alpha. [Latest evidence and limits](docs/command-session.md#interactive-full-mission-and-minimal-startup--october-28), [startup instructions](#restricted-interactive-startup).
+
 **Current source: 0.33.0.** Two real isolated Windows games now execute protected native commands over an explicitly configured private IPv4 route. The phase proof includes fresh initialization, deployment, both roles' selected tactics, all three stock Rift Walker weapons, the complete enemy/environment/spawn/planning boundary and next-turn movement. Delayed, split-frame delivery also passed Undo, Repair, unanimous Reset and renewed movement. A real one-sided execution-loss test exposed an unbounded wait; the corrected coordinator now stops both protected sessions without retrying an action that may already have committed. [Evidence and limits](docs/command-session.md#private-ipv4-transport--probe-0330-october-28).
 
 The separate 0.31 fresh mission combined 28 commands, two complete enemy phases, victory, an actual pilot promotion and matching committed results. The 0.32 primary-choice experiment completed 27 commands through saved results after both roles explicitly agreed their primary mechs and first shared controller. These use one pinned stock Tides encounter and one operator controlling both roles. Wider squads, campaign alternation, time-pod collection/rewards, two-human usability and encrypted Internet joining remain unfinished. [Primary-choice proof](docs/command-session.md#protected-primary-mech-choices--probe-0320-october-28), [combined mission proof](docs/command-session.md#integrated-diagnostic-driver-and-desktop-recovery--october-28).
@@ -66,12 +68,35 @@ Node.js and PowerShell run the development checks and restricted network harness
 npm ci --ignore-scripts --no-audit --no-fund
 npm test
 .\tests\install.ps1
+.\tests\launcher.ps1
 npm run check:tracked
 ```
 
 The local suite parses 28 mod/experiment Lua files as Lua 5.1 and runs focused Lua contracts under Fengari/Lua 5.3, plus Node coordinator, framing and fixture checks and inert PowerShell installer checks. These cover legality, ownership, preparation, phase/result boundaries, stale input, diagnostic isolation, inspection refusal/invalidation and no retries using engine/UI doubles. The separate native CI job builds the input, initial-choice and transport DLLs and runs C contracts; transport contracts test framing without opening sockets. Native test executables remain CI-only on this development machine after its unresolved antivirus alert. Neither job runs the game. [GitHub Actions results](https://github.com/abhriguvansh/itb-online-coop/actions/workflows/checks.yml) identify which checks passed for each revision.
 
 ## Prepare a real-game test
+
+### Restricted interactive startup
+
+The first startup helpers reuse the existing coordinator and game runtime. They do not install the game, loader, DLLs, network software or a checkpoint. Each PC must already have the reviewed 30-file probe payload, the pinned game at `C:\ITBCoopProbe\GameVerified`, and the same privately prepared disposable mission save selected as **ITB_Coop_Probe**. That game location remains required by the native safety checks. Repository and evidence paths are discovered automatically; no developer home-directory path is required.
+
+On the host, with an already established secure private connection:
+
+```powershell
+.\tools\Host-Coop.ps1 -PrivateAddress <host-private-IPv4>
+```
+
+Share only the printed **guest.json** file over your secure channel. The guest runs:
+
+```powershell
+.\tools\Join-Coop.ps1 -ConnectionFile <private-path-to-guest.json>
+```
+
+Use `-CheckOnly` on Join for a read-only preflight. Both machines need the same source checkout; only the host needs Node.js 22+. PowerShell must permit the reviewed local files under its existing policy. A policy refusal is a stopping condition: these scripts never change or bypass it. `-SoftwareRendering` opts into the already installed guest Mesa setup; it installs no driver. `Host-Coop -CoordinatorOnly` is for the existing two-VM engineering environment; its host.json is consumed by Join in VM A and guest.json by Join in VM B.
+
+Startup checks source/protocol identity, expiry, private endpoint, executable/loader/payload hashes, closed-game state and the selected disposable profile. It makes and verifies a private profile backup, preserves the previous mailbox/log, creates the session files and starts the game with only the interactive flags. A prepared session cannot be launched a second time. Backups are never restored automatically. Keep connection files, logs and backups private; never publish them.
+
+The console explains host-first mission entry and reports when the guest may enter. Use the existing protected in-game controls for distinct primary choices, the agreed first shared controller, placements, tactics, both-player End Turn consent and both local result reviews. The scope is the verified stock Rift Walkers/Tides encounter, not a campaign. Alpha admission refuses observed pods and pod results; it does not reroll initialization, collect/destroy a pod automatically, or skip a reward. Preserve and stop an unsupported encounter. No public listener, matchmaking, installer, updater or reconnection is provided. The coordinator remains unencrypted; a private address alone is not an encrypted Internet connection.
 
 1. Close Into the Breach. Resolve its Steam installation and your actual Documents folder. Preserve your normal profile.
 2. Download the exact pinned loader ZIP. From the repository, prepare verified backups and an installation file plan:

@@ -379,22 +379,25 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'complete',freshAfter));
  assert.equal(fresh.c.mode,'complete','mission completion does not require every bonus objective to succeed');
  const podResult={...freshResult,objectives:[...freshResult.objectives,{slot:2,text:'Pod_Failed',category:3,param1:'',param2:'',value:0,potential:1}]};
- for(const variant of ['observed','unknown','wrong-category','changed-peer']){
+ for(const variant of ['observed','unknown','wrong-category','changed-peer','alpha']){
   const p=make();p.c.fullMission=true;p.c.turn=3;p.c.states={host:{phase:'player3'},guest:{phase:'player3'}};
   p.c.proposal={request:{phase:'player3'}};
   const send=(peer,type,value)=>p.c.receive(peer,{...p.msg(peer,type,value),phase:'player3',sharedXp:xp});
-  for(const peer of ['host','guest'])send(peer,'result_prepared');
+  if(variant==='alpha')p.c.primarySetup={};
+  const retreat=variant==='alpha'?JSON.stringify({...JSON.parse(p.witness),tiles:Array.from({length:64},()=>({pod:false}))}):undefined;
+  for(const peer of ['host','guest'])send(peer,'result_prepared',retreat);
   const value=structuredClone(podResult);
   if(variant==='unknown')value.objectives[2].text='Pod_Unobserved';
   if(variant==='wrong-category')value.objectives[2].category=2;
-  if(variant==='unknown'||variant==='wrong-category')assert.throws(()=>send('host','result_observed',JSON.stringify(value)),/incomplete-objectives/);
+  if(variant==='alpha')assert.throws(()=>send('host','result_observed',JSON.stringify(value)),/alpha-unsupported-pod-result/);
+  else if(variant==='unknown'||variant==='wrong-category')assert.throws(()=>send('host','result_observed',JSON.stringify(value)),/incomplete-objectives/);
   else{
    send('host','result_observed',JSON.stringify(value));
    if(variant==='changed-peer')assert.throws(()=>send('guest','result_observed',freshAfter),/outcome-divergence/);
    else{send('guest','result_observed',JSON.stringify(value));assert.equal(p.c.mode,'result-finishing');}
   }
  }
- console.log('Only the observed third Pod_Failed result is admitted; unknown variants and differing peer objectives refuse (fake peers).');
+ console.log('Legacy observed Pod_Failed results remain bounded; the restricted primary-choice alpha refuses pod results (fake peers).');
  for(const variant of ['missing','context','limit','different']){
   const p=make();p.c.fullMission=true;p.c.turn=3;p.c.states={host:{phase:'player3'},guest:{phase:'player3'}};p.c.proposal={request:{phase:'player3'}};
   const send=(peer,value)=>p.c.receive(peer,{...p.msg(peer,'result_prepared'),phase:'player3',sharedXp:value});

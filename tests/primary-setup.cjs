@@ -1,9 +1,9 @@
 const a=require('node:assert/strict'),{PhaseCoordinator}=require('../tools/phase-coordinator.cjs'),{PrimarySetup}=require('../tools/primary-setup.cjs');
 const actors=['combat','cannon','artillery'],native={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
-function fixture(){
+function fixture(pod=false){
  const sent=[],events=[],c=new PhaseCoordinator('primary-test',(peer,frame)=>sent.push({peer,frame}),r=>events.push(r),true,()=>0,true,true,false,true,true);
  c.primarySetup=new PrimarySetup(c);
- const state={schema:'itb-observation-v1',unavailable:[],mission:'Mission_Tides',turn:0,team:6,
+ const state={schema:'itb-observation-v1',unavailable:[],tiles:Array.from({length:64},(_,i)=>({pod:pod&&i===0})),mission:'Mission_Tides',turn:0,team:6,
   initialChoices:Array.from({length:19},(_,i)=>({kind:i<17?'ai-constructor':i===17?'pod-delivery':'pod-select',limit:i<17?32768:i===17?3:9,value:42})),
   deployment:{inProgress:true,phase:0,mechs:[0,1,2].map(id=>({id,state:id?1:0,x:-1,y:-1}))},pawns:[0,1,2].map(localId=>({localId,position:{x:-1,y:-1},active:true}))};
  const ctx={revision:0,phase:'deployment',witness:JSON.stringify(state)};
@@ -46,4 +46,10 @@ for(const h of actors)for(const g of actors.filter(v=>v!==h))for(const shared of
  a.throws(()=>f.send('host',{type:'primary_choice',primary:'combat',sharedController:'host',witness:'changed'}),/invalid|incomplete|Unexpected|stale/);
  a(!f.sent.some(x=>['INPUT','PREPARE','EXEC'].includes(x.frame.kind)));
 }
-console.log('Primary setup: all 12 distinct-primary/first-controller combinations, conflict and stale approval, immutable assignment, both applied acknowledgments and normal owner/two-preparation gates (fake game peers).');
+a.throws(()=>fixture(true),/alpha-unsupported-pod-encounter/);
+{
+ const f=fixture();const state=JSON.parse(f.ctx.witness);state.tiles[3].pod=true;
+ a.throws(()=>f.c.checkAlphaEncounter(state),/alpha-unsupported-pod-encounter/);
+ a(!f.sent.some(x=>['INPUT','PREPARE','EXEC'].includes(x.frame.kind)));
+}
+console.log('Primary setup: all 12 assignments, fresh approvals and both application ACKs; alpha pod presence refuses command admission (fake game peers).');
