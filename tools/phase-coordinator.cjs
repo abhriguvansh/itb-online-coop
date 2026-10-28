@@ -303,9 +303,10 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
     socket.on('error',()=>stop('connection-error'));
     socket.on('close',()=>{sockets.delete(socket);if(!stopped)stop('connection-closed');});
     socket.on('data',chunk=>{
+      if(stopped)return;
       try{
         buffer+=chunk;if(Buffer.byteLength(buffer)>140000)throw Error('oversized-frame');
-        let cut;while((cut=buffer.indexOf('\n'))>=0){
+        let cut;while(!stopped&&(cut=buffer.indexOf('\n'))>=0){
           if(++count>(fullMission?4096:repeatedTurns?2048:1024))throw Error('message-limit');
           const m=JSON.parse(buffer.slice(0,cut));buffer=buffer.slice(cut+1);
           if(!peer){

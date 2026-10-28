@@ -25,6 +25,7 @@ if (!process.exitCode) {
   runReportTests();
   require('./phase-wire.cjs');
   require('./command-outcome.cjs');
+  require('./post-stop.cjs');
   require('./deployment-wire.cjs');
   require('./initial-choices.cjs');
   require('./bootstrap-exchange.cjs');
