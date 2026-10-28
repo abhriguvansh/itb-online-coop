@@ -47,6 +47,8 @@ function M.install(env,path,json,emit,session)
             and tostring(port)==number and #token==48,'transport-config-invalid')
         local sessionConfig=read('session.txt')
         assert(sessionConfig==sid..'\n'..peer..'\nfull-mission\n' and env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP')=='1'
+            or sessionConfig==sid..'\n'..peer..'\nxp-result-checkpoint\n' and env.os.getenv('ITB_COOP_XP_CHECKPOINT')=='1'
+                and not env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP') and not env.os.getenv('ITB_COOP_INITIAL_CHOICES')
             or sessionConfig==sid..'\n'..peer..'\nrepeated-turns\n' and env.os.getenv('ITB_COOP_REPAIR_CHECKPOINT')=='1'
                 and not env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP') and not env.os.getenv('ITB_COOP_INITIAL_CHOICES'),'transport-config-session')
         local open=assert(env.package.loadlib(path..'../itb_transport.dll','luaopen_itb_transport'))

@@ -28,7 +28,7 @@ do
 end
 local json=dofile('mod/scripts/json.lua')
 local function runtime(phaseRun,direct)
-    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='full' and 'full-mission\n' or phaseRun=='deploy' and 'deployment\n' or phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
+    local root='C:/ITBCoopProbe/Wire';local files={[root..'/session.txt']='test-session\nguest\n'..(phaseRun=='xp' and 'xp-result-checkpoint\n' or phaseRun=='full' and 'full-mission\n' or phaseRun=='deploy' and 'deployment\n' or phaseRun=='repeat' and 'repeated-turns\n' or phaseRun and 'interactive-phase\n' or 'interactive\n')}
     local clock,previews,submits=0,0,0
     local env={os={getenv=function()return root end,rename=function(a,b)files[b]=files[a];files[a]=nil;return true end},
         modApi={elapsedTime=function()return clock end},io={open=function(p,mode)
@@ -43,6 +43,7 @@ local function runtime(phaseRun,direct)
         env.ITBCoopTransport=transport
     end
     local w=wire.open(env,json,function()end);local r=wire.decode(dynamic,'test-session').move
+    if w.fullMission then w.sharedXp={healthy=function()end,begin=function()end,finish=function()return {abi='itb-shared-xp-v1',context='fixture',entries=json.array()}end} end
     local s={revision=0,phase='player2',previewMove=function()previews=previews+1;return true end,
         submit=function()submits=submits+1;return {status='pending'} end}
     local native={info=function()return {guardActive=true,sessionState=1,releaseFailed=false,armed=false,pressed=false}end}
@@ -143,3 +144,5 @@ do
  local w=wire.open(env,{},function()end)
  assert(w.fullMission and w.deployment and w.repeatedTurns and w.phaseRun and w.interactive)
 end
+
+do local w=runtime('xp',true).w;assert(w.fullMission and w.terminalCheckpoint and not w.deployment and w.repeatedTurns and w.interactive and w.phaseRun) end

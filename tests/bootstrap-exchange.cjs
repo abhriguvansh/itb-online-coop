@@ -1,6 +1,6 @@
 const assert=require('node:assert/strict'),{BootstrapExchange,validateTranscript}=require('../tools/bootstrap-exchange.cjs');
 const text='ai-constructor|32768|42\n'.repeat(17)+'pod-delivery|3|123\npod-select|9|234\n';
-const base={session:'test',probe:'0.29.0',fixture:'tides-fresh-v1',game:'1.2.93',abi:'itb-initial-choices-v1'};
+const base={session:'test',probe:'0.31.0',fixture:'tides-fresh-v1',game:'1.2.93',abi:'itb-initial-choices-v1'};
 function fixture(witness=text){
  const count=witness.trimEnd().split('\n').length;
  const sent=[],records=[],b=new BootstrapExchange('test',(peer,m)=>sent.push({peer,...m}),r=>records.push(r));

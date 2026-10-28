@@ -16,6 +16,7 @@ local function fixture(options)
         io={open=function(p,mode)assert(mode=='rb','transport must not use per-message files');local v=files[p:match('/([^/]+)$')];
             if v then return {read=function()return v end,close=function()end} end end},
         modApi={elapsedTime=function()return clock end,events={onFrameDrawStart={subscribe=function(_,f)draw=f end}}}}
+    if options.xp then flags.ITB_COOP_LIVE_BOOTSTRAP=nil;flags.ITB_COOP_XP_CHECKPOINT='1';files['session.txt']=sid..'\n'..peer..'\nxp-result-checkpoint\n' end
     if options.change then options.change(files)end
     local t=M.install(env,'mod/scripts/',json,function(k,p)records[#records+1]={kind=k,payload=p}end,function()return {stop=function()stops=stops+1 end}end)
     return {t=t,sid=sid,files=files,state=state,sent=sent,packets=packets,records=records,
@@ -42,3 +43,5 @@ do local f=fixture();f.tick();f.t:send({type='complete',session=f.sid,peer='gues
 do local f=fixture({change=function(files)files['native-connection.txt']='malformed'end});assert(f.t.error and f.stops()==1)end
 do local f=fixture({checkpoint=true});f.tick();assert(f.t:healthy() and not f.t.error)end
 print('In-game transport: ordered hello/messages, bounded pre-arm heartbeats, data framing, replaced config, disconnect/fault/timeout stop and completion passed (socket/engine doubles).')
+
+do local f=fixture({xp=true});assert(f.t:healthy()) end

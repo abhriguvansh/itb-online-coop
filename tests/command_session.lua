@@ -435,4 +435,9 @@ test('Reset requires a fresh completed phase and distinct unanimous consent with
  local after=make('move','after-reset');after.phase=s.phase;after.revision=4
  assert(s:submit('guest',after).status=='pending' and e.moveCalls==2)
 end)
+test('Tides saved-result checkpoint uses its mission adapter without deployment',function()
+ local e,o,r=fixture();o.fullMission=true;o.terminalCheckpoint=true;o.repeatedTurns=true;o.phase='player3';e.turn=3;e.mission.ID='Mission_Tides'
+ local s=session.new(o);local request=r();request.phase='player3'
+ assert(s:previewMove('guest',request));assert(s:submit('guest',request).status=='pending' and e.moveCalls==1)
+end)
 print('Shared command session contracts: '..passed..' passed (real Lua diagnostics, mocked game/guard).')

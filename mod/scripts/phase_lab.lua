@@ -36,6 +36,7 @@ function M.install(env,mod,native,path)
     end
     local function emit(k,p) mod.probe:record(k,p) end
     wire=require(path..'phase_wire').open(env,json,emit)
+    if wire and wire.fullMission then wire.sharedXp=require(path..'shared_xp').new(env,path,json,emit) end
     local self={status=wire and 'Network phase proof' or 'Protected phase sequence',used=false,
         identity=wire and wire.session or 'local-phase-proof'}
     self.resultTrace=require(path..'mission_completion').observe(env,emit,json,native)
@@ -98,7 +99,8 @@ function M.install(env,mod,native,path)
             and not mod.attack.armed and not mod.attack.pending and not mod.inputGate.active,'other-diagnostic-active')
         local finalCheckpoint=wire and wire.terminalCheckpoint
         local deploying=wire and wire.deployment
-        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(deploying and 0 or finalCheckpoint and 4 or 2),'checkpoint-required')
+        local finalTurn=wire and wire.fullMission and 3 or 4
+        check(mod.movement:profileAllowed() and env.Game:GetTurnCount()==(deploying and 0 or finalCheckpoint and finalTurn or 2),'checkpoint-required')
         local state,idle=capture();check(idle and state.gridPower==(deploying and 2 or finalCheckpoint and 1 or 4),'checkpoint-not-ready')
         if deploying then
             check(mod.initialChoices and mod.initialChoices.healthy and mod.initialChoices:healthy(),'initial-choice-bootstrap-incomplete')
@@ -117,7 +119,7 @@ function M.install(env,mod,native,path)
         if deploying then mod.movement.bridge:startSession() else mod.movement:lockInput('protected') end
         self.used=true;mod.movement.sessionOwned=true
         self.session=require(path..'command_session').new({env=env,session=self.identity,encounter='artillery-checkpoint',
-            phase=deploying and 'deployment' or finalCheckpoint and 'player4' or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
+            phase=deploying and 'deployment' or finalCheckpoint and ('player'..finalTurn) or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
                 cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
                 missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),undoMove=require(path..'undo_move'),resetTurn=require(path..'reset_turn'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
@@ -133,6 +135,7 @@ function M.install(env,mod,native,path)
     local function advance()
         local s=self.session
         if s.stopped then
+            if wire and wire.sharedXp then wire.sharedXp:stop() end
             self.status='Stopped: '..tostring(s.reason)..' - Esc exits'
             if self.intent then self.intent:update(s,false) end
             if wire and not self.stopSent then self.stopSent=true;wire:send({type='stopped',reason=tostring(s.reason)}) end
@@ -199,7 +202,7 @@ function M.install(env,mod,native,path)
         end
         local ok,err=pcall(function()
             self.button.visible=mod.movement:profileAllowed() and env.sdlext.isGame()
-                and env.GetCurrentMission() and env.GetCurrentMission().ID==(wire and wire.deployment and 'Mission_Tides' or 'Mission_Artillery')
+                and env.GetCurrentMission() and env.GetCurrentMission().ID==(wire and (wire.deployment or wire.fullMission) and 'Mission_Tides' or 'Mission_Artillery')
             self.button:caption(self.status)
             if self.startAt and env.modApi:elapsedTime()>=self.startAt then self.startAt=nil;start() end
             if mod.movement:profileAllowed() then self.resultTrace:draw() end
@@ -207,6 +210,7 @@ function M.install(env,mod,native,path)
             if self.intent then self.intent:draw(env.sdlext.getUiRoot(),self.session~=nil and self.button.visible) end
         end)
         if not ok then
+            if wire and wire.sharedXp then pcall(function()wire.sharedXp:stop()end) end
             self.status='Sequence stopped - Esc exits';self.done=true
             if self.session then self.session:stop('phase-lab:'..tostring(err)) else native.sessionStop();native.finish() end
             emit('phase_lab_failed',{reason=tostring(err)})

@@ -33,9 +33,12 @@ function M.open(env,json,emit)
     assert(root=='C:/ITBCoopProbe/Wire','unsupported-wire-directory')
     local f=assert(env.io.open(root..'/session.txt','rb'),'wire-config-missing')
     local config=f:read(256);f:close()
+    local checkpointSuffix='xp-result-checkpoint\n'
+    local xpCheckpoint=config:sub(-#checkpointSuffix)==checkpointSuffix
+    if xpCheckpoint then config=config:sub(1,-#checkpointSuffix-1)..'terminal-checkpoint\n' end
     local fullSuffix='full-mission\n'
-    local fullMission=config:sub(-#fullSuffix)==fullSuffix
-    if fullMission then config=config:sub(1,-#fullSuffix-1)..'deployment\n' end
+    local fullMission=xpCheckpoint or config:sub(-#fullSuffix)==fullSuffix
+    if fullMission and not xpCheckpoint then config=config:sub(1,-#fullSuffix-1)..'deployment\n' end
     local deploymentSuffix='deployment\n'
     local deployment=config:sub(-#deploymentSuffix)==deploymentSuffix
     if deployment then config=config:sub(1,-#deploymentSuffix-1)..'interactive-phase\n' end
@@ -43,7 +46,7 @@ function M.open(env,json,emit)
     local terminalCheckpoint=config:sub(-#terminalSuffix)==terminalSuffix
     if terminalCheckpoint then config=config:sub(1,-#terminalSuffix-1)..'repeated-turns\n' end
     local repeatedTurns=fullMission or config:sub(-15)=='repeated-turns\n'
-    if repeatedTurns and not fullMission then config=config:sub(1,-16)..'interactive-phase\n' end
+    if repeatedTurns and (not fullMission or xpCheckpoint) then config=config:sub(1,-16)..'interactive-phase\n' end
     local phaseRun=config:sub(-18)=='interactive-phase\n'
     if phaseRun then config=config:sub(1,-19)..'interactive\n' end
     local interactive=config:sub(-12)=='interactive\n'
@@ -66,9 +69,10 @@ function M.open(env,json,emit)
         self.tx=self.tx+1
     end
     function self:arm(context)
+        if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:healthy() end
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.29.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.31.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -90,6 +94,7 @@ function M.open(env,json,emit)
         self:send({type='reset_ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmReset=true})
     end
     function self:tick(s,request,native)
+        if self.sharedXp then self.sharedXp:healthy() end
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable') end
         assert(now()-self.since<(self.fullMission and 3600000 or self.repeatedTurns and 1800000 or self.interactive and 600000 or 180000),'wire-experiment-timeout')
         assert(now()-self.last<10000,'wire-heartbeat-timeout')
@@ -157,6 +162,7 @@ function M.open(env,json,emit)
                         self.prepared=nil
                     end
                     assert(not self.pending and m.id==r.id,'wire-unexpected-command')
+                    if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:begin(self.session,r) end
                     local result=s:submit(m.peer,r)
                     assert(result.status=='pending','wire-command-rejected:'..tostring(result.reason))
                     self.pending=r.id
@@ -178,7 +184,8 @@ function M.open(env,json,emit)
         if self.spawn then self.spawn:tick() end
         if self.pending and s.revision==self.observed+1 then
             local r=request();self.observed=s.revision
-            self:send({type='observed',id=self.pending,revision=s.revision,phase=s.phase,witness=r.witness,native=native.info(),resetRemaining=self.pendingKind=='reset-turn' and s.resetRemaining or nil})
+            local xp=self.sharedXp and self.sharedXp:finish() or nil
+            self:send({type='observed',id=self.pending,revision=s.revision,phase=s.phase,witness=r.witness,native=native.info(),resetRemaining=self.pendingKind=='reset-turn' and s.resetRemaining or nil,sharedXp=xp})
             self.pending=nil
             self.pendingKind=nil
         end

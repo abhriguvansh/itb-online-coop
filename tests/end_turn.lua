@@ -222,4 +222,8 @@ test('Tides terminal hook requires its observed third turn and both environment 
     assert(l:beginTerminal(e.mission) and not l.pending)
     assert(not l:beginTerminal(e.mission),'committed terminal transition cannot repeat')
 end)
+
+test('Pinned Tides result checkpoint admits only final third turn',function()
+ local e,l=fixture();e.mission.ID='Mission_Tides';e.friendlyIds={0,1,2};l.fullMission=true;l.repeatedTurns=true;l.terminalCheckpoint=true;e.turn=3;assert(l:arm());e.turn=4;assert(not l:arm())
+end)
 print('Protected End Turn contracts: '..passed..' passed (mocked engine/native input).')

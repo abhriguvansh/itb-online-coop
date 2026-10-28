@@ -147,9 +147,71 @@ static int restore(lua_State *L){
     }
     return info(L);
 }
+/* One observed shared-XP remainder CALL. Native division/award logic stays intact.
+ * A command's common session context supplies independent 15-bit hash tickets.
+ * Consume each original draw once, and compare applied draws before admission. */
+static int xp_active,xp_fault,xp_count;
+static char xp_context[224];
+static unsigned char xp_saved[5],xp_patched[5];
+static DWORD xp_protection;
+static struct {int raw,applied,limit;} xp_entries[128];
+static const unsigned char xp_expected[11]={0xe8,0xf0,0x8b,0x1f,0,0x8b,0x4d,0xe0,0x99,0xf7,0xfe};
+static int xp_ticket(const char *context,DWORD index,int *value){
+    HCRYPTPROV prov=0;HCRYPTHASH h=0;BYTE hash[32];DWORD n=32;int ok=0;
+    if(!CryptAcquireContextW(&prov,NULL,NULL,PROV_RSA_AES,CRYPT_VERIFYCONTEXT)||!CryptCreateHash(prov,CALG_SHA_256,0,0,&h))goto done;
+    if(!CryptHashData(h,(const BYTE*)context,(DWORD)strlen(context),0)||!CryptHashData(h,(const BYTE*)&index,sizeof(index),0))goto done;
+    if(!CryptGetHashParam(h,HP_HASHVAL,hash,&n,0)||n!=32)goto done;
+    *value=((int)hash[0]|((int)hash[1]<<8))&32767;ok=1;
+ done:if(h)CryptDestroyHash(h);if(prov)CryptReleaseContext(prov,0);return ok;
+}
+static int xp_patch(const unsigned char *before,const unsigned char *after,int applying){
+    DWORD prior,ignored;unsigned char *site=game+0x18f321;
+    if(memcmp(site,before,5)||!protect_page(site,5,PAGE_EXECUTE_READWRITE,&prior))return 0;
+    memcpy(site,after,5);xp_active=applying;if(applying)xp_protection=prior;
+    int ok=flush_cache(GetCurrentProcess(),site,5)!=0;
+    if(!protect_page(site,5,applying?prior:xp_protection,&ignored))ok=0;
+    return ok;
+}
+__attribute__((used,noinline)) static int __cdecl xp_draw(int limit){
+    int raw=original_rand(),applied=raw;
+    if(GetCurrentThreadId()!=owner||!xp_active){xp_fault=1;return raw;}
+    if(xp_count>=128||limit<1||limit>3||raw<0||raw>32767){xp_fault=2;return raw;}
+    if(!xp_fault&&!xp_ticket(xp_context,(DWORD)xp_count,&applied))xp_fault=3;
+    xp_entries[xp_count].raw=raw;xp_entries[xp_count].applied=applied;xp_entries[xp_count].limit=limit;xp_count++;
+    return applied;
+}
+__attribute__((naked)) static int __cdecl xp_hook(void){__asm__ volatile("pushl %esi\n\tcalll _xp_draw\n\taddl $4,%esp\n\tretl");}
+static int xp_info(lua_State *L){
+    p_lua_createtable(L,0,5);p_lua_pushstring(L,"itb-shared-xp-v1");p_lua_setfield(L,-2,"abi");
+    field_bool(L,"active",xp_active);field_num(L,"fault",xp_fault);field_num(L,"count",xp_count);
+    p_lua_pushstring(L,xp_context);p_lua_setfield(L,-2,"context");p_lua_createtable(L,xp_count,0);
+    for(int i=0;i<xp_count;i++){p_lua_createtable(L,0,3);field_num(L,"raw",xp_entries[i].raw);field_num(L,"applied",xp_entries[i].applied);field_num(L,"limit",xp_entries[i].limit);p_lua_rawseti(L,-2,i+1);}
+    p_lua_setfield(L,-2,"entries");return 1;
+}
+static int xp_begin(lua_State *L){
+    size_t n=0;const char *context=p_lua_tolstring(L,1,&n);
+    /* A pinned saved-result experiment has no initialization hooks to install. */
+    if(!game&&!xp_fault&&!attempted&&verify_file()){
+        game=(unsigned char*)GetModuleHandleW(NULL);owner=GetCurrentThreadId();
+        original_rand=(void*)(game+0x387f16);
+    }
+    if(xp_fault||xp_active||installed||fault||!game||GetCurrentThreadId()!=owner||p_lua_type(L,1)!=LUA_TSTRING||!context||n<10||n>=sizeof(xp_context)||memchr(context,0,n)||!strcmp(context,xp_context)||!verify_file()){
+        xp_fault=4;return xp_info(L);
+    }
+    if(memcmp(game+0x18f321,xp_expected,11)){xp_fault=5;return xp_info(L);}
+    memcpy(xp_context,context,n);xp_context[n]=0;xp_count=0;memcpy(xp_saved,xp_expected,5);xp_patched[0]=0xe8;
+    uint32_t displacement=(uint32_t)(uintptr_t)xp_hook-(uint32_t)(uintptr_t)(game+0x18f326);memcpy(xp_patched+1,&displacement,4);
+    if(!xp_patch(xp_saved,xp_patched,1))xp_fault=6;
+    return xp_info(L);
+}
+static int xp_finish(lua_State *L){
+    if(xp_active&&(GetCurrentThreadId()!=owner||!xp_patch(xp_patched,xp_saved,0)))xp_fault=7;
+    return xp_info(L);
+}
 #define LOAD(name) p_##name=(void*)GetProcAddress(lua,#name);if(!p_##name)return 0
 __declspec(dllexport) int __cdecl luaopen_itb_initial_choices(lua_State *L){
  HMODULE lua=GetModuleHandleW(L"lua5.1.dll");if(!lua||sizeof(void*)!=4)return 0;
  LOAD(lua_type);LOAD(lua_objlen);LOAD(lua_rawgeti);LOAD(lua_getfield);LOAD(lua_tonumber);LOAD(lua_tolstring);LOAD(lua_settop);LOAD(lua_createtable);LOAD(lua_pushnumber);LOAD(lua_pushboolean);LOAD(lua_pushstring);LOAD(lua_setfield);LOAD(lua_rawseti);LOAD(lua_pushcclosure);
- p_lua_createtable(L,0,3);p_lua_pushcclosure(L,install,0);p_lua_setfield(L,-2,"install");p_lua_pushcclosure(L,info,0);p_lua_setfield(L,-2,"info");p_lua_pushcclosure(L,restore,0);p_lua_setfield(L,-2,"restore");return 1;
+ p_lua_createtable(L,0,6);p_lua_pushcclosure(L,install,0);p_lua_setfield(L,-2,"install");p_lua_pushcclosure(L,info,0);p_lua_setfield(L,-2,"info");p_lua_pushcclosure(L,restore,0);p_lua_setfield(L,-2,"restore");
+ p_lua_pushcclosure(L,xp_begin,0);p_lua_setfield(L,-2,"xpBegin");p_lua_pushcclosure(L,xp_info,0);p_lua_setfield(L,-2,"xpInfo");p_lua_pushcclosure(L,xp_finish,0);p_lua_setfield(L,-2,"xpFinish");return 1;
 }

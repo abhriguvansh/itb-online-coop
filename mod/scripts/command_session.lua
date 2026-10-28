@@ -100,7 +100,7 @@ function M.new(o)
         end
     end
     move = o.movement.new(o.env,labEvent,'ui')
-    if o.deployment then move.supportedMission='Mission_Tides' end
+    if o.deployment or o.fullMission then move.supportedMission='Mission_Tides' end
     move.bridge = o.bridge
     attack = o.attack.new(o.env,move,o.gate,labEvent,o.capture,o.json)
     attack.bridge=o.bridge
@@ -132,7 +132,7 @@ function M.new(o)
         if r.kind=='reset-turn' then return {turn=self.turn,restoreWitness=self.resetBase and self.resetBase.restoreWitness,actionObserved=self.resetAction==true} end
         if not entity then return nil end
         return {pawnId=entity.pawnId,repair=r.kind=='repair' or nil,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
-            mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn,
+            mission=(o.deployment or o.fullMission) and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn,
             restoreWitness=r.kind=='undo-move' and undoMoves[#undoMoves] and undoMoves[#undoMoves].witness or nil}
     end
     function self:undoTarget(peer,actor)
@@ -240,7 +240,7 @@ function M.new(o)
         if not entity or not entity.commandable or entity.owner~=peer then return false,'actor-not-owned' end
         if not move:arm() then return false,move.status end
         local ok,reason=move:validate({pawnId=entity.pawnId,from={x=r.fromX,y=r.fromY},to={x=r.toX,y=r.toY},
-            mission=o.deployment and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn})
+            mission=(o.deployment or o.fullMission) and 'Mission_Tides' or 'Mission_Artillery',turn=self.turn})
         move.armed=false
         return ok,ok and 'supported-move' or tostring(reason)
     end

@@ -22,7 +22,7 @@ testRepeatedTurns();
  const n={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
  const ctx=(revision,turn,x=0,spent=false)=>({revision,phase:'player'+turn,witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn,pawns:[{localId:2,position:{x,y:3},active:true,movementSpent:spent}]})});
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
  const vote=(revision,turn,x=0)=>({type:'reset_ready',confirmReset:true,...ctx(revision,turn,x,x!==0)});
  assert.throws(()=>send('host',vote(0,2)),/reset-unavailable/);
  for(const peer of ['host','guest'])send(peer,{type:'ready',confirmUnused:true,...ctx(0,2)});
@@ -57,7 +57,7 @@ testRepeatedTurns();
  const sent=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true,true);
  const n={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
  const ctx=(revision,x,y,spent)=>({revision,phase:'player2',witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn:2,pawns:[{localId:2,position:{x,y},active:true,movementSpent:spent}]})});
- for(const peer of ['host','guest'])c.receive(peer,{type:'armed',session,peer,probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,0,3,false)});
+ for(const peer of ['host','guest'])c.receive(peer,{type:'armed',session,peer,probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,0,3,false)});
  const proposal=(kind,id,revision,fromX,fromY,toX,toY,spent)=>({session,encounter:'artillery-checkpoint',...ctx(revision,fromX,fromY,spent),id,kind,actor:'artillery',fromX,fromY,toX,toY});
  const first=proposal('move','move-guest-1',0,0,3,0,2,false);
  const apply=(r,next)=>{
@@ -81,7 +81,7 @@ testRepeatedTurns();
  const state=(artillery,combat)=>JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn:2,pawns:[{localId:2,position:{x:0,y:artillery},active:true,movementSpent:artillery===2},{localId:0,position:{x:combat,y:3},active:true,movementSpent:combat===2}]});
  const ctx=(revision,artillery=3,combat=3)=>({revision,phase:'player2',witness:state(artillery,combat)});
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0)});
  const request=(peer,kind,actor,id,fromX,fromY,toX,toY)=>({session,encounter:'artillery-checkpoint',phase:'player2',revision:c.stage,witness:c.states.host.witness,id:kind==='move'?'move-'+peer+'-'+id:'undo-'+peer+'-'+id,kind,actor,fromX,fromY,toX,toY});
  const apply=(origin,r,next)=>{
   send(origin,{type:'proposal',request:r});
@@ -102,7 +102,7 @@ testRepeatedTurns();
  const make=()=>{
   const sent=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true,true);
   const witness=JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn:2,pawns:[{localId:0,position:{x:3,y:3},active:true,movementSpent:false,health:2}]});
-  for(const peer of ['host','guest'])c.receive(peer,{type:'armed',session,peer,probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,revision:0,phase:'player2',witness});
+  for(const peer of ['host','guest'])c.receive(peer,{type:'armed',session,peer,probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,revision:0,phase:'player2',witness});
   const request={session,encounter:'artillery-checkpoint',revision:0,phase:'player2',witness,id:'repair-host-1',kind:'repair',actor:'combat',fromX:3,fromY:3,toX:3,toY:3};
   return {c,sent,request};
  };
@@ -121,7 +121,7 @@ function testRepeatedTurns(){
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});
  const ctx=(revision,turn)=>({revision,phase:'player'+turn,witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],pawns:[{localId:2,position:{x:0,y:3},movementSpent:false,active:true}],turn})});
  const n={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx(0,2)});
  let rev=0,turn=2;
  for(const kind of ['move','end-turn','move','end-turn','move']){
   let r,origin;
@@ -180,7 +180,7 @@ function spawnFixture(){
 function fixture(){
   const sent=[],events=[];const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e));
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:false,...context(0)});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:false,...context(0)});
   return {c,sent,events,send};
 }
 let count=0;
@@ -232,7 +232,7 @@ function interactiveFixture(){
   const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},sent=[];
   let time=0;const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>time);
   const send=(peer,message)=>c.receive(peer,{session,peer,...message});
-  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,...ctx});
+  for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,...ctx});
   const r={session,encounter:'artillery-checkpoint',...ctx,id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
   const prepare=()=>{for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request:r,native:{...guard,armed:false,pressed:false}});};
   return {c,send,sent,r,ctx,prepare,elapse:ms=>{time+=ms;}};
@@ -291,7 +291,7 @@ test('selected phase requires two explicit ready messages and fresh preparation 
  const sent=[],state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:0,position:{x:3,y:3},active:true},{localId:1,position:{x:1,y:5},movementSpent:false},{localId:2,position:{x:0,y:3},movementSpent:false}]};
  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true);
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});let ctx={revision:0,phase:'player2',witness:JSON.stringify(state)};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,phaseRun:true,...ctx});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,...ctx});
  for(let n=0;n<4;n++){
   const origin=['guest','host','host','guest'][n],r=expected(session,n,ctx);
   if(n!==2)r.id=(n===1?'attack-':'move-')+origin+'-'+(n+1);
@@ -321,7 +321,7 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  const state={schema:'itb-observation-v1',unavailable:[],pawns:[{localId:1,position:{x:1,y:5},active:true}]},sent=[];
  const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),()=>{},true,()=>0,true,true);
  const ctx={revision:0,phase:'player2',witness:JSON.stringify(state)},send=(peer,m)=>c.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.29.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,...ctx});
  const request={session,encounter:'artillery-checkpoint',...ctx,id:'attack-guest-1',kind:'basic-attack',actor:'cannon',fromX:1,fromY:5,toX:1,toY:3};
  assert.throws(()=>send('host',{type:'proposal',request}),/actor-not-owned/);
  send('guest',{type:'proposal',request});assert.equal(c.mode,'preparing');
@@ -343,7 +343,7 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  const {c,sent,msg,events}=make();c.receive('host',msg('host','result_prepared'));
  assert.equal(sent.length,0);assert.throws(()=>c.receive('host',msg('host','result_prepared')),/duplicate-preparation/);
  c.receive('guest',msg('guest','result_prepared'));assert.equal(sent.filter(s=>s.frame.kind==='RESULTCONTINUE').length,2);
- const result={schema:'itb-mission-result-v1',coverage:'partial-result-only',region:2,regionState:2,mission:'',grid:2,reputation:1,pilots:[0,1,2].map(slot=>({slot,id:'p'+slot,experience:slot,level:0})),objectives:[{slot:0,text:'Mission_Artillery_Obj',value:1,potential:1},{slot:1,text:'Bonus_Simple_Asset',value:1,potential:1}]};
+ const result={schema:'itb-mission-result-v1',coverage:'partial-result-only',region:2,regionState:2,mission:'',grid:2,reputation:1,pilots:[0,1,2].map(slot=>({slot,id:'p'+slot,experience:slot,level:0,skill1:3,skill2:0})),objectives:[{slot:0,text:'Mission_Artillery_Obj',value:1,potential:1},{slot:1,text:'Bonus_Simple_Asset',value:1,potential:1}]};
  const after=JSON.stringify(result);
  c.receive('host',msg('host','result_observed',after));assert.equal(c.mode,'result-executing');
  c.receive('guest',msg('guest','result_observed',after));assert.equal(c.mode,'result-finishing');
@@ -356,11 +356,20 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  const mismatch=make();for(const peer of ['host','guest'])mismatch.c.receive(peer,mismatch.msg(peer,'result_prepared'));
  mismatch.c.receive('host',mismatch.msg('host','result_observed',after));
  assert.throws(()=>mismatch.c.receive('guest',mismatch.msg('guest','result_observed',JSON.stringify({...result,reputation:2}))),/outcome-divergence/);
+ const missingSkill=make();for(const peer of ['host','guest'])missingSkill.c.receive(peer,missingSkill.msg(peer,'result_prepared'));
+ const incomplete=structuredClone(result);delete incomplete.pilots[0].skill1;
+ assert.throws(()=>missingSkill.c.receive('host',missingSkill.msg('host','result_observed',JSON.stringify(incomplete))),/incomplete-pilots/);
+ const changedSkill=make();for(const peer of ['host','guest'])changedSkill.c.receive(peer,changedSkill.msg(peer,'result_prepared'));
+ changedSkill.c.receive('host',changedSkill.msg('host','result_observed',after));
+ const changedPilot=structuredClone(result);changedPilot.pilots[0].skill1=4;
+ assert.throws(()=>changedSkill.c.receive('guest',changedSkill.msg('guest','result_observed',JSON.stringify(changedPilot))),/outcome-divergence/);
  console.log('Terminal coordinator requires both preparations, committed result equality and both acknowledgments (fake peers).');
  const fresh=make();fresh.c.fullMission=true;fresh.c.deployment=true;
  assert.throws(()=>fresh.c.receive('host',fresh.msg('host','result_prepared')),/outside-final/,'Tides does not use the Artillery turn-four boundary');
  fresh.c.turn=3;fresh.c.states={host:{phase:'player3'},guest:{phase:'player3'}};
- const freshMsg=(peer,type,body)=>({...fresh.msg(peer,type,body),phase:'player3'});
+ fresh.c.proposal={request:{phase:'player3'}};
+ const xp={abi:'itb-shared-xp-v1',context:session+'/player3/16/end-turn-16',entries:[]};
+ const freshMsg=(peer,type,body)=>({...fresh.msg(peer,type,body),phase:'player3',sharedXp:xp});
  for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'result_prepared'));
  assert.throws(()=>fresh.c.receive('host',freshMsg('host','result_observed',after)),/uncommitted-state/,'old fixture region cannot finish a fresh mission');
  const freshResult={...result,region:1,objectives:[{slot:0,text:'Bonus_GridDamage',value:0,potential:1},{slot:1,text:'Bonus_Power',value:1,potential:1}]};
@@ -369,4 +378,30 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  assert.equal(fresh.c.mode,'result-finishing');
  for(const peer of ['host','guest'])fresh.c.receive(peer,freshMsg(peer,'complete',freshAfter));
  assert.equal(fresh.c.mode,'complete','mission completion does not require every bonus objective to succeed');
+ const podResult={...freshResult,objectives:[...freshResult.objectives,{slot:2,text:'Pod_Failed',category:3,param1:'',param2:'',value:0,potential:1}]};
+ for(const variant of ['observed','unknown','wrong-category','changed-peer']){
+  const p=make();p.c.fullMission=true;p.c.turn=3;p.c.states={host:{phase:'player3'},guest:{phase:'player3'}};
+  p.c.proposal={request:{phase:'player3'}};
+  const send=(peer,type,value)=>p.c.receive(peer,{...p.msg(peer,type,value),phase:'player3',sharedXp:xp});
+  for(const peer of ['host','guest'])send(peer,'result_prepared');
+  const value=structuredClone(podResult);
+  if(variant==='unknown')value.objectives[2].text='Pod_Unobserved';
+  if(variant==='wrong-category')value.objectives[2].category=2;
+  if(variant==='unknown'||variant==='wrong-category')assert.throws(()=>send('host','result_observed',JSON.stringify(value)),/incomplete-objectives/);
+  else{
+   send('host','result_observed',JSON.stringify(value));
+   if(variant==='changed-peer')assert.throws(()=>send('guest','result_observed',freshAfter),/outcome-divergence/);
+   else{send('guest','result_observed',JSON.stringify(value));assert.equal(p.c.mode,'result-finishing');}
+  }
+ }
+ console.log('Only the observed third Pod_Failed result is admitted; unknown variants and differing peer objectives refuse (fake peers).');
+ for(const variant of ['missing','context','limit','different']){
+  const p=make();p.c.fullMission=true;p.c.turn=3;p.c.states={host:{phase:'player3'},guest:{phase:'player3'}};p.c.proposal={request:{phase:'player3'}};
+  const send=(peer,value)=>p.c.receive(peer,{...p.msg(peer,'result_prepared'),phase:'player3',sharedXp:value});
+  const good={...xp,entries:[{limit:3,applied:123}]};
+  if(variant==='different'){send('host',good);assert.throws(()=>send('guest',{...good,entries:[{limit:3,applied:124}]}),/shared-xp-divergence/);}
+  else assert.throws(()=>send('host',variant==='missing'?undefined:variant==='context'?{...good,context:'stale'}:{...good,entries:[{limit:4,applied:123}]}),/shared-xp-/);
+  assert.equal(p.sent.filter(v=>v.frame.kind==='RESULTCONTINUE').length,0,'unagreed XP cannot authorize result navigation');
+ }
+ console.log('Shared-XP proof requires exact command context, supported limits and equal applied draws before Continue (fake peers).');
 }

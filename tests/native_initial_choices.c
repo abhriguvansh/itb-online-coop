@@ -49,5 +49,15 @@ int main(void){
     protect_ok=0;assert(!patch(0,saved[0],patched[0],1)&&!live_mask);
     protect_ok=1;assert(patch(0,saved[0],patched[0],1));game[sites[0]]=0;restore_hooks();
     assert(fault==7&&live_mask==1&&installed);
-    free(game);puts("Initial-choice native contracts passed (CI doubles; no game proof).");return 0;
+    /* Shared XP consumes one original draw, with a separate exact command ticket. */
+    reset();xp_fault=xp_count=0;xp_active=1;strcpy(xp_context,"fixture-session/player3/27/end-turn-27");
+    int first,again,other;assert(xp_ticket(xp_context,0,&first)&&xp_ticket(xp_context,0,&again)&&first==again);
+    assert(xp_ticket(xp_context,1,&other)&&other>=0&&other<=32767);
+    assert(xp_draw(3)==first&&calls==1&&xp_count==1&&xp_entries[0].raw==123&&xp_entries[0].limit==3);
+    assert(xp_draw(4)==123&&calls==2&&xp_fault==2&&xp_count==1);
+    xp_fault=0;xp_count=128;assert(xp_draw(3)==123&&calls==3&&xp_fault==2);
+    xp_fault=0;xp_count=0;owner++;assert(xp_draw(3)==123&&calls==4&&xp_fault==1);owner--;
+    xp_active=0;xp_fault=0;memcpy(game+0x18f321,xp_expected,5);memcpy(xp_saved,xp_expected,5);memcpy(xp_patched,"\xe8\x01\x02\x03\x04",5);
+    assert(xp_patch(xp_saved,xp_patched,1)&&xp_active);assert(xp_patch(xp_patched,xp_saved,0)&&!xp_active);
+    free(game);puts("Initial-choice and shared-XP native contracts passed (CI doubles; no game proof).");return 0;
 }

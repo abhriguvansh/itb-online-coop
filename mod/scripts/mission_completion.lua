@@ -14,8 +14,10 @@ function M.saved(env,index,json)
     assert(type(result.mission)=='string','result-mission-missing')
     for id=0,2 do
         local pilot=assert(game.current['pilot'..id],'result-pilot-missing')
-        assert(type(pilot.id)=='string' and integer(pilot.exp) and integer(pilot.level),'result-pilot-fields')
-        result.pilots[#result.pilots+1]={slot=id,id=pilot.id,experience=pilot.exp,level=pilot.level}
+        assert(type(pilot.id)=='string' and integer(pilot.exp) and integer(pilot.level)
+            and integer(pilot.skill1) and integer(pilot.skill2),'result-pilot-fields')
+        result.pilots[#result.pilots+1]={slot=id,id=pilot.id,experience=pilot.exp,level=pilot.level,
+            skill1=pilot.skill1,skill2=pilot.skill2}
     end
     for i=0,7 do
         local v=region.objectives and region.objectives[tostring(i)]
@@ -32,6 +34,35 @@ end
 function M.runtime(o)
     local env,native,json,wire=o.env,o.native,o.json,o.wire
     local self={frame=0}
+    local promotionPortraits
+    local function portraitPosition()
+        if not promotionPortraits then
+            promotionPortraits={}
+            for _,suffix in ipairs({'','_2','_blink'}) do
+                promotionPortraits[#promotionPortraits+1]=env.sdlext.getSurface({path='img/portraits/pilots/Pilot_Original'..suffix..'.png'})
+            end
+        end
+        for _,surface in ipairs(promotionPortraits) do
+            if surface:wasDrawn() then
+                return surface.x,surface.y
+            end
+        end
+    end
+    local function promotionVisible()
+        local x,y=portraitPosition()
+        if x then
+            assert(x==810 and y==471,'unsupported-result-portrait-layout')
+            return true
+        end
+        return false
+    end
+    local function continueTarget()
+        local x,y=portraitPosition()
+        assert(x==959 and (y==653 or y==688),'unsupported-result-continue-layout')
+        -- Two observed native result layouts: two objectives, or an added pod.
+        -- Revalidated before the sole click; never infer layout from RNG count.
+        return y==653 and 803 or 839
+    end
     local function now() return env.modApi:elapsedTime() end
     local function healthy()
         local n=native.info()
@@ -42,7 +73,7 @@ function M.runtime(o)
     end
     local function send(kind,witness)
         local p=self.pending
-        wire:send({type=kind,id=p.context.id,revision=p.context.revision,phase=p.context.phase,witness=witness,native=native.info()})
+        wire:send({type=kind,id=p.context.id,revision=p.context.revision,phase=p.context.phase,witness=witness,native=native.info(),sharedXp=p.sharedXp})
     end
     local function aim(x,y,stage)
         local p=self.pending;assert(native.aim(x,y),'result-aim-failed')
@@ -111,7 +142,8 @@ function M.runtime(o)
             assert(p.stage=='prepared' and m.witness==p.before and now()-p.preparedAt<90000,'result-continue-not-prepared')
             local state,idle=o.capture()
             assert(idle and #state.unavailable==0 and json.encode(state)==p.before,'result-precondition-changed')
-            assert(native.begin(),'result-input-unavailable');aim(1329,803,'continue-approach')
+            p.continueY=continueTarget()
+            assert(native.begin(),'result-input-unavailable');aim(1329,p.continueY,'continue-approach')
         elseif m.kind=='RESULTDONE' then
             assert(p.stage=='observed' and m.witness==p.after,'result-done-conflict')
             o.session():finishTerminal();p.stage='complete';send('complete',p.after)
@@ -133,6 +165,7 @@ function M.runtime(o)
             local state,idle=o.capture();assert(#state.unavailable==0,'result-incomplete-observation')
             if not idle then return end
             for _,pawn in ipairs(state.pawns) do assert(pawn.team~=env.TEAM_ENEMY or pawn.dead,'result-enemy-not-retreated') end
+            if wire.sharedXp then p.sharedXp=wire.sharedXp:finish() end
             p.stage='await-confirm';p.serial=n.intentSerial
             o.emit('mission_result_retreat_settled',{revision=p.context.revision,state=state});return
         end
@@ -149,11 +182,26 @@ function M.runtime(o)
             if not p.dismissed or not p.changed or env.Board or env.GetCurrentMission() then return end
             assert(env.modApi:getGameState()=='Island','result-not-on-island')
             if n.pressed then return end
-            -- Give the native result transition its normal animation time. This delay
-            -- is not completion proof: only the committed result below can finish.
+            -- Allow the result animation to reach its native dialog. This delay
+            -- is not completion proof; the cue and committed save remain required.
             if now()-p.changedAt<2500 or (env.modApi.runLaterQueue and next(env.modApi.runLaterQueue)) then return end
+            if promotionVisible() then
+                assert(not p.promotionDone,'additional-result-promotion-unsupported')
+                native.finish();assert(native.begin(),'result-promotion-input-unavailable')
+                o.emit('mission_result_promotion_observed',{pilot='Pilot_Original',x=810,y=471})
+                aim(988,672,'promotion-approach');return
+            end
             native.finish();assert(native.begin(),'result-menu-input-unavailable')
             aim(40,26,'gear-approach');return
+        end
+        if p.stage=='promotion-sent' then
+            assert(not env.Board and not env.GetCurrentMission() and env.modApi:getGameState()=='Island','result-promotion-context-lost')
+            if n.pressed or promotionVisible() then return end
+            if not p.promotionGoneFrame then p.promotionGoneFrame=self.frame;return end
+            if self.frame<=p.promotionGoneFrame+1 or (env.modApi.runLaterQueue and next(env.modApi.runLaterQueue)) then return end
+            native.finish();p.promotionDone=true;p.changedAt=now();p.stage='continue-sent'
+            o.emit('mission_result_promotion_acknowledged',{actualReleaseObserved=true,laterDraw=true})
+            return
         end
         if p.stage=='gear-sent' then
             if n.pressed then return end
@@ -165,7 +213,11 @@ function M.runtime(o)
         if p.stage=='menu-sent' then
             if not p.exited or n.pressed or env.modApi:getGameState()~='Main_Menu' then return end
             local result=M.saved(env,p.index,json)
-            if result.regionState~=2 or result.mission~='' or #result.objectives~=2 then
+            local pod=result.objectives[3]
+            local observedPodFailure=wire.fullMission and #result.objectives==3 and pod.slot==2
+                and pod.text=='Pod_Failed' and pod.category==3 and pod.param1=='' and pod.param2==''
+                and pod.value==0 and pod.potential==1
+            if result.regionState~=2 or result.mission~='' or not (#result.objectives==2 or observedPodFailure) then
                 if not p.staleReported then p.staleReported=true;o.emit('mission_result_save_pending',{result=result}) end
                 return -- Read-only wait; never repeat Continue or menu actions.
             end
@@ -173,14 +225,28 @@ function M.runtime(o)
             o.emit('mission_result_committed_observed',{result=result});return
         end
         if n.pressed or self.frame<=p.aimFrame+1 or n.mouseX~=p.x or n.mouseY~=p.y or n.cursorX~=n.mouseX or n.cursorY~=n.mouseY then return end
-        if p.stage=='continue-approach' then aim(1325,803,'continue-click');return end
+        if p.stage=='continue-approach' then
+            assert(continueTarget()==p.continueY,'result-continue-layout-changed')
+            aim(1325,p.continueY,'continue-click');return
+        end
+        if p.stage=='promotion-approach' then
+            assert(not env.Board and not env.GetCurrentMission() and env.modApi:getGameState()=='Island','result-promotion-context-lost')
+            assert(promotionVisible(),'result-promotion-disappeared-before-click')
+            aim(984,672,'promotion-click');return
+        end
         if p.stage=='gear-approach' then aim(36,26,'gear-click');return end
         if p.stage=='menu-approach' then aim(808,593,'menu-click');return end
-        local nextStage=({['continue-click']='continue-sent',['gear-click']='gear-sent',['menu-click']='menu-sent'})[p.stage]
+        local nextStage=({['continue-click']='continue-sent',['promotion-click']='promotion-sent',['gear-click']='gear-sent',['menu-click']='menu-sent'})[p.stage]
         assert(nextStage,'result-unknown-stage')
+        if p.stage=='continue-click' then assert(continueTarget()==p.continueY,'result-continue-layout-changed') end
         if p.stage=='menu-click' then
             local r=env.sdlext.CurrentWindowRect;assert(r and r.x==1005 and r.y==290 and r.w==275 and r.h==500,'result-menu-changed')
         end
+        if p.stage=='promotion-click' then
+            assert(not env.Board and not env.GetCurrentMission() and env.modApi:getGameState()=='Island','result-promotion-context-lost')
+            assert(promotionVisible(),'result-promotion-changed-before-click')
+        end
+        if p.stage=='gear-click' then assert(not promotionVisible(),'result-promotion-before-menu') end
         local action=p.stage;p.stage=nextStage
         if env.sdl then p.releaseExpected=(p.releasesSeen or 0)+1 end
         local accepted,detail=native.click(p.x,p.y)
@@ -194,6 +260,7 @@ function M.runtime(o)
 end
 function M.observe(env,emit,json,native)
     local self={frame=0}
+    local portraits
     env.ITBCoopMissionTail=function()
         local p=self.pending;if not p then return end
         p.tail=true;p.tailFrame=self.frame
@@ -215,6 +282,21 @@ function M.observe(env,emit,json,native)
         local value={tail=p.tail==true,boardPresent=env.Board~=nil,
             missionPresent=env.GetCurrentMission()~=nil,gameState=env.modApi:getGameState(),saved=ok and saved or nil,
             saveUnavailable=not ok,saveReason=not ok and tostring(saved):sub(1,240) or nil,cursor={x=n.mouseX,y=n.mouseY},window=r and {x=r.x,y=r.y,w=r.w,h=r.h} or nil}
+        if env.os.getenv('ITB_COOP_PROMOTION_TRACE')=='1' then
+            if not portraits then
+                portraits={}
+                for _,id in ipairs({'Pilot_Original','Pilot_Rust','Pilot_Pinnacle'}) do
+                    for _,suffix in ipairs({'','_2','_blink'}) do
+                        local path='img/portraits/pilots/'..id..suffix..'.png'
+                        portraits[#portraits+1]={path=path,surface=env.sdlext.getSurface({path=path})}
+                    end
+                end
+            end
+            value.portraits=json.array()
+            for _,entry in ipairs(portraits) do
+                if entry.surface:wasDrawn() then value.portraits[#value.portraits+1]={path=entry.path,x=entry.surface.x,y=entry.surface.y} end
+            end
+        end
         local text=json.encode(value)
         if text~=p.last then p.last=text;emit('mission_result_boundary_observed',value) end
     end

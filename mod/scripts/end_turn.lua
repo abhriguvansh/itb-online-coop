@@ -21,7 +21,7 @@ function M.new(env,native,emit,capture,phaseSettled)
         native.sessionStop();native.finish()
         emit('end_turn_failed',{reason=reason,stage=self.pending and self.pending.stage})
     end
-    local function initialFinal() return self.repeatedTurns and self.terminalCheckpoint and not self.used and env.Game:GetTurnCount()==4 end
+    local function initialFinal() return self.repeatedTurns and self.terminalCheckpoint and not self.used and env.Game:GetTurnCount()==(self.fullMission and 3 or 4) end
     function self:arm()
         local ok,reason=pcall(function()
             context();assert((not self.used or (self.repeatedTurns and self.completedTurn==env.Game:GetTurnCount())) and not self.pending and not self.fault,'one-call-lockout')
