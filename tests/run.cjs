@@ -31,6 +31,7 @@ if (!process.exitCode) {
   require('./fixed-combat.cjs');
   require('./integrated-mission.cjs');
   require('./primary-setup.cjs');
+  require('./private-address.cjs');
   require('./peer-heartbeat.cjs');
   console.log('Contract tests use Fengari (Lua 5.3) and engine doubles. No in-game result is implied.');
 }

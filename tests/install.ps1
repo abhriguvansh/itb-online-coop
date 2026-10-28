@@ -105,7 +105,7 @@ Assert-Condition (-not (Test-Path -LiteralPath $modRoot)) 'Nine-file probe upgra
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture | Out-Null
 Assert-Condition (@(Get-ChildItem -LiteralPath $modRoot -File -Recurse -Force).Count -eq 30) 'Optional bootstrap payload mismatch.'
 $currentMarker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json
-Assert-Condition ($currentMarker.Version-eq'0.32.0') 'Current installer version mismatch.'
+Assert-Condition ($currentMarker.Version-eq'0.33.0') 'Current installer version mismatch.'
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) 'Optional bootstrap uninstall failed.'
 & $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture | Out-Null
@@ -159,3 +159,9 @@ $marker.Files=@($marker.Files|Where-Object {$_.RelativePath-ne'scripts\primary_s
 $marker|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $markerPath -Encoding utf8
 & $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
 Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) '0.31.0 exact-manifest upgrade removal failed.'
+
+& $installer -GamePath $gameRoot -Mode Install -NativeBridgePath $nativeFixture -InitialChoicesPath $nativeFixture -TransportPath $nativeFixture | Out-Null
+$marker=Get-Content -LiteralPath $markerPath -Raw|ConvertFrom-Json;$marker.Version='0.32.0'
+$marker|ConvertTo-Json -Depth 4|Set-Content -LiteralPath $markerPath -Encoding utf8
+& $installer -GamePath $gameRoot -Mode Uninstall | Out-Null
+Assert-Condition (-not(Test-Path -LiteralPath $modRoot)) '0.32.0 exact-manifest upgrade removal failed.'

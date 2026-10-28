@@ -8,7 +8,7 @@ function fixture(){
   deployment:{inProgress:true,phase:0,mechs:[0,1,2].map(id=>({id,state:id?1:0,x:-1,y:-1}))},pawns:[0,1,2].map(localId=>({localId,position:{x:-1,y:-1},active:true}))};
  const ctx={revision:0,phase:'deployment',witness:JSON.stringify(state)};
  const send=(peer,m)=>c.receive(peer,{session:c.session,peer,...ctx,native,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.32.0',interactive:true,phaseRun:true,repeatedTurns:true,deployment:true,fullMission:true,primarySetup:true,sharedXp:'itb-shared-xp-v1'});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.33.0',interactive:true,phaseRun:true,repeatedTurns:true,deployment:true,fullMission:true,primarySetup:true,sharedXp:'itb-shared-xp-v1'});
  const choose=(peer,primary,sharedController='host')=>send(peer,{type:'primary_choice',primary,sharedController});
  const ready=peer=>send(peer,{type:'primary_ready',generation:c.primarySetup.generation,confirm:true});
  const applied=peer=>send(peer,{type:'primary_applied',generation:c.primarySetup.generation,owners:c.primarySetup.snapshot().owners});

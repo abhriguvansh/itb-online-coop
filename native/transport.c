@@ -1,4 +1,4 @@
-/* Opt-in, bounded nonblocking TCP for the isolated two-guest experiment.
+/* Opt-in, bounded private-IPv4 TCP for the isolated two-guest experiment.
  * No hooks, input, game-state writes, DNS, listening socket or reconnection. */
 #include <winsock2.h>
 #include <windows.h>
@@ -26,6 +26,23 @@ static int attempted,state,fault,wsa;
 /* state: 0 disabled, 1 connecting, 2 connected, 3 closed, 4 fault. */
 static char rx[MAX_RX],tx[MAX_TX];
 static unsigned rx_count,tx_count,packet_count,sent_count;
+static char target_text[16];
+/* Canonical RFC1918/CGNAT or exact loopback only. No DNS/public targets. */
+static int private_address(const char *text,size_t size,uint32_t *result){
+    unsigned octets[4]={0},part=0,digits=0;
+    if(!text||size<7||size>15)return 0;
+    for(size_t i=0;i<size;i++){
+        unsigned char c=(unsigned char)text[i];
+        if(c=='.'){if(!digits||part>=3)return 0;part++;digits=0;continue;}
+        if(c<'0'||c>'9'||digits>=3||(digits&&octets[part]==0))return 0;
+        octets[part]=octets[part]*10u+(unsigned)(c-'0');if(octets[part]>255)return 0;digits++;
+    }
+    if(part!=3||!digits)return 0;
+    uint32_t value=(octets[0]<<24)|(octets[1]<<16)|(octets[2]<<8)|octets[3];
+    if(!(octets[0]==10||(octets[0]==172&&octets[1]>=16&&octets[1]<=31)||
+        (octets[0]==192&&octets[1]==168)||(octets[0]==100&&octets[1]>=64&&octets[1]<=127)||value==0x7f000001u))return 0;
+    *result=value;return 1;
+}
 static void close_channel(void){
     if(channel!=INVALID_SOCKET){closesocket(channel);channel=INVALID_SOCKET;}
     if(wsa){WSACleanup();wsa=0;}
@@ -77,7 +94,8 @@ static void pump(void){
 }
 static int info(lua_State *L){
     p_lua_createtable(L,0,7);
-    p_lua_pushstring(L,"itb-transport-v1");p_lua_setfield(L,-2,"abi");
+    p_lua_pushstring(L,"itb-transport-v2");p_lua_setfield(L,-2,"abi");
+    p_lua_pushstring(L,target_text);p_lua_setfield(L,-2,"target");
     p_lua_pushnumber(L,state);p_lua_setfield(L,-2,"state");
     p_lua_pushnumber(L,fault);p_lua_setfield(L,-2,"fault");
     p_lua_pushnumber(L,tx_count);p_lua_setfield(L,-2,"pendingTx");
@@ -89,12 +107,15 @@ static int open_channel(lua_State *L){
     if(attempted)return info(L);
     attempted=1;owner=GetCurrentThreadId();started=GetTickCount();
     lua_Number port=p_lua_tonumber(L,1);
-    if(!allowed_process()||p_lua_type(L,1)!=LUA_TNUMBER||!(port>=1&&port<=65535)||port!=(int)port){fail(1);return info(L);}
+    size_t size=0;const char *target=p_lua_tolstring(L,2,&size);uint32_t target_ip=0;
+    if(!allowed_process()||p_lua_type(L,1)!=LUA_TNUMBER||!(port>=1&&port<=65535)||port!=(int)port||
+        p_lua_type(L,2)!=LUA_TSTRING||!private_address(target,size,&target_ip)){fail(1);return info(L);}
+    memcpy(target_text,target,size);target_text[size]=0;
     WSADATA data;if(WSAStartup(MAKEWORD(2,2),&data)){fail(3);return info(L);}wsa=1;
     channel=socket(AF_INET,SOCK_STREAM,IPPROTO_TCP);u_long nonblocking=1;int no_delay=1;
     if(channel==INVALID_SOCKET||ioctlsocket(channel,FIONBIO,&nonblocking)||setsockopt(channel,IPPROTO_TCP,TCP_NODELAY,(char*)&no_delay,sizeof(no_delay))){fail(3);return info(L);}
     struct sockaddr_in address;memset(&address,0,sizeof(address));address.sin_family=AF_INET;
-    address.sin_port=htons((unsigned short)port);address.sin_addr.s_addr=htonl(0x0a000202u); /* Existing NAT host only. */
+    address.sin_port=htons((unsigned short)port);address.sin_addr.s_addr=htonl(target_ip);
     int result=connect(channel,(struct sockaddr*)&address,sizeof(address));
     if(!result)state=2;else if(WSAGetLastError()==WSAEWOULDBLOCK)state=1;else fail(3);
     return info(L);

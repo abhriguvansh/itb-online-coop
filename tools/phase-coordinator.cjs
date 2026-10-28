@@ -3,6 +3,11 @@ const fs=require('node:fs'),net=require('node:net'),crypto=require('node:crypto'
 const {canonical}=require('./probe-report.cjs');
 const owners=['guest','host','host','guest'];
 const ids=['artillery','punch','end-turn','cannon-next'];
+function isPrivateAddress(value){
+  if(typeof value!=='string'||net.isIPv4(value)!==true)return false;
+  const [a,b]=value.split('.').map(Number);
+  return a===10||a===172&&b>=16&&b<=31||a===192&&b===168||a===100&&b>=64&&b<=127||value==='127.0.0.1';
+}
 function expected(session,revision,state){
   const r={session,encounter:'artillery-checkpoint',phase:state.phase,revision,witness:state.witness,id:ids[revision]};
   if(revision===2)return {...r,kind:'end-turn',confirmUnused:true};
@@ -133,7 +138,7 @@ class PhaseCoordinator{
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
       this.require(!this.fullMission||m.sharedXp==='itb-shared-xp-v1','shared-xp-required');
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.32.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.33.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       this.require((m.primarySetup===true)===(!!this.primarySetup),'primary-setup-mode-mismatch');
       if(this.states.host && this.states.guest){if(this.primarySetup)this.primarySetup.start();else this.advance();}return;
@@ -261,8 +266,9 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false,integratedFixture=false,primarySetup=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false,integratedFixture=false,primarySetup=false,privateAddress=null){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
+  if(privateAddress!==null&&(!nativeTransport||!isPrivateAddress(privateAddress)))throw Error('private-native-address-required');
   if(integratedFixture&&(!interactive||!phaseRun||!repeatedTurns||!deployment||!fullMission||!liveBootstrap||!nativeTransport||terminalCheckpoint||fixedCombatFixture))throw Error('integrated-fixture-requires-fresh-native-full-mission');
   if(primarySetup&&(!interactive||!phaseRun||!repeatedTurns||!deployment||!fullMission||!liveBootstrap||!nativeTransport||terminalCheckpoint||fixedCombatFixture||integratedFixture))throw Error('primary-setup-requires-fresh-native-interactive-mission');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
@@ -316,19 +322,21 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
     for(const peer of Object.keys(peers))if(!peers[peer].destroyed)send(peer,{kind:'PING',session,peer:'-',revision:core.stage,phase:'-',id:'-',witness:''});
   },1000);
   server.on('error',e=>stop(e.message));
-  server.listen(0,'127.0.0.1',()=>{
+  server.listen(0,privateAddress||'127.0.0.1',()=>{
+    const target=privateAddress||'10.0.2.2';
     for(const peer of ['host','guest']){
-      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport,primarySetup},null,2));
-      if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v1',session,peer,'10.0.2.2',server.address().port,tokens[peer],''].join('\n'));
+      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:target,port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport,primarySetup},null,2));
+      if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v2',session,peer,target,server.address().port,tokens[peer],''].join('\n'));
     }
-    record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
+    record({type:'listening',session,address:server.address().address,target,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
     if(integratedFixture){record({type:'scripted_integrated_fixture',humanSelectionProof:false,humanReadinessProof:false,localResetRequired:true});console.log('Diagnostic fixture: scripted tactical intent, launch and End Turn consent. Game entry, arming, both local Reset approvals and result reviews remain manual.');}
     else if(fixedCombatFixture){record({type:'scripted_combat_fixture',humanSelectionProof:false,humanReadinessProof:false});console.log('Fixed combat fixture: both roles have scripted intent and End Turn consent. Result review remains manual.');}
   });
   process.on('SIGINT',()=>stop('operator-stop'));
 }
-module.exports={PhaseCoordinator,expected};
+module.exports={PhaseCoordinator,expected,isPrivateAddress};
 if(require.main===module){try{
+ if(process.argv.length>4&&(process.argv.length!==6||process.argv[4]!=='--private-address'))throw Error('Unknown coordinator arguments');
  const raw=process.argv[3],primary=raw==='--native-primary-choice',integrated=raw==='--native-integrated-fixture',xp=raw==='--native-xp-result-checkpoint',repair=raw==='--native-repair',direct=primary||integrated||xp||repair||raw==='--native-transport',live=!xp&&!repair&&(direct||raw==='--live-bootstrap'),mode=xp?'--xp-result-checkpoint':repair?'--repeated-turns':live?'--full-mission':raw,full=mode==='--full-mission'||xp;
- main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct,integrated,primary);
+ main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct,integrated,primary,process.argv[5]??null);
 }catch(e){console.error(e.message);process.exitCode=1;}}

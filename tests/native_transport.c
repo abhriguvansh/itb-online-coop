@@ -5,6 +5,13 @@
 #include "../native/transport.c"
 static void input(const char *value){fault=0;state=2;rx_count=(unsigned)strlen(value);memcpy(rx,value,rx_count);}
 int main(void){
+ uint32_t ip=0;
+ const char *good[]={"10.0.2.2","172.16.0.1","172.31.255.254","192.168.1.10","100.64.0.1","100.127.255.254","127.0.0.1"};
+ for(unsigned i=0;i<sizeof(good)/sizeof(good[0]);i++)assert(private_address(good[i],strlen(good[i]),&ip));
+ assert(private_address("192.168.1.10",12,&ip)&&ip==0xc0a8010au);
+ const char *invalid[]={"","localhost","0.0.0.0","8.8.8.8","172.15.1.1","172.32.0.1","100.63.0.1","100.128.0.1","127.0.0.2","010.0.2.2","10.0.2.02","10..2.2","10.0.2.256","10.0.2.2.","10.0.2.2\n","10.0.2.2:80","224.0.0.1","255.255.255.255"};
+ for(unsigned i=0;i<sizeof(invalid)/sizeof(invalid[0]);i++)assert(!private_address(invalid[i],strlen(invalid[i]),&ip));
+ assert(!private_address("10.0.2.2\0extra",14,&ip));
  unsigned h=0,n=0;
  input("5\nhe");assert(packet_size(&h,&n)==0&&h==2&&n==5&&!fault);
  input("5\nhello4\nnext");assert(packet_size(&h,&n)==1&&h==2&&n==5);

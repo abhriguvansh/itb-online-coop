@@ -3,10 +3,10 @@ assert(M.install({os={getenv=function()end}},'',{},function()error('disabled')en
 local function fixture(options)
     options=options or {};local sid='11111111-1111-1111-1111-111111111111';local peer='guest'
     local files={['session.txt']=sid..'\n'..peer..'\nfull-mission\n',
-        ['native-connection.txt']='itb-transport-v1\n'..sid..'\n'..peer..'\n10.0.2.2\n12345\n'..string.rep('a',48)..'\n'}
+        ['native-connection.txt']='itb-transport-v2\n'..sid..'\n'..peer..'\n10.0.2.2\n12345\n'..string.rep('a',48)..'\n'}
     local clock,draw,stops=0,nil,0;local sent,packets,records={},{},{}
-    local state={abi='itb-transport-v1',state=0,fault=0,pendingTx=0,pendingRx=0}
-    local native={info=function()return state end,open=function(port)assert(port==12345);state.state=2;return state end,
+    local state={abi=options.abi or 'itb-transport-v2',state=0,fault=0,pendingTx=0,pendingRx=0}
+    local native={info=function()return state end,open=function(port,target)assert(port==12345 and target==(options.target or '10.0.2.2'));state.target=target;state.state=2;return state end,
         poll=function()return table.remove(packets,1)end,send=function(v)sent[#sent+1]=v;return true end,
         close=function()state.state=3 end}
     local flags={ITB_COOP_NATIVE_TRANSPORT='1',ITB_COOP_LIVE_BOOTSTRAP='1',ITB_COOP_WIRE_DIR='C:/ITBCoopProbe/Wire'}
@@ -17,6 +17,7 @@ local function fixture(options)
             if v then return {read=function()return v end,close=function()end} end end},
         modApi={elapsedTime=function()return clock end,events={onFrameDrawStart={subscribe=function(_,f)draw=f end}}}}
     if options.xp then flags.ITB_COOP_LIVE_BOOTSTRAP=nil;flags.ITB_COOP_XP_CHECKPOINT='1';files['session.txt']=sid..'\n'..peer..'\nxp-result-checkpoint\n' end
+    if options.target then files['native-connection.txt']=files['native-connection.txt']:gsub('10%.0%.2%.2',options.target) end
     if options.change then options.change(files)end
     local t=M.install(env,'mod/scripts/',json,function(k,p)records[#records+1]={kind=k,payload=p}end,function()return {stop=function()stops=stops+1 end}end)
     return {t=t,sid=sid,files=files,state=state,sent=sent,packets=packets,records=records,
@@ -45,3 +46,13 @@ do local f=fixture({checkpoint=true});f.tick();assert(f.t:healthy() and not f.t.
 print('In-game transport: ordered hello/messages, bounded pre-arm heartbeats, data framing, replaced config, disconnect/fault/timeout stop and completion passed (socket/engine doubles).')
 
 do local f=fixture({xp=true});assert(f.t:healthy()) end
+
+for _,target in ipairs({'10.0.2.2','172.16.0.1','172.31.255.254','192.168.1.10','100.64.0.1','100.127.255.254','127.0.0.1'})do
+    assert(M.privateAddress(target));local f=fixture({target=target});assert(f.t:healthy());f.state.target='changed';assert(not f.t:healthy());f.tick();assert(f.t.error)
+end
+for _,target in ipairs({'','localhost','0.0.0.0','8.8.8.8','172.15.1.1','172.32.0.1','100.63.0.1','100.128.0.1','127.0.0.2','010.0.2.2','10.0.2.02','10..2.2','10.0.2.256','10.0.2.2.','10.0.2.2\n','10.0.2.2:80','224.0.0.1','255.255.255.255'})do
+    assert(not M.privateAddress(target));local f=fixture({target=target});assert(f.t.error and f.stops()==1)
+end
+do local f=fixture({abi='itb-transport-v1'});assert(f.t.error and f.stops()==1)end
+do local f=fixture({change=function(files)files['native-connection.txt']=files['native-connection.txt']:gsub('itb%-transport%-v2','itb-transport-v1')end});assert(f.t.error and f.stops()==1)end
+print('Private IPv4 transport: canonical bounded targets, exact native target binding, legacy ABI/config and public/DNS/wildcard refusal (native doubles).')

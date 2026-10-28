@@ -1,8 +1,18 @@
 -- One opt-in in-process connection for the existing isolated full-mission lab.
 local M={}
+function M.privateAddress(text)
+    if type(text)~='string' or #text>15 then return false end
+    local a,b,c,d=text:match('^(%d+)%.(%d+)%.(%d+)%.(%d+)$')
+    if not a then return false end
+    local n={tonumber(a),tonumber(b),tonumber(c),tonumber(d)}
+    if table.concat(n,'.')~=text then return false end
+    for _,v in ipairs(n)do if v>255 then return false end end
+    return n[1]==10 or n[1]==172 and n[2]>=16 and n[2]<=31 or n[1]==192 and n[2]==168
+        or n[1]==100 and n[2]>=64 and n[2]<=127 or text=='127.0.0.1'
+end
 function M.install(env,path,json,emit,session)
     if env.os.getenv('ITB_COOP_NATIVE_TRANSPORT')~='1' then return nil end
-    local self={out={},incoming={},bootstrap={},sent=0,received=0};local native,config,sid,peer,token,port,since,last
+    local self={out={},incoming={},bootstrap={},sent=0,received=0};local native,config,sid,peer,token,port,target,since,last
     env.ITBCoopTransport=self
     local root='C:/ITBCoopProbe/Wire'
     local function read(name)
@@ -17,7 +27,7 @@ function M.install(env,path,json,emit,session)
     end
     function self:healthy()
         if self.error or self.done or not native then return false end
-        local n=native.info();return n.abi=='itb-transport-v1' and n.state==2 and n.fault==0
+        local n=native.info();return n.abi=='itb-transport-v2' and n.target==target and n.state==2 and n.fault==0
     end
     function self:send(value)
         assert(not self.error and not self.done,'transport-stopped')
@@ -40,10 +50,10 @@ function M.install(env,path,json,emit,session)
     local ok,why=pcall(function()
         assert(env.os.getenv('ITB_COOP_WIRE_DIR')==root,'transport-unsupported-mode')
         config=assert(read('native-connection.txt'),'transport-config-missing')
-        local target,number
-        sid,peer,target,number,token=config:match('^itb%-transport%-v1\n([a-f0-9%-]+)\n([a-z]+)\n([^\n]+)\n(%d+)\n([a-f0-9]+)\n$')
+        local number
+        sid,peer,target,number,token=config:match('^itb%-transport%-v2\n([a-f0-9%-]+)\n([a-z]+)\n([^\n]+)\n(%d+)\n([a-f0-9]+)\n$')
         port=tonumber(number)
-        assert(sid and #sid==36 and (peer=='host' or peer=='guest') and target=='10.0.2.2' and port and port>=1 and port<=65535
+        assert(sid and #sid==36 and (peer=='host' or peer=='guest') and M.privateAddress(target) and port and port>=1 and port<=65535
             and tostring(port)==number and #token==48,'transport-config-invalid')
         local sessionConfig=read('session.txt')
         assert(sessionConfig==sid..'\n'..peer..'\nfull-mission\n' and env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP')=='1'
@@ -52,8 +62,8 @@ function M.install(env,path,json,emit,session)
             or sessionConfig==sid..'\n'..peer..'\nrepeated-turns\n' and env.os.getenv('ITB_COOP_REPAIR_CHECKPOINT')=='1'
                 and not env.os.getenv('ITB_COOP_LIVE_BOOTSTRAP') and not env.os.getenv('ITB_COOP_INITIAL_CHOICES'),'transport-config-session')
         local open=assert(env.package.loadlib(path..'../itb_transport.dll','luaopen_itb_transport'))
-        native=assert(open());assert(native.info().abi=='itb-transport-v1','transport-abi')
-        local n=native.open(port);assert(n.fault==0 and (n.state==1 or n.state==2),'transport-connect-failed')
+        native=assert(open());assert(native.info().abi=='itb-transport-v2','transport-abi')
+        local n=native.open(port,target);assert(n.target==target and n.fault==0 and (n.state==1 or n.state==2),'transport-connect-failed')
         since=env.modApi:elapsedTime();last=since
         env.modApi.events.onFrameDrawStart:subscribe(function()
             if self.error or self.done then return end
@@ -62,7 +72,7 @@ function M.install(env,path,json,emit,session)
                 assert(now-since<3610000,'transport-experiment-deadline')
                 assert(read('native-connection.txt')==config and read('session.txt')==sessionConfig,'transport-config-replaced')
                 for _=1,4 do
-                    local packet=native.poll();local n=native.info();assert(n.fault==0,'transport-native-fault:'..tostring(n.fault))
+                    local packet=native.poll();local n=native.info();assert(n.fault==0 and n.target==target,'transport-native-fault:'..tostring(n.fault))
                     if packet then
                         self.received=self.received+1;assert(self.received<=4096,'transport-input-limit');last=now
                         local kind,id,body=packet:match('^([A-Z]+)|([^|\n]+)\n(.*)$')
@@ -90,7 +100,7 @@ function M.install(env,path,json,emit,session)
                 if n.state==2 then
                     if not self.hello then
                         assert(native.send(json.encode({type='hello',session=sid,peer=peer,token=token})),'transport-hello-failed')
-                        self.hello=true;emit('native_transport_connected',{peer=peer,abi=n.abi})
+                        self.hello=true;emit('native_transport_connected',{peer=peer,abi=n.abi,target=n.target})
                     end
                     for _=1,4 do
                         local value=self.out[1];if not value then break end
