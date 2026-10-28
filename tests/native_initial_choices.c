@@ -1,4 +1,5 @@
 /* CI only. RNG and protection functions are doubles; no game or input APIs run. */
+#undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>

@@ -1,4 +1,5 @@
 /* CI only. Parser boundaries; no sockets, game process or input are opened. */
+#undef NDEBUG
 #include <assert.h>
 #include <stdio.h>
 #include "../native/transport.c"
