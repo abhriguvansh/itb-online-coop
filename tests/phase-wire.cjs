@@ -5,7 +5,7 @@ testRepeatedTurns();
 {
  const make=(frozen=false,building=false)=>{
   const c=new PhaseCoordinator(session,()=>{},()=>{},true,()=>0,true,true);
-  c.stage=8;c.turn=1;c.mode='executing';c.pendingKind='reset-turn';c.pendingId='reset-turn-8';
+  c.stage=8;c.turn=1;c.mode='executing';c.executionDeadline=240000;c.pendingKind='reset-turn';c.pendingId='reset-turn-8';
   const state={schema:'itb-observation-v1',unavailable:[],tiles:[{terrain:3,building,frozen,health:4}],pawns:[]};
   c.resetBaseWitness=JSON.stringify(state);
   const message=(peer,health)=>({session,peer,type:'observed',id:c.pendingId,revision:9,phase:'player1',resetRemaining:0,native:{guardActive:true,sessionState:1,releaseFailed:false},witness:JSON.stringify({...state,tiles:[{...state.tiles[0],health}]})});
@@ -150,7 +150,7 @@ const guard={guardActive:true,sessionState:1,releaseFailed:false};
 function spawnFixture(){
   const sent=[],events=[];let time=0;
   const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e),true,()=>time,true,true);
-  c.mode='executing';c.pendingKind='end-turn';c.stage=3;c.states={host:{phase:'player2'},guest:{phase:'player2'}};
+  c.mode='executing';c.executionDeadline=240000;c.pendingKind='end-turn';c.stage=3;c.states={host:{phase:'player2'},guest:{phase:'player2'}};
   const witness=JSON.stringify({board:{schema:'itb-observation-v1',unavailable:[]},spawner:'{}'});
   const message=(type,extra={})=>({type,session,revision:3,phase:'player2',index:1,witness,native:guard,...extra});
   const send=(peer,type,extra)=>c.receive(peer,{...message(type,extra),peer});
@@ -334,7 +334,7 @@ test('repeated-turn basic weapon proposal still needs exact both-runtime prepara
  const make=()=>{
   const sent=[],events=[];let clock=0;
   const c=new PhaseCoordinator(session,(peer,frame)=>sent.push({peer,frame}),e=>events.push(e),true,()=>clock,true,true);
-  c.stage=16;c.turn=4;c.mode='executing';c.pendingKind='end-turn';c.pendingId='end-turn-16';c.states={host:{phase:'player4'},guest:{phase:'player4'}};
+  c.stage=16;c.turn=4;c.mode='executing';c.executionDeadline=240000;c.pendingKind='end-turn';c.pendingId='end-turn-16';c.states={host:{phase:'player4'},guest:{phase:'player4'}};
   const witness=JSON.stringify({schema:'itb-observation-v1',unavailable:[],pawns:[]});
   const guard={guardActive:true,sessionState:1,releaseFailed:false};
   const msg=(peer,type,body=witness)=>({session,peer,type,id:'end-turn-16',revision:16,phase:'player4',witness:body,native:guard});

@@ -23,7 +23,12 @@ class PhaseCoordinator{
     this.require(r&&v?.abi==='itb-shared-xp-v1'&&v.context===this.session+'/'+r.phase+'/'+this.stage+'/'+this.pendingId&&Array.isArray(v.entries)&&v.entries.length<=128,'shared-xp-context');
     this.require(v.entries.every(e=>Number.isInteger(e.limit)&&e.limit>=1&&e.limit<=3&&Number.isInteger(e.applied)&&e.applied>=0&&e.applied<=32767&&canonical(e)===canonical({limit:e.limit,applied:e.applied})),'shared-xp-draw');
   }
-  tick(){this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');this.require(!this.result||this.mode==='complete'||this.now()<this.result.deadline,'mission-result-timeout');}
+  tick(){
+    this.require(this.mode!=='preparing'||this.now()<this.prepareDeadline,'game-prepare-timeout');
+    this.require(this.mode!=='executing'||this.now()<this.executionDeadline,'game-outcome-timeout');
+    this.require(!this.spawn||this.now()<this.spawn.deadline,'spawn-prepare-timeout');
+    this.require(!this.result||this.mode==='complete'||this.now()<this.result.deadline,'mission-result-timeout');
+  }
   resultReceive(peer,m){
     this.require(this.repeatedTurns&&this.pendingKind==='end-turn'&&this.turn===(this.fullMission?3:4)&&!this.spawn,'result-outside-final-end-turn');
     this.require(m.revision===this.stage&&m.phase===this.states.host.phase&&m.id===this.pendingId,'result-stale-context');
@@ -263,6 +268,11 @@ class PhaseCoordinator{
     if(request.kind==='reset-turn')this.resetUsed=true;
     this.mode='executing';this.receipts={};this.record({type:'dispatch',origin:peer,request});
     this.pendingId=request.id;this.pendingKind=request.kind;
+    // A live socket does not prove EXEC arrived or the game committed it.
+    // Ordinary native outcomes already have 15-second bounds. Phase commands
+    // also include ordered activity and possibly local result review; their
+    // existing shorter game/result deadlines remain independently enforced.
+    this.executionDeadline=this.now()+(['end-turn','deployment-confirm'].includes(request.kind)?240000:20000);
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{move:request}:{})});
   }
 }
