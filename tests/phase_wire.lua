@@ -16,6 +16,8 @@ assert(not pcall(wire.decode,dynamic:gsub('artillery','enemy'),'test-session'))
 assert(not pcall(wire.decode,dynamic:gsub('|0|3|0|2','|0|3|8|2'),'test-session'))
 assert(not pcall(wire.decode,dynamic:gsub('EXEC','INPUT'),'test-session'))
 print('10 mailbox framing contracts passed; no game or filesystem execution implied.')
+assert(wire.decode('SQUAD|test-session|-|0|deployment|primary-0\n0|-|-|-|-|0|0','test-session').kind=='SQUAD')
+assert(wire.decode('SQUADLOCK|test-session|-|0|deployment|primary-2\n2|artillery|host|combat|host|1|1','test-session').kind=='SQUADLOCK')
 for _,actor in ipairs({'combat','cannon','artillery'})do
  local text='PREPARE|test-session|guest|1|player2|undo-guest-1|undo'..actor..'|0|2|0|3\n{}'
  local r=wire.decode(text,'test-session').move

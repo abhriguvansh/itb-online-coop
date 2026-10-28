@@ -10,7 +10,7 @@ function M.decode(text,session)
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
     local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
-    assert(spawn or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    assert(spawn or kind=='SQUAD' or kind=='SQUADLOCK' or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
@@ -56,6 +56,8 @@ function M.open(env,json,emit)
     assert(ident(session) and peer,'wire-config-invalid')
     local self={fullMission=fullMission,session=session,peer=peer,root=root,rx=1,tx=1,interactive=interactive,phaseRun=phaseRun,repeatedTurns=repeatedTurns,terminalCheckpoint=terminalCheckpoint,deployment=deployment,limit=deployment and 5 or interactive and not phaseRun and 2 or 4}
     self.transport=env.ITBCoopTransport
+    self.primaryMode=env.os.getenv('ITB_COOP_CHOOSE_MECHS')=='1'
+    assert(not self.primaryMode or self.fullMission and self.deployment and not self.terminalCheckpoint and self.transport,'primary-mode-requires-fresh-native-mission')
     if env.os.getenv('ITB_COOP_NATIVE_TRANSPORT')=='1' then assert(self.transport,'wire-native-transport-missing') end
     local function now() return env.modApi:elapsedTime() end
     function self:send(value)
@@ -72,7 +74,7 @@ function M.open(env,json,emit)
         if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:healthy() end
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.31.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.32.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,primarySetup=self.primaryMode or nil,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
@@ -109,12 +111,16 @@ function M.open(env,json,emit)
             if not data then break end;self.rx=self.rx+1
             local m=M.decode(data,self.session);self.last=now()
             assert(m.kind~='STOP','wire-peer-or-coordinator-stopped')
-            if m.kind:sub(1,6)=='RESULT' then
+            if m.kind=='SQUAD' or m.kind=='SQUADLOCK' then
+                assert(self.primaryMode and self.primarySetup and not self.inputReady and not self.pending and not self.prepared,'wire-primary-context')
+                self.primarySetup:receive(m,s,request())
+            elseif m.kind:sub(1,6)=='RESULT' then
                 assert(self.repeatedTurns and self.result and s.terminal,'wire-result-unavailable')
                 if self.result:receive(m) then self.pending=nil;self.pendingKind=nil;return true end
             elseif m.kind:sub(1,5)=='SPAWN' then
                 assert((self.repeatedTurns or self.deployment) and self.spawn,'wire-spawn-unavailable');self.spawn:receive(m)
             elseif m.kind~='PING' then
+                assert(not self.primaryMode or self.primarySetup and self.primarySetup.locked,'wire-primary-not-locked')
                 assert(not s.terminal,'wire-gameplay-after-mission-end')
                 local r=request()
                 assert(m.revision==s.revision and m.phase==s.phase and m.witness==r.witness,'wire-stale-context')

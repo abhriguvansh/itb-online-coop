@@ -23,6 +23,12 @@ s.revision=1;ui:update(s,false);assert(not ui.draft and not ui.actor)
 current.intentSerial=2;current.intentX=20;current.intentY=470;ui:update(s,false)
 assert(not ui.actor and #sent==1) -- dropped/multiple clicks never become intent
 print('8 interactive intent contracts passed; blocked-input and game behavior require live verification.')
+do
+ local changed={peer='guest',inputReady=true,squadOwners={combat='guest',cannon='host',artillery='host'}}
+ local selected=module.new({env=env,wire=changed,native={info=function()return current end},emit=function()end,request=function()return {}end})
+ selected:click(20,390,s);assert(selected.actor=='combat')
+ selected:click(20,470,s);assert(not selected.actor and selected.status=='That mech belongs to your teammate')
+end
 wire.phaseRun=true;wire.peer='host';s.revision=1;wire.inputReady=true
 s.previewAction=function(_,peer,r)return peer=='host' and r.kind=='lab-punch' end
 ui:update(s,false);ui:click(20,390,s);ui:click(800,600,s)

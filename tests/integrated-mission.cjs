@@ -10,7 +10,7 @@ function fixture(){
   pawns:['PunchMech','TankMech','ArtiMech'].map((type,localId)=>({type,localId,team:1,health:localId===2?2:3,active:true,movementSpent:false,position:{x:-1,y:-1}}))};
  const context=revision=>({revision,phase:revision<4?'deployment':'player'+state.turn,witness:JSON.stringify(state)});
  const send=(peer,m)=>core.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.31.0',interactive:true,phaseRun:true,repeatedTurns:true,deployment:true,fullMission:true,sharedXp:'itb-shared-xp-v1',...context(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.32.0',interactive:true,phaseRun:true,repeatedTurns:true,deployment:true,fullMission:true,sharedXp:'itb-shared-xp-v1',...context(0)});
  const native={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
  const prepared=peer=>send(peer,{type:'prepared',origin:core.proposal.peer,request:core.proposal.request,native});
  const observed=change=>{

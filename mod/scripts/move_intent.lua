@@ -4,6 +4,7 @@ local actors={combat={id=0,owner='host',label='Combat'},cannon={id=1,owner='gues
     artillery={id=2,owner='guest',label='Artillery'}}
 function M.new(o)
     local self={serial=0,counter=0,status='Waiting for both games',controls={}}
+    local function owner(actor)return o.wire.squadOwners and o.wire.squadOwners[actor] or actors[actor].owner end
     local function reject(reason)
         self.draft=nil;self.status=tostring(reason)
         o.emit('move_intent_rejected',{reason=self.status,peer=o.wire.peer})
@@ -13,6 +14,9 @@ function M.new(o)
         return s:previewMove(o.wire.peer,r)
     end
     function self:click(x,y,s)
+        if o.wire.primarySetup and not o.wire.primarySetup.locked then
+            o.wire.primarySetup:click(x,y,s,o.request('deployment-confirm','primary-context'));return
+        end
         if o.inspection and o.inspection:click(x,y,s) then
             self.actor=nil;self.draft=nil;self.attacking=false;return
         end
@@ -48,7 +52,7 @@ function M.new(o)
                 or y>=460 and y<496 and 'artillery'
             if actor then
                 self.actor=nil;self.draft=nil;self.repairing=false
-                if actors[actor].owner~=o.wire.peer then reject('That mech belongs to your teammate');return end
+                if owner(actor)~=o.wire.peer then reject('That mech belongs to your teammate');return end
                 if o.wire.phaseRun and not o.wire.repeatedTurns and not o.wire.deployment and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
                     reject('Unsupported actor for this phase test');return
                 end
@@ -117,6 +121,7 @@ function M.new(o)
             elseif not contiguous then reject('Multiple clicks; choose again') end
         end
         if done or s.stopped then self.status='Experiment ended - Escape exits'
+        elseif o.wire.primarySetup and not o.wire.primarySetup.locked then self.status=o.wire.primarySetup:status()
         elseif o.wire.readyInput then self.status=self.launchReady and 'Both players must agree to launch' or 'End Turn includes unused units; both must agree'
         elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion'
         elseif self.status=='Waiting for the other game / action completion' then self.status='Choose your mech, then a board tile' end
@@ -137,6 +142,20 @@ function M.new(o)
             label('status',540,self.status);label('confirm',600,'Confirm move');label('cancel',640,'Cancel selection')
         end
         for _,control in pairs(self.controls) do control.visible=visible end
+        local setup=o.wire.primarySetup
+        if setup and not setup.locked then
+            self.controls.title:caption('Choose primary: '..o.wire.peer)
+            for _,a in ipairs({'combat','cannon','artillery'})do self.controls[a]:caption(setup:caption(a)) end
+            self.controls.confirm:caption('Approve these assignments')
+            self.controls.attack:caption('First shared mech: '..(setup.sharedController or 'choose'))
+            for _,k in ipairs({'cancel','endTurn','repair','undo','reset'})do if self.controls[k] then self.controls[k].visible=false end end
+            self.controls.status:caption(self.status)
+            if o.inspection then o.inspection:draw(root,false) end
+            return
+        end
+        self.controls.title:caption('Co-op actions: '..o.wire.peer)
+        for _,a in ipairs({'combat','cannon','artillery'})do self.controls[a]:caption(actors[a].label..' ('..owner(a)..')') end
+        if self.controls.attack then self.controls.attack:caption('Toggle move / basic weapon') end
         self.controls.status:caption(self.status)
         if self.controls.reset then self.controls.reset:caption(o.wire.resetPending and (o.wire.resetSent and 'Reset approved; action cancels vote' or 'Approve teammate Reset request') or 'Request Reset (both must agree)') end
         self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'

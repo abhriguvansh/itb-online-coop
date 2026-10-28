@@ -48,6 +48,7 @@ function M.new(o)
     end
     local self = {revision=0, stopped=false,phase=o.phase,turn=o.env.Game:GetTurnCount()}
     local records, count, pending, observed = {}, 0, nil, false
+    local primaryInstalled=not o.primarySetup
     local move, attack, ending, deployment, undo, reset
     local ready={}
     -- The observed native button undoes moves in reverse execution order,
@@ -121,6 +122,20 @@ function M.new(o)
         end
         return value
     end
+    function self:installPrimaryOwners(owners,expected)
+        assert(o.primarySetup and o.deployment and o.fullMission and not primaryInstalled and self.phase=='deployment' and self.revision==0
+            and self.turn==0 and count==0 and not pending and not self.terminal and health(),'primary-install-context')
+        assert(type(owners)=='table' and getmetatable(owners)==nil and witness()==expected,'primary-install-state')
+        local keys={combat=0,cannon=1,artillery=2};local n,host=0,0
+        for actor,owner in pairs(owners) do
+            local e=registry[actor];assert(keys[actor]~=nil and e and e.pawnId==keys[actor] and e.owner==false
+                and e.commandable==false and players[owner],'primary-install-map')
+            n=n+1;if owner=='host' then host=host+1 end
+        end
+        assert(n==3 and host>=1 and host<=2 and not self.stopped,'primary-install-participants')
+        for actor,owner in pairs(owners) do registry[actor].owner=owner;registry[actor].commandable=true end
+        primaryInstalled=true;emit('primary_owners_installed',{owners=copy(owners),revision=0,immutable=true})
+    end
     local function undoMatch(peer,r)
         local m=undoMoves[#undoMoves]
         return undo and m and m.peer==peer and m.actor==r.actor and m.revision<=self.revision
@@ -143,6 +158,7 @@ function M.new(o)
         return {fromX=m.toX,fromY=m.toY,toX=m.fromX,toY=m.fromY}
     end
     function self:setReady(peer,phase,revision,value,confirmUnused,kind)
+        if not primaryInstalled then return false end
         if self.terminal then return false end
         if not players[peer] then return false end
         ready[peer]=nil
@@ -155,6 +171,7 @@ function M.new(o)
     end
     function self:clearResetReady()for peer,v in pairs(ready)do if v.kind=='reset-turn' then ready[peer]=nil end end end
     function self:canReset(peer,phase,revision,value)
+        if not primaryInstalled then return false,'primary-setup-pending' end
         if not reset or not players[peer] or self.terminal or not health() or pending or self.phase=='deployment'
             or self.phase~=phase or self.revision~=revision or value~=witness() then return false,'reset-context-unavailable' end
         if not self.resetBase or self.resetBase.turn~=self.turn or self.resetBase.phase~=self.phase then return false,'fresh-turn-start-required' end
@@ -167,6 +184,7 @@ function M.new(o)
     function self:submit(peer,r)
         if not players[peer] then return {status='rejected',reason='unknown-peer'} end
         if not envelope(r) then return {status='rejected',reason='invalid-envelope'} end
+        if not primaryInstalled then return {status='rejected',reason='primary-setup-pending'} end
         local key=peer..'/'..r.id
         if records[key] then
             if not same(records[key].request,r) then return {status='rejected',reason='request-id-conflict'} end
@@ -230,6 +248,7 @@ function M.new(o)
     end
     -- Read-only draft check; never reserves a command or crosses the input boundary.
     function self:previewMove(peer,r)
+        if not primaryInstalled then return false,'primary-setup-pending' end
         if self.terminal then return false,'mission-result-pending' end
         if not players[peer] or not envelope(r) or r.kind~='move' then return false,'invalid-move-draft' end
         if not health() then return false,self.reason end
@@ -245,6 +264,7 @@ function M.new(o)
         return ok,ok and 'supported-move' or tostring(reason)
     end
     function self:previewAction(peer,r)
+        if not primaryInstalled then return false,'primary-setup-pending' end
         if self.terminal then return false,'mission-result-pending' end
         if self.phase=='deployment' then
             if not deployment or not players[peer] or not envelope(r) or (r.kind~='deploy' and r.kind~='deployment-confirm') then return false,'invalid-deployment-draft' end

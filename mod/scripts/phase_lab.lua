@@ -118,10 +118,12 @@ function M.install(env,mod,native,path)
         end
         if deploying then mod.movement.bridge:startSession() else mod.movement:lockInput('protected') end
         self.used=true;mod.movement.sessionOwned=true
+        local choosing=wire and wire.primaryMode
         self.session=require(path..'command_session').new({env=env,session=self.identity,encounter='artillery-checkpoint',
-            phase=deploying and 'deployment' or finalCheckpoint and ('player'..finalTurn) or 'player2',players={'host','guest'},entities={combat={pawnId=0,owner='host',commandable=true},
-                cannon={pawnId=1,owner='guest',commandable=true},artillery={pawnId=2,owner='guest',commandable=true},
-                missionAlly={pawnId=100,owner='host',commandable=true}},movement=require(path..'movement'),
+            phase=deploying and 'deployment' or finalCheckpoint and ('player'..finalTurn) or 'player2',players={'host','guest'},primarySetup=choosing,
+            entities={combat={pawnId=0,owner=not choosing and 'host' or false,commandable=not choosing},
+                cannon={pawnId=1,owner=not choosing and 'guest' or false,commandable=not choosing},artillery={pawnId=2,owner=not choosing and 'guest' or false,commandable=not choosing},
+                missionAlly={pawnId=100,owner=not choosing and 'host' or false,commandable=not choosing}},movement=require(path..'movement'),
             attack=require(path..(wire and wire.repeatedTurns and 'basic_attack' or 'attack')),undoMove=require(path..'undo_move'),resetTurn=require(path..'reset_turn'),endTurn=require(path..'end_turn'),native=native,bridge=mod.movement.bridge,
             gate=mod.inputGate,capture=capture,json=json,witness=witness,repeatedTurns=wire and wire.repeatedTurns,terminalCheckpoint=finalCheckpoint,
             deployment=deploying and deploymentModule or nil,fullMission=wire and wire.fullMission,
@@ -129,7 +131,10 @@ function M.install(env,mod,native,path)
             guardHealthy=function() local n=native.info();return n.sessionState==1 and n.guardActive and not n.releaseFailed end,
             stopProtection=function() native.sessionStop();native.finish() end,emit=emit})
         self.stage=0;self.status='Running protected phase sequence'
-        if wire then wire:arm(planned());self.status='Waiting for network peer' end
+        if wire then
+            if choosing then wire.primarySetup=require(path..'primary_setup').new({env=env,wire=wire,json=json,emit=emit,native=native}) end
+            wire:arm(planned());self.status='Waiting for network peer'
+        end
         emit('phase_lab_started',{scriptedPeers=not (wire and wire.interactive),networked=wire~=nil,state=state})
     end
     local function advance()

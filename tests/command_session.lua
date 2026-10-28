@@ -440,4 +440,20 @@ test('Tides saved-result checkpoint uses its mission adapter without deployment'
  local s=session.new(o);local request=r();request.phase='player3'
  assert(s:previewMove('guest',request));assert(s:submit('guest',request).status=='pending' and e.moveCalls==1)
 end)
+test('primary setup installs fresh owners once and gates every mutation before approval',function()
+ local e,o,r=fixture();o.primarySetup=true;o.fullMission=true;o.phase='deployment';e.turn=0;e.phase=6;e.TEAM_ENEMY=6
+ o.deployment={new=function()return {arm=function()return true end}end}
+ for _,v in pairs(o.entities)do v.owner=false;v.commandable=false end
+ local s=session.new(o);local request=r();request.phase='deployment';request.kind='deploy';request.actor='combat';request.fromX=-1;request.fromY=-1
+ assert(s:submit('host',request).reason=='primary-setup-pending' and e.moveCalls==0 and e.attackCalls==0)
+ assert(not s:previewAction('guest',request) and not s:setReady('host','deployment',0,e.witness,true))
+ local owners={combat='guest',cannon='host',artillery='host'}
+ assert(not pcall(function()s:installPrimaryOwners(owners,'stale')end))
+ assert(not pcall(function()s:installPrimaryOwners({combat='host',cannon='host',artillery='host'},e.witness)end))
+ assert(not s:previewAction('host',request))
+ s:installPrimaryOwners(owners,e.witness);owners.combat='host'
+ assert(not s:previewAction('host',request) and s:previewAction('guest',request))
+ assert(s:submit('host',request).reason=='actor-not-owned')
+ assert(not pcall(function()s:installPrimaryOwners(owners,e.witness)end))
+end)
 print('Shared command session contracts: '..passed..' passed (real Lua diagnostics, mocked game/guard).')

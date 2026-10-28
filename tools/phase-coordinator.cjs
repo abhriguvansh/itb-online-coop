@@ -128,13 +128,15 @@ class PhaseCoordinator{
     this.tick();
     this.require((peer==='host'||peer==='guest') && m.session===this.session && m.peer===peer,'peer-binding');
     this.require(m.type!=='stopped','game-stopped:'+String(m.reason).slice(0,200));
+    if(m.type.startsWith('primary_')){this.require(this.primarySetup,'primary-setup-disabled');this.primarySetup.receive(peer,m);return;}
     if(m.type==='result_prepared'||m.type==='result_observed'){this.resultReceive(peer,m);return;}
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
       this.require(!this.fullMission||m.sharedXp==='itb-shared-xp-v1','shared-xp-required');
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.31.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.32.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
-      if(this.states.host && this.states.guest)this.advance();return;
+      this.require((m.primarySetup===true)===(!!this.primarySetup),'primary-setup-mode-mismatch');
+      if(this.states.host && this.states.guest){if(this.primarySetup)this.primarySetup.start();else this.advance();}return;
     }
     if(m.type==='reset_ready'){
       this.require(this.interactive&&this.repeatedTurns&&!this.resetUsed&&(this.mode==='proposal'||this.mode==='reset-readiness')&&this.resetBaseWitness&&m.confirmReset===true,'reset-unavailable');
@@ -173,7 +175,7 @@ class PhaseCoordinator{
       if(this.mode==='reset-readiness')this.cancelReset();
       this.require(this.mode==='proposal' && (this.interactive || owners[this.stage]===peer),'unexpected-proposal');
       if(this.interactive){
-        const r=m.request,entities={combat:{peer:'host',id:0},cannon:{peer:'guest',id:1},artillery:{peer:'guest',id:2}};
+        const r=m.request,entities=this.entities||{combat:{peer:'host',id:0},cannon:{peer:'guest',id:1},artillery:{peer:'guest',id:2}};
         this.require(r && Object.hasOwn(entities,r.actor) && entities[r.actor].peer===peer,'actor-not-owned');
         this.context(r,this.stage);
         if(this.deployment&&(!this.fullMission||this.stage<4))this.require(this.stage<3?r.kind==='deploy'&&r.actor===['combat','cannon','artillery'][this.stage]:this.stage===4&&r.kind==='move'&&r.actor==='cannon','unsupported-deployment-order');
@@ -259,16 +261,18 @@ class PhaseCoordinator{
     this.both({...this.frame('EXEC',peer,request.id),...(this.interactive&&!['end-turn','deployment-confirm','reset-turn'].includes(request.kind)?{move:request}:{})});
   }
 }
-function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false,integratedFixture=false){
+function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminalCheckpoint=false,fixedCombatFixture=false,deployment=false,fullMission=false,liveBootstrap=false,nativeTransport=false,integratedFixture=false,primarySetup=false){
   if(!root)throw Error('Usage: node tools/phase-coordinator.cjs PRIVATE_NEW_SESSION_DIRECTORY');
   if(integratedFixture&&(!interactive||!phaseRun||!repeatedTurns||!deployment||!fullMission||!liveBootstrap||!nativeTransport||terminalCheckpoint||fixedCombatFixture))throw Error('integrated-fixture-requires-fresh-native-full-mission');
+  if(primarySetup&&(!interactive||!phaseRun||!repeatedTurns||!deployment||!fullMission||!liveBootstrap||!nativeTransport||terminalCheckpoint||fixedCombatFixture||integratedFixture))throw Error('primary-setup-requires-fresh-native-interactive-mission');
   root=path.resolve(root);fs.mkdirSync(root,{recursive:false});
   const session=crypto.randomUUID(),tokens={host:crypto.randomBytes(24).toString('hex'),guest:crypto.randomBytes(24).toString('hex')};
-  const peers={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
+  const peers={},lastPong={},sockets=new Set(),created=Date.now();let stopped=false,started=0;
   const record=value=>fs.appendFileSync(path.join(root,'events.jsonl'),JSON.stringify({at:new Date().toISOString(),...value})+'\n');
   const encode=value=>nativeTransport?require('./game-frame.cjs').packet(value):JSON.stringify(value)+'\n';
   const send=(peer,value)=>{if(!peers[peer] || peers[peer].destroyed)throw Error('peer-unavailable');peers[peer].write(encode(value));};
   const core=new PhaseCoordinator(session,send,record,interactive,undefined,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission);
+  if(primarySetup)core.primarySetup=new (require('./primary-setup.cjs').PrimarySetup)(core);
   const bootstrap=liveBootstrap?new (require('./bootstrap-exchange.cjs').BootstrapExchange)(session,send,record):null;
   if(fixedCombatFixture&&(!interactive||!phaseRun||!repeatedTurns||terminalCheckpoint))throw Error('fixture-requires-original-repeated-turn-checkpoint');
   const fixture=integratedFixture?require('./integrated-mission-fixture.cjs').createIntegratedMissionFixture():fixedCombatFixture?require('./fixed-combat-fixture.cjs').createFixedCombatFixture():null;
@@ -290,9 +294,9 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
           const m=JSON.parse(buffer.slice(0,cut));buffer=buffer.slice(cut+1);
           if(!peer){
             if(m.type!=='hello'||m.session!==session||!Object.hasOwn(tokens,m.peer)||m.token!==tokens[m.peer]||peers[m.peer])throw Error('authentication-failed');
-            peer=m.peer;peers[peer]=socket;if(!started)started=Date.now();record({type:'connected',peer});continue;
+            peer=m.peer;peers[peer]=socket;lastPong[peer]=performance.now();if(!started)started=Date.now();record({type:'connected',peer});continue;
           }
-          if(m.type==='pong'){if(m.session!==session)throw Error('pong-session');continue;}
+          if(m.type==='pong'){if(m.session!==session)throw Error('pong-session');lastPong[peer]=performance.now();continue;}
           record({type:'received',peer,message:m});
           if(bootstrap&&m.type.startsWith('bootstrap_')){bootstrap.receive(peer,m);continue;}
           if(bootstrap&&!bootstrap.complete)throw Error('bootstrap-agreement-required');
@@ -303,6 +307,9 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
     });
   });
   const timer=setInterval(()=>{
+    // Socket inactivity also resets on writes. Only received, bound peer pongs
+    // establish runtime liveness; our outgoing PING must never renew this lease.
+    for(const peer of Object.keys(peers))if(performance.now()-lastPong[peer]>15000){stop('peer-heartbeat-timeout:'+peer);return;}
     try{core.tick();if(fixture)fixture(core,record);}catch(e){stop(e.message);return;}
     if(!started && Date.now()-created>600000){stop('startup-deadline');return;}
     if(started && Date.now()-started>(fullMission?3600000:repeatedTurns?1800000:interactive?600000:180000)){stop('experiment-deadline');return;}
@@ -311,7 +318,7 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
   server.on('error',e=>stop(e.message));
   server.listen(0,'127.0.0.1',()=>{
     for(const peer of ['host','guest']){
-      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport},null,2));
+      fs.writeFileSync(path.join(root,peer+'.json'),JSON.stringify({session,peer,token:tokens[peer],host:'10.0.2.2',port:server.address().port,interactive,phaseRun,repeatedTurns,terminalCheckpoint,deployment,fullMission,liveBootstrap,nativeTransport,primarySetup},null,2));
       if(nativeTransport)fs.writeFileSync(path.join(root,peer+'-native.txt'),['itb-transport-v1',session,peer,'10.0.2.2',server.address().port,tokens[peer],''].join('\n'));
     }
     record({type:'listening',session,port:server.address().port});console.log('Private phase coordinator ready; games must be explicitly armed.');
@@ -322,6 +329,6 @@ function main(root,interactive=false,phaseRun=false,repeatedTurns=false,terminal
 }
 module.exports={PhaseCoordinator,expected};
 if(require.main===module){try{
- const raw=process.argv[3],integrated=raw==='--native-integrated-fixture',xp=raw==='--native-xp-result-checkpoint',repair=raw==='--native-repair',direct=integrated||xp||repair||raw==='--native-transport',live=!xp&&!repair&&(direct||raw==='--live-bootstrap'),mode=xp?'--xp-result-checkpoint':repair?'--repeated-turns':live?'--full-mission':raw,full=mode==='--full-mission'||xp;
- main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct,integrated);
+ const raw=process.argv[3],primary=raw==='--native-primary-choice',integrated=raw==='--native-integrated-fixture',xp=raw==='--native-xp-result-checkpoint',repair=raw==='--native-repair',direct=primary||integrated||xp||repair||raw==='--native-transport',live=!xp&&!repair&&(direct||raw==='--live-bootstrap'),mode=xp?'--xp-result-checkpoint':repair?'--repeated-turns':live?'--full-mission':raw,full=mode==='--full-mission'||xp;
+ main(process.argv[2],['--xp-result-checkpoint','--full-mission','--interactive','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--interactive-phase','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture','--deployment'].includes(mode),['--xp-result-checkpoint','--full-mission','--repeated-turns','--terminal-checkpoint','--fixed-combat-fixture'].includes(mode),xp||mode==='--terminal-checkpoint',mode==='--fixed-combat-fixture',mode==='--deployment'||full&&!xp,full,live,direct,integrated,primary);
 }catch(e){console.error(e.message);process.exitCode=1;}}
