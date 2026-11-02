@@ -29,6 +29,8 @@ function M.new(o)
             return
         end
         if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=720 and y<756 and not s.stopped then
+            if o.wire.readySent then self.status='Ready recorded; an action clears both confirmations';return end
+            self.rejectionNotice=false
             o.wire:ready(s,o.request('end-turn','end-turn-'..s.revision));self.actor=nil;self.draft=nil;return
         end
         if o.wire.repeatedTurns and o.wire.inputReady and x>=8 and x<298 and y>=960 and y<996 and not s.stopped then
@@ -128,7 +130,8 @@ function M.new(o)
         elseif o.wire.primarySetup and not o.wire.primarySetup.locked then self.status=o.wire.primarySetup:status()
         elseif o.wire.readyInput then self.status=self.launchReady and 'Both players must agree to launch' or 'End Turn includes unused units; both must agree'
         elseif not o.wire.inputReady then self.status=self.rejectionNotice and 'Other action in progress; choose again when ready' or 'Waiting for the other game / action completion'
-        elseif self.rejectionNotice then self.status='Request declined; choose your mech again'
+        elseif self.rejectionNotice then self.status=o.wire.rejectionKind=='readiness' and 'Readiness expired; approve End Turn again' or 'Request declined; choose your mech again'
+        elseif o.wire.readySent and not self.actor and not self.draft then self.status='You are ready; an action clears both confirmations'
         elseif self.status=='Waiting for the other game / action completion' then self.status='Choose your mech, then a board tile' end
         return self.status
     end
@@ -162,6 +165,7 @@ function M.new(o)
         for _,a in ipairs({'combat','cannon','artillery'})do self.controls[a]:caption(actors[a].label..' ('..owner(a)..')') end
         if self.controls.attack then self.controls.attack:caption('Toggle move / basic weapon') end
         self.controls.status:caption(self.status)
+        if self.controls.endTurn then self.controls.endTurn:caption(o.wire.readySent and 'Ready recorded (action clears vote)' or 'Ready End Turn (unused units OK)') end
         if self.controls.reset then self.controls.reset:caption(o.wire.resetPending and (o.wire.resetSent and 'Reset approved; action cancels vote' or 'Approve teammate Reset request') or 'Request Reset (both must agree)') end
         self.controls.confirm:caption(self.launchReady and 'Ready to launch squad' or o.wire.readyInput and 'Ready End Turn (unused units OK)'
             or self.placing and 'Confirm placement' or self.draft and self.draft.kind=='undo-move' and 'Confirm undo' or self.draft and self.draft.kind=='repair' and 'Confirm repair' or (o.wire.repeatedTurns and self.attacking or not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and self.revision==1) and 'Confirm attack' or 'Confirm move')

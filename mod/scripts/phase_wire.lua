@@ -10,7 +10,7 @@ function M.decode(text,session)
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
     local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
-    assert(spawn or kind=='REJECT' or kind=='SQUAD' or kind=='SQUADLOCK' or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    assert(spawn or kind=='REJECT' or kind=='SQUAD' or kind=='SQUADLOCK' or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='READYCANCEL' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
@@ -74,20 +74,23 @@ function M.open(env,json,emit)
         if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:healthy() end
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.34.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,primarySetup=self.primaryMode or nil,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.35.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,primarySetup=self.primaryMode or nil,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
         assert(r.revision==self.inputRevision and r.witness==self.inputWitness,'wire-stale-draft')
         self.inputReady=false;self.inspectionReady=false
         self.submitted=self.submitted or {};assert(not self.submitted[r.id],'wire-duplicate-intent')
-        self.submitted[r.id]={revision=r.revision,phase=r.phase}
+        self.submitted[r.id]={revision=r.revision,phase=r.phase,kind='action'}
         self:send({type='proposal',request=r})
     end
     function self:ready(s,r)
         assert(self.phaseRun and (self.readyInput or ((self.repeatedTurns or self.deployment) and self.inputReady)) and not self.readySent,'wire-not-accepting-readiness')
         assert(s:setReady(self.peer,r.phase,r.revision,r.witness,true),'wire-local-readiness-rejected')
-        self.readySent=true;self.readyInput=false;self.inputReady=false
+        self.readySent=true;self.readyInput=false
+        if not(self.repeatedTurns and s.phase~='deployment') then self.inputReady=false end
+        self.submitted=self.submitted or {};assert(not self.submitted[r.id],'wire-duplicate-readiness')
+        self.submitted[r.id]={revision=r.revision,phase=r.phase,kind='readiness'}
         self:send({type='ready',revision=r.revision,phase=r.phase,witness=r.witness,confirmUnused=r.kind=='end-turn' and true or nil,confirmDeployment=r.kind=='deployment-confirm' and true or nil})
     end
     function self:resetReady(s,r)
@@ -117,7 +120,7 @@ function M.open(env,json,emit)
                 local submitted=self.submitted and self.submitted[m.id]
                 assert(self.interactive and m.peer==self.peer and submitted and submitted.revision==m.revision and submitted.phase==m.phase,'wire-rejection-context')
                 assert(m.witness=='stale-input' or m.witness=='action-in-progress','wire-rejection-reason')
-                self.submitted[m.id]=nil;self.rejectionSerial=(self.rejectionSerial or 0)+1
+                self.submitted[m.id]=nil;self.rejectionKind=submitted.kind;self.rejectionSerial=(self.rejectionSerial or 0)+1
                 emit('network_intent_rejected',{peer=self.peer,id=m.id,revision=m.revision,reason=m.witness})
                 -- Never change an executing/prepared command or grant input here.
             elseif m.kind=='SQUAD' or m.kind=='SQUADLOCK' then
@@ -138,7 +141,7 @@ function M.open(env,json,emit)
                 end
                 if m.kind=='INPUT' then
                     assert(self.interactive and not self.pending,'wire-input-context')
-                    self.readySent=false;self.readyInput=false;self.resetSent=false;self.resetPending=false;self.inputReady=true;self.inspectionReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
+                    self.readySent=false;self.readyInput=false;self.readinessOpen=false;self.resetSent=false;self.resetPending=false;self.inputReady=true;self.inspectionReady=true;self.inputRevision=s.revision;self.inputWitness=r.witness
                 elseif m.kind=='RESETREADY' then
                     assert(self.repeatedTurns and not self.pending and r.kind=='reset-turn','wire-reset-ready-context')
                     self.resetPending=true;self.inputReady=true;self.readyInput=false;self.inspectionReady=true
@@ -152,11 +155,18 @@ function M.open(env,json,emit)
                     self:send({type='proposal',request=r})
                 elseif m.kind=='READY' then
                     assert((self.repeatedTurns or (self.deployment and s.revision==3) or (not self.deployment and s.revision==2)) and m.id==r.id,'wire-readiness-context')
-                    if self.phaseRun then self.inputReady=false;self.readyInput=not self.readySent;self.inspectionReady=true
+                    if self.phaseRun then
+                        self.readinessOpen=true;self.inputReady=self.repeatedTurns and s.phase~='deployment';self.readyInput=not self.inputReady and not self.readySent;self.inspectionReady=true
                     else self:send({type='ready',revision=s.revision,phase=s.phase,witness=r.witness,confirmUnused=true}) end
+                elseif m.kind=='READYCANCEL' then
+                    assert(self.repeatedTurns and s.phase~='deployment' and self.readinessOpen and not self.pending and not self.prepared and m.id=='end-turn-'..s.revision,'wire-ready-cancel-context')
+                    s:clearReady();self.readySent=false;self.readyInput=false;self.readinessOpen=false;self.inputReady=false;self.inspectionReady=false
+                    if self.submitted then self.submitted[m.id]=nil end
+                    emit('network_readiness_cancelled',{revision=s.revision})
                 elseif m.kind=='CONSENT' then
                     assert((self.repeatedTurns or (self.deployment and s.revision==3) or (not self.deployment and s.revision==2)) and m.id==r.id,'wire-consent-context')
                     assert(s:setReady(m.peer,m.phase,m.revision,m.witness,true),'wire-consent-rejected')
+                    if m.peer==self.peer and self.submitted then self.submitted[m.id]=nil end
                 elseif m.kind=='PREPARE' then
                     assert(self.interactive and (m.move or (self.phaseRun and (r.kind=='end-turn' or r.kind=='deployment-confirm' or r.kind=='reset-turn'))) and not self.pending and not self.prepared,'wire-prepare-context')
                     local preparedRequest=m.move or r

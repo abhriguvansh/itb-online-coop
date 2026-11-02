@@ -170,6 +170,7 @@ function M.new(o)
         ready[peer]={phase=phase,revision=revision,witness=value,kind=kind};return true
     end
     function self:clearResetReady()for peer,v in pairs(ready)do if v.kind=='reset-turn' then ready[peer]=nil end end end
+    function self:clearReady()ready={} end
     function self:canReset(peer,phase,revision,value)
         if not primaryInstalled then return false,'primary-setup-pending' end
         if not reset or not players[peer] or self.terminal or not health() or pending or self.phase=='deployment'

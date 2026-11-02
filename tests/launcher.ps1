@@ -16,7 +16,7 @@ $mirroredHost=Join-Path $mirror 'tools\Host-Coop.ps1'
 $mirroredIdentity=& node -e "process.stdout.write(require('./tools/launcher-compatibility.cjs').compatibility(process.argv[1]).sourceSha256)" $mirror
 Assert ($mirroredIdentity-ceq$js) 'Git checkout line endings caused a false peer incompatibility'
 $config=Join-Path $root 'guest.json'
-$base=@{session='00000000-0000-4000-8000-000000000000';peer='guest';token=('a'*48);host='10.0.2.2';port=12345;terminalCheckpoint=$false;launch=@{protocol='itb-coop-launch-v1';probe='0.34.0';sourceSha256=$js;expiresAt=[DateTimeOffset]::UtcNow.AddMinutes(9).ToString('o')}}
+$base=@{session='00000000-0000-4000-8000-000000000000';peer='guest';token=('a'*48);host='10.0.2.2';port=12345;terminalCheckpoint=$false;launch=@{protocol='itb-coop-launch-v1';probe='0.35.0';sourceSha256=$js;expiresAt=[DateTimeOffset]::UtcNow.AddMinutes(9).ToString('o')}}
 foreach($flag in @('interactive','phaseRun','repeatedTurns','deployment','fullMission','liveBootstrap','nativeTransport','primarySetup')){$base[$flag]=$true}
 function Write-Config($Value){$Value|ConvertTo-Json -Depth 5|Set-Content -LiteralPath $config -Encoding UTF8}
 Write-Config $base

@@ -109,11 +109,29 @@ f=runtime('repeat');assert(f.w.repeatedTurns and f.w.phaseRun and f.w.interactiv
 f.s.revision=5;f.s.phase='player3';f.r.revision=5;f.r.phase='player3';f.r.id='end-turn-5';f.r.kind='end-turn'
 local readiness=0;f.s.setReady=function()readiness=readiness+1;return true end
 f.add('INPUT|test-session|-|5|player3|-\n{}');f.tick();assert(f.w.inputReady and not f.w.readySent)
-f.w:ready(f.s,f.r);assert(readiness==1 and not f.w.inputReady)
+f.w:ready(f.s,f.r);assert(readiness==1 and f.w.inputReady)
 f.add('READY|test-session|-|5|player3|end-turn-5\n{}');f.tick();assert(not f.w.readyInput)
 assert(not pcall(function()f.w:ready(f.s,f.r)end))
 f.add('CONSENT|test-session|host|5|player3|end-turn-5\n{}');f.tick();assert(readiness==2)
 print('Repeated-turn mailbox config and fresh readiness passed (in-memory doubles).')
+do
+ local x=runtime('repeat',true);x.r.id='end-turn-0';x.r.kind='end-turn';x.r.confirmUnused=true
+ local cleared=0;x.s.setReady=function()return true end;x.s.clearReady=function()cleared=cleared+1 end
+ x.add('INPUT|test-session|-|0|player2|-\n{}');x.tick();x.w:ready(x.s,x.r)
+ x.add('READY|test-session|-|0|player2|end-turn-0\n{}');x.tick()
+ assert(x.w.inputReady and x.w.readySent and not x.w.readyInput,'one readiness vote is nonmodal')
+ x.add('READYCANCEL|test-session|-|0|player2|end-turn-0\n{}');x.tick()
+ assert(cleared==1 and not x.w.readySent and not x.w.inputReady and not x.w.submitted['end-turn-0'],'cancellation clears votes without granting input')
+ local move=dynamic:gsub('|guest|','|host|'):gsub('move%-guest%-1','move-host-1'):gsub('artillery','combat')
+ x.s.previewAction=function()return cleared==1 end
+ x.add(move:gsub('EXEC','PREPARE'));x.tick();assert(x.w.prepared)
+ local y=runtime('repeat',true);y.r.id='end-turn-0';y.r.kind='end-turn';y.r.confirmUnused=true;y.s.setReady=function()return true end
+ y.add('INPUT|test-session|-|0|player2|-\n{}');y.tick();y.w:ready(y.s,y.r)
+ y.add(move:gsub('EXEC','PREPARE'));y.s.previewAction=function()return true end;y.tick();local prepared=y.w.prepared
+ y.add('REJECT|test-session|guest|0|player2|end-turn-0\naction-in-progress');y.tick()
+ assert(y.w.prepared==prepared and not y.w.inputReady and y.w.rejectionKind=='readiness','late readiness cannot cancel the prepared action')
+ print('One vote permits selection; action cancellation clears native votes before preparation and late readiness grants no execution rights (transport doubles).')
+end
 f=runtime('repeat');f.s.canReset=function()return true end
 local resetVotes={};f.s.setReady=function(_,peer,phase,revision,witness,confirm,kind)assert(confirm and kind=='reset-turn');resetVotes[peer]=true;return true end
 f.s.clearResetReady=function()resetVotes={}end

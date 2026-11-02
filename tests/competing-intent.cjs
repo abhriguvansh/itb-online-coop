@@ -6,7 +6,7 @@ function setup(){
  const witness=JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn:2,pawns:[{localId:0,position:{x:3,y:3},active:true,movementSpent:false},{localId:2,position:{x:0,y:3},active:true,movementSpent:false}]});
  const context={phase:'player2',revision:0,witness};
  const send=(peer,m)=>c.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.34.0',interactive:true,phaseRun:true,repeatedTurns:true,...context});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.35.0',interactive:true,phaseRun:true,repeatedTurns:true,...context});
  const request=peer=>({session,encounter:'artillery-checkpoint',...context,id:'move-'+peer+'-1',kind:'move',actor:peer==='host'?'combat':'artillery',fromX:peer==='host'?3:0,fromY:3,toX:peer==='host'?2:0,toY:peer==='host'?3:2});
  return {c,sent,events,send,request,context};
 }

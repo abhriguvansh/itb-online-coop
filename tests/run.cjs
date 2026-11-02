@@ -25,6 +25,7 @@ if (!process.exitCode) {
   runReportTests();
   require('./phase-wire.cjs');
   require('./competing-intent.cjs');
+  require('./readiness-race.cjs');
   require('./command-outcome.cjs');
   require('./post-stop.cjs');
   require('./deployment-wire.cjs');
