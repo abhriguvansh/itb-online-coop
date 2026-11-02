@@ -132,13 +132,31 @@ class PhaseCoordinator{
     if(this.resetConsents){this.record({type:'reset_cancelled',revision:this.stage});this.both(this.frame('RESETCANCEL','-','reset-turn-'+this.stage));this.resetConsents=null;}
     if(this.mode==='reset-readiness')this.mode='proposal';
   }
+  rejectCompetingIntent(peer,r){
+    const entities=this.entities||{combat:{peer:'host'},cannon:{peer:'guest'},artillery:{peer:'guest'}};
+    this.require(r&&Object.hasOwn(entities,r.actor)&&entities[r.actor].peer===peer,'actor-not-owned');
+    const input=this.inputContexts?.get(r.revision);
+    this.require(input&&r.session===this.session&&r.encounter==='artillery-checkpoint'&&r.phase===input.phase&&r.witness===input.witness,'unissued-input-context');
+    this.require(['proposal','reset-readiness','readiness','preparing','executing'].includes(this.mode),'unexpected-proposal');
+    const shape={session:r.session,encounter:r.encounter,phase:r.phase,revision:r.revision,witness:r.witness,id:r.id,kind:r.kind,actor:r.actor,fromX:r.fromX,fromY:r.fromY,toX:r.toX,toY:r.toY};
+    this.require(typeof r.id==='string'&&new RegExp('^(move|attack|repair|undo)-'+peer+'-[1-9][0-9]{0,2}$').test(r.id)&&canonical(r)===canonical(shape),'invalid-move-envelope');
+    this.require(['move','lab-punch','basic-attack','repair','undo-move','deploy'].includes(r.kind),'unsupported-action');
+    this.require(!this.used.has(peer+'/'+r.id),'duplicate-request');
+    this.require(['fromX','fromY','toX','toY'].every(k=>Number.isInteger(r[k])&&(r.kind==='deploy'&&k.startsWith('from')?this.deployment&&r.revision<3&&r[k]===-1:r[k]>=0&&r[k]<=7)),'invalid-coordinate');
+    this.require(r.kind!=='repair'||r.fromX===r.toX&&r.fromY===r.toY,'repair-must-target-self');
+    this.used.add(peer+'/'+r.id);
+    const reason=r.revision<this.stage?'stale-input':'action-in-progress';
+    this.record({type:'intent_rejected',peer,id:r.id,revision:r.revision,currentRevision:this.stage,reason});
+    // Advisory only: no INPUT, preparation, consent, queue or automatic retry.
+    this.send(peer,{kind:'REJECT',session:this.session,peer,revision:r.revision,phase:r.phase,id:r.id,witness:reason});
+  }
   advance(){
     this.require(this.states.host.witness===this.states.guest.witness,'observed-state-divergence');
     this.record({type:'barrier',revision:this.stage,witness:this.states.host.witness,fullStateProof:false});
     if(!this.repeatedTurns&&this.stage===this.limit){this.mode='finishing';this.both(this.frame('DONE'));return;}
     this.require(this.stage<32,'experiment-command-limit');
     this.consents={};
-    if(this.interactive){this.mode=!this.deployment&&!this.repeatedTurns&&this.phaseRun&&this.stage===2?'readiness':'proposal';this.both(this.frame(this.mode==='readiness'?'READY':'INPUT','-',this.mode==='readiness'?'end-turn':'-'));return;}
+    if(this.interactive){this.mode=!this.deployment&&!this.repeatedTurns&&this.phaseRun&&this.stage===2?'readiness':'proposal';this.inputContexts??=new Map();this.inputContexts.set(this.stage,{...this.states.host});this.both(this.frame(this.mode==='readiness'?'READY':'INPUT','-',this.mode==='readiness'?'end-turn':'-'));return;}
     if(this.stage===2){this.mode='readiness';this.both(this.frame('READY','-','end-turn'));return;}
     this.mode='proposal';this.send(owners[this.stage],this.frame('PROPOSE',owners[this.stage],ids[this.stage]));
   }
@@ -151,7 +169,7 @@ class PhaseCoordinator{
     if(['spawn_prepare','spawn_selected','spawn_applied'].includes(m.type)){this.spawnReceive(peer,m);return;}
     if(m.type==='armed'){
       this.require(!this.fullMission||m.sharedXp==='itb-shared-xp-v1','shared-xp-required');
-      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.33.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
+      this.require(this.mode==='arming' && !this.states[peer] && m.probe==='0.34.0' && m.interactive===this.interactive && (m.phaseRun===true)===this.phaseRun && (m.repeatedTurns===true)===this.repeatedTurns && (m.terminalCheckpoint===true)===this.terminalCheckpoint && (m.deployment===true)===this.deployment && (m.fullMission===true)===this.fullMission,'unexpected-arm');
       this.context(m,0);this.states[peer]={phase:m.phase,witness:m.witness};
       this.require((m.primarySetup===true)===(!!this.primarySetup),'primary-setup-mode-mismatch');
       if(this.states.host && this.states.guest){if(this.primarySetup)this.primarySetup.start();else this.advance();}return;
@@ -190,6 +208,9 @@ class PhaseCoordinator{
       }return;
     }
     if(m.type==='proposal'){
+      if(this.interactive&&((this.mode!=='proposal'&&this.mode!=='reset-readiness')||m.request?.revision!==this.stage)){
+        this.rejectCompetingIntent(peer,m.request);return;
+      }
       if(this.mode==='reset-readiness')this.cancelReset();
       this.require(this.mode==='proposal' && (this.interactive || owners[this.stage]===peer),'unexpected-proposal');
       if(this.interactive){

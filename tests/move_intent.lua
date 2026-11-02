@@ -24,6 +24,15 @@ current.intentSerial=2;current.intentX=20;current.intentY=470;ui:update(s,false)
 assert(not ui.actor and #sent==1) -- dropped/multiple clicks never become intent
 print('8 interactive intent contracts passed; blocked-input and game behavior require live verification.')
 do
+ wire.inputReady=false;wire.rejectionSerial=1;ui.actor='artillery';ui.draft={}
+ ui:update(s,false);assert(not ui.actor and not ui.draft and ui.status=='Other action in progress; choose again when ready')
+ wire.inputReady=true;s.revision=s.revision+1;ui:update(s,false)
+ assert(ui.status=='Request declined; choose your mech again' and #sent==1)
+ ui:click(20,470,s);assert(ui.actor=='artillery' and not ui.rejectionNotice and not ui.draft and #sent==1)
+ ui:update(s,false);assert(ui.status=='Click a supported destination on the board')
+ print('Competing request notice requires renewed local selection and never resubmits a stale draft (UI doubles).')
+end
+do
  local changed={peer='guest',inputReady=true,squadOwners={combat='guest',cannon='host',artillery='host'}}
  local selected=module.new({env=env,wire=changed,native={info=function()return current end},emit=function()end,request=function()return {}end})
  selected:click(20,390,s);assert(selected.actor=='combat')

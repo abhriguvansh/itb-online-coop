@@ -56,7 +56,7 @@ function M.new(o)
                 if o.wire.phaseRun and not o.wire.repeatedTurns and not o.wire.deployment and actor~=(s.revision==0 and 'artillery' or s.revision==1 and 'combat' or 'cannon') then
                     reject('Unsupported actor for this phase test');return
                 end
-                self.actor=actor;self.status=not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
+                self.rejectionNotice=false;self.actor=actor;self.status=not o.wire.deployment and not o.wire.repeatedTurns and o.wire.phaseRun and s.revision==1 and 'Click the Hornet at (2,3)' or 'Click a supported destination on the board'
                 o.emit('move_intent_selected',{actor=actor,peer=o.wire.peer});return
             end
             if o.wire.repeatedTurns and y>=760 and y<796 and not self.placing then
@@ -114,6 +114,10 @@ function M.new(o)
         if self.revision~=s.revision then
             self.revision=s.revision;self.actor=nil;self.draft=nil;self.attacking=false;self.repairing=false;self.status='Choose your mech, then a board tile'
         end
+        if (o.wire.rejectionSerial or 0)~=(self.rejectionSerial or 0) then
+            self.rejectionSerial=o.wire.rejectionSerial;self.rejectionNotice=true
+            self.actor=nil;self.draft=nil;self.attacking=false;self.repairing=false
+        end
         if n.intentSerial~=self.serial then
             local contiguous=n.intentSerial==self.serial+1;self.serial=n.intentSerial
             if contiguous and not done and n.guardActive and n.sessionState==1 and not n.armed and not n.pressed then
@@ -123,7 +127,8 @@ function M.new(o)
         if done or s.stopped then self.status='Experiment ended - Escape exits'
         elseif o.wire.primarySetup and not o.wire.primarySetup.locked then self.status=o.wire.primarySetup:status()
         elseif o.wire.readyInput then self.status=self.launchReady and 'Both players must agree to launch' or 'End Turn includes unused units; both must agree'
-        elseif not o.wire.inputReady then self.status='Waiting for the other game / action completion'
+        elseif not o.wire.inputReady then self.status=self.rejectionNotice and 'Other action in progress; choose again when ready' or 'Waiting for the other game / action completion'
+        elseif self.rejectionNotice then self.status='Request declined; choose your mech again'
         elseif self.status=='Waiting for the other game / action completion' then self.status='Choose your mech, then a board tile' end
         return self.status
     end

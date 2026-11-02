@@ -10,7 +10,7 @@ function M.decode(text,session)
     local kind,sid,peer,revision,phase,id,witness=text:match('^([A-Z]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)|([^|\n]+)\n(.*)$')
     assert(sid==session and ident(sid),'wire-session')
     local spawn=kind=='SPAWNSELECT' or kind=='SPAWNAPPLY' or kind=='SPAWNRELEASE'
-    assert(spawn or kind=='SQUAD' or kind=='SQUADLOCK' or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
+    assert(spawn or kind=='REJECT' or kind=='SQUAD' or kind=='SQUADLOCK' or kind=='RESETREADY' or kind=='RESETCONSENT' or kind=='RESETCANCEL' or kind=='RESULTCONTINUE' or kind=='RESULTDONE' or kind=='PING' or kind=='STOP' or kind=='PROPOSE' or kind=='READY' or kind=='CONSENT' or kind=='EXEC' or kind=='DONE' or kind=='INPUT' or kind=='PREPARE','wire-kind')
     assert(peer=='host' or peer=='guest' or peer=='-','wire-peer')
     local rev=tonumber(revision);assert(rev and rev>=0 and rev<=32 and rev==math.floor(rev),'wire-revision')
     assert((phase=='-' or ident(phase)) and (id=='-' or ident(id)),'wire-context')
@@ -74,12 +74,14 @@ function M.open(env,json,emit)
         if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:healthy() end
         if self.transport then assert(self.transport:healthy(),'wire-native-transport-unavailable');self.transport.active=true end
         self.since=now();self.last=now();self.observed=0
-        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.33.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,primarySetup=self.primaryMode or nil,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
+        self:send({type='armed',revision=0,phase=context.phase,witness=context.witness,probe='0.34.0',interactive=self.interactive,phaseRun=self.phaseRun,repeatedTurns=self.repeatedTurns,terminalCheckpoint=self.terminalCheckpoint,deployment=self.deployment,fullMission=self.fullMission,primarySetup=self.primaryMode or nil,sharedXp=self.fullMission and 'itb-shared-xp-v1' or nil})
     end
     function self:propose(r)
         assert(self.interactive and self.inputReady,'wire-not-accepting-input')
         assert(r.revision==self.inputRevision and r.witness==self.inputWitness,'wire-stale-draft')
         self.inputReady=false;self.inspectionReady=false
+        self.submitted=self.submitted or {};assert(not self.submitted[r.id],'wire-duplicate-intent')
+        self.submitted[r.id]={revision=r.revision,phase=r.phase}
         self:send({type='proposal',request=r})
     end
     function self:ready(s,r)
@@ -111,7 +113,14 @@ function M.open(env,json,emit)
             if not data then break end;self.rx=self.rx+1
             local m=M.decode(data,self.session);self.last=now()
             assert(m.kind~='STOP','wire-peer-or-coordinator-stopped')
-            if m.kind=='SQUAD' or m.kind=='SQUADLOCK' then
+            if m.kind=='REJECT' then
+                local submitted=self.submitted and self.submitted[m.id]
+                assert(self.interactive and m.peer==self.peer and submitted and submitted.revision==m.revision and submitted.phase==m.phase,'wire-rejection-context')
+                assert(m.witness=='stale-input' or m.witness=='action-in-progress','wire-rejection-reason')
+                self.submitted[m.id]=nil;self.rejectionSerial=(self.rejectionSerial or 0)+1
+                emit('network_intent_rejected',{peer=self.peer,id=m.id,revision=m.revision,reason=m.witness})
+                -- Never change an executing/prepared command or grant input here.
+            elseif m.kind=='SQUAD' or m.kind=='SQUADLOCK' then
                 assert(self.primaryMode and self.primarySetup and not self.inputReady and not self.pending and not self.prepared,'wire-primary-context')
                 self.primarySetup:receive(m,s,request())
             elseif m.kind:sub(1,6)=='RESULT' then
@@ -171,6 +180,7 @@ function M.open(env,json,emit)
                     if self.fullMission then assert(self.sharedXp,'shared-xp-required');self.sharedXp:begin(self.session,r) end
                     local result=s:submit(m.peer,r)
                     assert(result.status=='pending','wire-command-rejected:'..tostring(result.reason))
+                    if m.peer==self.peer and self.submitted then self.submitted[r.id]=nil end
                     self.pending=r.id
                     self.pendingKind=r.kind
                     if r.kind=='end-turn' or r.kind=='deployment-confirm' then self.ending=true end

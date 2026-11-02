@@ -6,7 +6,7 @@ function fixture(){
  const native={guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false};
  const context=(revision,y=3)=>({revision,phase:'player2',witness:JSON.stringify({schema:'itb-observation-v1',unavailable:[],turn:2,pawns:[{localId:2,position:{x:0,y},active:true,movementSpent:y!==3}]})});
  const send=(peer,m)=>core.receive(peer,{session,peer,...m});
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.33.0',interactive:true,...context(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.34.0',interactive:true,...context(0)});
  const request={session,encounter:'artillery-checkpoint',...context(0),id:'move-guest-1',kind:'move',actor:'artillery',fromX:0,fromY:3,toX:0,toY:2};
  send('guest',{type:'proposal',request});
  for(const peer of ['host','guest'])send(peer,{type:'prepared',origin:'guest',request,native});

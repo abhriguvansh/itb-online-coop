@@ -57,6 +57,22 @@ local function runtime(phaseRun,direct)
         elapsed=function(ms)clock=clock+ms end,counts=function()return previews,submits end}
 end
 local f=runtime();f.add(dynamic);assert(not pcall(f.tick));local _,n=f.counts();assert(n==0)
+do
+ local x=runtime(nil,true)
+ x.w.inputReady=true;x.w.inputRevision=0;x.w.inputWitness=x.r.witness;x.w:propose(x.r)
+ local winner=dynamic:gsub('|guest|','|host|'):gsub('move%-guest%-1','move-host-1'):gsub('artillery','combat')
+ x.add(winner:gsub('EXEC','PREPARE'));x.tick();local prepared=x.w.prepared
+ x.add('REJECT|test-session|guest|0|player2|move-guest-1\naction-in-progress');x.tick()
+ assert(x.w.prepared==prepared and not x.w.inputReady and not x.w.inspectionReady and x.w.rejectionSerial==1)
+ x.add(winner);x.tick();local _,submits=x.counts();assert(submits==1,'rejection cannot cancel the independently prepared command')
+ x.add('REJECT|test-session|guest|0|player2|move-guest-1\naction-in-progress');assert(not pcall(x.tick),'duplicate rejection is not silently accepted')
+ local y=runtime(nil,true);y.w.inputReady=true;y.w.inputRevision=0;y.w.inputWitness=y.r.witness;y.w:propose(y.r)
+ y.s.revision=1;y.s.phase='player3';y.w.inputReady=true;y.w.inspectionReady=true
+ y.add('REJECT|test-session|guest|0|player2|move-guest-1\nstale-input');y.tick()
+ assert(y.w.inputReady and y.w.inspectionReady and y.s.revision==1,'late advisory preserves the newer input lease')
+ local z=runtime(nil,true);z.add('REJECT|test-session|guest|0|player2|move-guest-1\nstale-input');assert(not pcall(z.tick),'unknown rejection cannot alter state')
+ print('Correlated rejection preserves prepared/current input state, handles old context without execution, and refuses unknown/duplicate notices (transport doubles).')
+end
 f=runtime();f.add(dynamic:gsub('EXEC','PREPARE'));f.tick();local p,n=f.counts();assert(p==1 and n==0 and f.w.prepared)
 assert(f.files[f.root..'/out-0002.json']:find('prepared'))
 f.add(dynamic);f.tick();p,n=f.counts();assert(n==1 and not f.w.prepared)

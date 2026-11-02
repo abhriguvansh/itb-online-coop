@@ -8,7 +8,7 @@ function fixture(full=false){
   pawns:[0,1,2].map(localId=>({localId,position:{x:-1,y:-1},active:true}))};
  const ctx=revision=>({revision,phase:revision>=4?'player'+state.turn:'deployment',witness:JSON.stringify(state)});
  const send=(peer,m)=>{if(full&&m.type==='observed')m={sharedXp:{abi:'itb-shared-xp-v1',context:s+'/'+c.proposal.request.phase+'/'+c.stage+'/'+c.pendingId,entries:[]},...m};c.receive(peer,{session:s,peer,...m});};
- for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.33.0',interactive:true,phaseRun:true,deployment:true,...(full?{repeatedTurns:true,fullMission:true,sharedXp:'itb-shared-xp-v1'}:{}),...ctx(0)});
+ for(const peer of ['host','guest'])send(peer,{type:'armed',probe:'0.34.0',interactive:true,phaseRun:true,deployment:true,...(full?{repeatedTurns:true,fullMission:true,sharedXp:'itb-shared-xp-v1'}:{}),...ctx(0)});
  const request=i=>({session:s,encounter:'artillery-checkpoint',...ctx(i),id:'move-'+(i?'guest':'host')+'-'+(i+1),kind:'deploy',actor:['combat','cannon','artillery'][i],fromX:-1,fromY:-1,toX:1,toY:4+i});
  return {c,send,sent,events,state,ctx,request,elapse:()=>{time=3000}};
 }
@@ -31,7 +31,7 @@ function fixture(full=false){
  f.state.turn=2;
  for(const peer of ['host','guest'])f.send(peer,{type:'observed',id:end.id,...f.ctx(6),native:n});
  assert.equal(f.c.turn,2);assert.equal(f.c.mode,'proposal');
- assert.throws(()=>f.send('guest',{type:'proposal',request:r}),/wrong-phase-or-revision/);
+ assert.throws(()=>f.send('guest',{type:'proposal',request:r}),/duplicate-request/);
  console.log('Fresh mission connects attacks, joint End Turn and player-two admission without resetting the session (fake peers).');
 }
 for(const full of [false,true]){
@@ -40,7 +40,7 @@ for(const full of [false,true]){
  for(let i=0;i<3;i++){
   const peer=i?'guest':'host',r=f.request(i);f.send(peer,{type:'proposal',request:r});assert.equal(f.c.mode,'preparing');
   for(const p of ['host','guest'])f.send(p,{type:'prepared',origin:peer,request:r,native:{guardActive:true,sessionState:1,releaseFailed:false,armed:false,pressed:false}});
-  assert.equal(f.c.mode,'executing');assert.throws(()=>f.send(peer,{type:'proposal',request:r}),/unexpected-proposal/);
+  assert.equal(f.c.mode,'executing');assert.throws(()=>f.send(peer,{type:'proposal',request:r}),/duplicate-request/);
   f.state.pawns[i].position={x:r.toX,y:r.toY};Object.assign(f.state.deployment.mechs[i],{state:2,x:r.toX,y:r.toY});
   for(const p of ['host','guest'])f.send(p,{type:'observed',id:r.id,...f.ctx(i+1),native:{guardActive:true,sessionState:1,releaseFailed:false}});
  }

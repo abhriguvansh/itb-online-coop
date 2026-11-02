@@ -24,6 +24,7 @@ for (const suite of ['tests/probe.lua', 'tests/movement.lua', 'tests/move_trace.
 if (!process.exitCode) {
   runReportTests();
   require('./phase-wire.cjs');
+  require('./competing-intent.cjs');
   require('./command-outcome.cjs');
   require('./post-stop.cjs');
   require('./deployment-wire.cjs');
